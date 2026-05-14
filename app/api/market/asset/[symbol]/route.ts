@@ -67,7 +67,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ symb
         signal = {
             symbol,
             price: lastClose,
-            quant: analyzeMarket({ symbol, candles }),
+            quant: { regime: 'neutral', bias: 'wait', confidence: 0.5, risk_flags: [] },
             timestamp: Math.floor(Date.now() / 1000),
             ai: {
                 ai_regime_label: 'AEGIS_NEURAL_SYNC',
