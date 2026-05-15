@@ -729,6 +729,423 @@ function _detectSMC(closes: number[], highs: number[], lows: number[]) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ADAPTIVE MOVING AVERAGES
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** KAMA — Kaufman Adaptive Moving Average */
+function _kama(closes: number[], period = 10, fastEnd = 2, slowEnd = 30): number[] {
+  const fast = 2 / (fastEnd + 1);
+  const slow = 2 / (slowEnd + 1);
+  const result: number[] = new Array(closes.length).fill(NaN);
+  if (closes.length < period + 1) return result;
+  result[period] = closes[period];
+  for (let i = period + 1; i < closes.length; i++) {
+    const change  = Math.abs(closes[i] - closes[i - period]);
+    let volatility = 0;
+    for (let j = i - period + 1; j <= i; j++) volatility += Math.abs(closes[j] - closes[j - 1]);
+    const er = volatility > 0 ? change / volatility : 0;
+    const sc = Math.pow(er * (fast - slow) + slow, 2);
+    result[i] = result[i - 1] + sc * (closes[i] - result[i - 1]);
+  }
+  return result;
+}
+
+/** McGinley Dynamic MA */
+function _mcginley(closes: number[], period = 14): number[] {
+  const result: number[] = new Array(closes.length).fill(NaN);
+  let prev = closes[0];
+  for (let i = 0; i < closes.length; i++) {
+    if (i === 0) { result[0] = closes[0]; continue; }
+    const denom = period * Math.pow(closes[i] / prev, 4);
+    prev = denom > 0 ? prev + (closes[i] - prev) / denom : prev;
+    result[i] = prev;
+  }
+  return result;
+}
+
+/** T3 — Tim Tillson's Triple EMA (5th-order) */
+function _t3(closes: number[], period = 5, vFactor = 0.7): number[] {
+  const vf2 = vFactor * vFactor;
+  const vf3 = vf2 * vFactor;
+  const c1 = -(vf3);
+  const c2 = 3 * vf2 + 3 * vf3;
+  const c3 = -6 * vf2 - 3 * vFactor - 3 * vf3;
+  const c4 = 1 + 3 * vFactor + vf3 + 3 * vf2;
+  const e1 = _ema(closes, period);
+  const e2 = _ema(e1, period);
+  const e3 = _ema(e2, period);
+  const e4 = _ema(e3, period);
+  const e5 = _ema(e4, period);
+  const e6 = _ema(e5, period);
+  return e6.map((v, i) => c1*v + c2*e5[i] + c3*e4[i] + c4*e3[i]);
+}
+
+/** SMMA / RMA — Smoothed/Running Moving Average (Wilder) */
+function _smma(values: number[], period: number): number[] {
+  return _wilderEma(values, period);
+}
+
+/** LSMA — Least Squares Moving Average (Linear Regression MA) */
+function _lsma(closes: number[], period = 25): number[] {
+  const result: number[] = [];
+  for (let i = 0; i < closes.length; i++) {
+    if (i < period - 1) { result.push(NaN); continue; }
+    const x = Array.from({ length: period }, (_, j) => j);
+    const y = closes.slice(i - period + 1, i + 1);
+    const n = period;
+    const sumX = x.reduce((a, b) => a + b, 0);
+    const sumY = y.reduce((a, b) => a + b, 0);
+    const sumXY = x.reduce((a, b, j) => a + b * y[j], 0);
+    const sumX2 = x.reduce((a, b) => a + b * b, 0);
+    const denom = n * sumX2 - sumX * sumX;
+    if (denom === 0) { result.push(closes[i]); continue; }
+    const m = (n * sumXY - sumX * sumY) / denom;
+    const b2 = (sumY - m * sumX) / n;
+    result.push(m * (period - 1) + b2);
+  }
+  return result;
+}
+
+/** VIDYA — Variable Index Dynamic Average */
+function _vidya(closes: number[], period = 14, momentumPeriod = 10): number[] {
+  const cmo = _cmo(closes, momentumPeriod).map(v => Math.abs(v) / 100);
+  const alpha = 2 / (period + 1);
+  const result: number[] = new Array(closes.length).fill(NaN);
+  result[0] = closes[0];
+  for (let i = 1; i < closes.length; i++) {
+    const k = alpha * (isNaN(cmo[i]) ? 0 : cmo[i]);
+    const prev = isNaN(result[i - 1]) ? closes[i - 1] : result[i - 1];
+    result[i] = k * closes[i] + (1 - k) * prev;
+  }
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADVANCED OSCILLATORS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** WaveTrend Oscillator (WT1, WT2) — popular LazyBear community script */
+function _waveTrend(highs: number[], lows: number[], closes: number[], n1 = 10, n2 = 21) {
+  const hlc3 = closes.map((c, i) => (highs[i] + lows[i] + c) / 3);
+  const esa = _ema(hlc3, n1);
+  const d   = _ema(hlc3.map((v, i) => Math.abs(v - esa[i])), n1);
+  const ci  = hlc3.map((v, i) => d[i] !== 0 ? (v - esa[i]) / (0.015 * d[i]) : 0);
+  const wt1 = _ema(ci, n2);
+  const wt2 = _sma(wt1, 4);
+  return { wt1, wt2, cross: wt1.map((v, i) => v - wt2[i]) };
+}
+
+/** Schaff Trend Cycle (STC) */
+function _stc(closes: number[], stcPeriod = 10, fast = 23, slow = 50, signal = 3) {
+  const { macd } = _macd(closes, fast, slow, signal);
+  const stochMacd = macd.map((m, i) => {
+    if (i < stcPeriod - 1) return NaN;
+    const sl = macd.slice(i - stcPeriod + 1, i + 1).filter(x => !isNaN(x));
+    const mn = Math.min(...sl), mx = Math.max(...sl);
+    return mx === mn ? 0 : ((m - mn) / (mx - mn)) * 100;
+  });
+  const kLine = _ema(stochMacd.map(v => isNaN(v) ? 0 : v), 3);
+  const stcLine = kLine.map((k, i) => {
+    if (i < stcPeriod - 1) return NaN;
+    const sl = kLine.slice(i - stcPeriod + 1, i + 1).filter(x => !isNaN(x));
+    const mn = Math.min(...sl), mx = Math.max(...sl);
+    return mx === mn ? 0 : ((k - mn) / (mx - mn)) * 100;
+  });
+  return { stc: _ema(stcLine.map(v => isNaN(v) ? 0 : v), 3), raw: stcLine };
+}
+
+/** Connors RSI (3-component: RSI2 + streak RSI + ROC percentile) */
+function _connorsRsi(closes: number[], rsiPeriod = 3, streakPeriod = 2, rocPeriod = 100): number[] {
+  const rsi2 = _rsi(closes, rsiPeriod);
+  // Streak calculation (consecutive up/down bars)
+  const streak: number[] = [0];
+  for (let i = 1; i < closes.length; i++) {
+    if (closes[i] > closes[i - 1])      streak.push(streak[i - 1] >= 0 ? streak[i - 1] + 1 :  1);
+    else if (closes[i] < closes[i - 1]) streak.push(streak[i - 1] <= 0 ? streak[i - 1] - 1 : -1);
+    else streak.push(0);
+  }
+  const streakRsi = _rsi(streak, streakPeriod);
+  const roc1 = closes.map((c, i) => i < 1 ? 0 : c - closes[i - 1]);
+  const pctRank = roc1.map((r, i) => {
+    if (i < rocPeriod) return 50;
+    const hist = roc1.slice(i - rocPeriod, i);
+    const below = hist.filter(v => v < r).length;
+    return (below / rocPeriod) * 100;
+  });
+  return closes.map((_, i) => {
+    const r = isNaN(rsi2[i]) ? 50 : rsi2[i];
+    const s = isNaN(streakRsi[i]) ? 50 : streakRsi[i];
+    return (r + s + pctRank[i]) / 3;
+  });
+}
+
+/** Relative Vigor Index (RVI) */
+function _rvi(opens: number[], highs: number[], lows: number[], closes: number[], period = 10) {
+  const numerator   = closes.map((c, i) => ((c - opens[i]) + 2*(closes[Math.max(0,i-1)]-opens[Math.max(0,i-1)]) + 2*(closes[Math.max(0,i-2)]-opens[Math.max(0,i-2)]) + (closes[Math.max(0,i-3)]-opens[Math.max(0,i-3)])) / 6);
+  const denominator = highs.map((h, i) => ((h - lows[i]) + 2*(highs[Math.max(0,i-1)]-lows[Math.max(0,i-1)]) + 2*(highs[Math.max(0,i-2)]-lows[Math.max(0,i-2)]) + (highs[Math.max(0,i-3)]-lows[Math.max(0,i-3)])) / 6);
+  const rviLine = closes.map((_, i) => {
+    if (i < period - 1) return NaN;
+    const n = numerator.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
+    const d = denominator.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
+    return d !== 0 ? n / d : 0;
+  });
+  const signal = rviLine.map((v, i) => {
+    if (i < 3 || isNaN(v)) return NaN;
+    const p0 = rviLine[i], p1 = rviLine[i-1], p2 = rviLine[i-2], p3 = rviLine[i-3];
+    if ([p0,p1,p2,p3].some(isNaN)) return NaN;
+    return (p0 + 2*p1 + 2*p2 + p3) / 6;
+  });
+  return { rvi: rviLine, signal };
+}
+
+/** Stochastic Momentum Index (SMI) */
+function _smi(highs: number[], lows: number[], closes: number[], period = 13, smoothK = 25, smoothD = 2) {
+  const midHL = closes.map((c, i) => {
+    if (i < period - 1) return { hh: NaN, ll: NaN };
+    const hh = Math.max(...highs.slice(i - period + 1, i + 1));
+    const ll = Math.min(...lows.slice(i - period + 1, i + 1));
+    return { hh, ll };
+  });
+  const delta = midHL.map(({ hh, ll }, i) => isNaN(hh) ? NaN : closes[i] - (hh + ll) / 2);
+  const hlRange = midHL.map(({ hh, ll }) => isNaN(hh) ? NaN : hh - ll);
+  const d2 = _ema(_ema(delta.map(v => isNaN(v) ? 0 : v), smoothK), smoothD);
+  const r2 = _ema(_ema(hlRange.map(v => isNaN(v) ? 0 : v), smoothK), smoothD);
+  const smi = d2.map((d, i) => r2[i] !== 0 ? (d / (r2[i] / 2)) * 100 : 0);
+  return { smi, signal: _ema(smi, smoothD) };
+}
+
+/** Chande Kroll Stop */
+function _chandeKrollStop(highs: number[], lows: number[], closes: number[], p = 10, q = 9, x = 1) {
+  const atrV = _atr(highs, lows, closes, p);
+  const stopShortFirst = highs.map((h, i) => {
+    if (i < p - 1) return NaN;
+    return Math.max(...highs.slice(i - p + 1, i + 1)) - x * atrV[i];
+  });
+  const stopLongFirst = lows.map((l, i) => {
+    if (i < p - 1) return NaN;
+    return Math.min(...lows.slice(i - p + 1, i + 1)) + x * atrV[i];
+  });
+  const stopShort = stopShortFirst.map((v, i) => {
+    if (i < q - 1 || isNaN(v)) return NaN;
+    return Math.max(...stopShortFirst.slice(i - q + 1, i + 1).filter(x => !isNaN(x)));
+  });
+  const stopLong = stopLongFirst.map((v, i) => {
+    if (i < q - 1 || isNaN(v)) return NaN;
+    return Math.min(...stopLongFirst.slice(i - q + 1, i + 1).filter(x => !isNaN(x)));
+  });
+  return { stopShort, stopLong };
+}
+
+/** Hull RSI */
+function _hullRsi(closes: number[], rsiPeriod = 14, hullPeriod = 14): number[] {
+  return _hma(_rsi(closes, rsiPeriod).map(v => isNaN(v) ? 50 : v), hullPeriod);
+}
+
+/** Laguerre RSI (John Ehlers) */
+function _laguerreRsi(closes: number[], gamma = 0.5): number[] {
+  let l0 = 0, l1 = 0, l2 = 0, l3 = 0;
+  return closes.map(c => {
+    const p0 = (1 - gamma) * c + gamma * l0;
+    const p1 = -gamma * p0 + l0 + gamma * l1;
+    const p2 = -gamma * p1 + l1 + gamma * l2;
+    const p3 = -gamma * p2 + l2 + gamma * l3;
+    l0 = p0; l1 = p1; l2 = p2; l3 = p3;
+    let cu = 0, cd = 0;
+    if (p0 >= p1) cu += p0 - p1; else cd += p1 - p0;
+    if (p1 >= p2) cu += p1 - p2; else cd += p2 - p1;
+    if (p2 >= p3) cu += p2 - p3; else cd += p3 - p2;
+    return cu + cd !== 0 ? cu / (cu + cd) * 100 : 50;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BILL WILLIAMS INDICATORS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Alligator — three SMAs with offsets (jaw=13/8, teeth=8/5, lips=5/3) */
+function _alligator(highs: number[], lows: number[], jawPeriod = 13, jawOffset = 8, teethPeriod = 8, teethOffset = 5, lipsPeriod = 5, lipsOffset = 3) {
+  const median = highs.map((h, i) => (h + lows[i]) / 2);
+  const jawRaw   = _smma(median, jawPeriod);
+  const teethRaw = _smma(median, teethPeriod);
+  const lipsRaw  = _smma(median, lipsPeriod);
+  const shift = (arr: number[], offset: number) => {
+    const r = new Array(offset).fill(NaN).concat(arr);
+    return r.slice(0, arr.length);
+  };
+  return { jaw: shift(jawRaw, jawOffset), teeth: shift(teethRaw, teethOffset), lips: shift(lipsRaw, lipsOffset) };
+}
+
+/** Fractals (Bill Williams) — up and down fractal indices */
+function _fractals(highs: number[], lows: number[], period = 2) {
+  const upFractals: number[] = [], downFractals: number[] = [];
+  for (let i = period; i < highs.length - period; i++) {
+    const sl_h = highs.slice(i - period, i + period + 1);
+    const sl_l = lows.slice(i - period, i + period + 1);
+    if (highs[i] === Math.max(...sl_h)) upFractals.push(i);
+    if (lows[i]  === Math.min(...sl_l)) downFractals.push(i);
+  }
+  return { upFractals, downFractals };
+}
+
+/** Awesome Oscillator (AO) — 5-period vs 34-period SMA of midpoints */
+function _awesomeOscillator(highs: number[], lows: number[]): number[] {
+  const median = highs.map((h, i) => (h + lows[i]) / 2);
+  const sma5  = _sma(median, 5);
+  const sma34 = _sma(median, 34);
+  return sma5.map((v, i) => isNaN(v) || isNaN(sma34[i]) ? NaN : v - sma34[i]);
+}
+
+/** Accelerator Oscillator (AC) — AO minus 5-SMA of AO */
+function _acceleratorOscillator(highs: number[], lows: number[]): number[] {
+  const ao = _awesomeOscillator(highs, lows);
+  const aoSma = _sma(ao.map(v => isNaN(v) ? 0 : v), 5);
+  return ao.map((v, i) => isNaN(v) ? NaN : v - aoSma[i]);
+}
+
+/** Bill Williams Market Facilitation Index */
+function _bwMfi(highs: number[], lows: number[], volumes: number[]): number[] {
+  return highs.map((h, i) => volumes[i] > 0 ? (h - lows[i]) / volumes[i] : 0);
+}
+
+/** Gator Oscillator (above/below zero from Alligator diff) */
+function _gator(highs: number[], lows: number[]) {
+  const al = _alligator(highs, lows);
+  const upper = al.jaw.map((j, i) => Math.abs(j - al.teeth[i]));
+  const lower = al.teeth.map((t, i) => -Math.abs(t - al.lips[i]));
+  return { upper, lower };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VOLUME ADVANCED
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Price Volume Trend (PVT) */
+function _pvt(closes: number[], volumes: number[]): number[] {
+  const result: number[] = [0];
+  for (let i = 1; i < closes.length; i++) {
+    const prev = closes[i - 1];
+    result.push(result[i - 1] + (prev !== 0 ? ((closes[i] - prev) / prev) * volumes[i] : 0));
+  }
+  return result;
+}
+
+/** Ease of Movement (EMV) */
+function _emv(highs: number[], lows: number[], volumes: number[], period = 14): number[] {
+  const emv: number[] = [0];
+  for (let i = 1; i < highs.length; i++) {
+    const midMove = ((highs[i] + lows[i]) / 2) - ((highs[i-1] + lows[i-1]) / 2);
+    const boxH    = volumes[i] / (highs[i] - lows[i] || 1);
+    emv.push(midMove / boxH);
+  }
+  return _sma(emv, period);
+}
+
+/** Klinger Volume Oscillator (KVO) */
+function _kvo(highs: number[], lows: number[], closes: number[], volumes: number[], fast = 34, slow = 55, sig = 13) {
+  const trend = closes.map((c, i) => {
+    if (i === 0) return 0;
+    const hl = ((highs[i] + lows[i] + c) / 3) - ((highs[i-1] + lows[i-1] + closes[i-1]) / 3);
+    return hl > 0 ? 1 : -1;
+  });
+  const vf = volumes.map((v, i) => v * trend[i]);
+  const kvo = _ema(vf, fast).map((f, i) => f - _ema(vf, slow)[i]);
+  return { kvo, signal: _ema(kvo, sig) };
+}
+
+/** Positive Volume Index (PVI) */
+function _pvi(closes: number[], volumes: number[]): number[] {
+  const result: number[] = [1000];
+  for (let i = 1; i < closes.length; i++) {
+    if (volumes[i] > volumes[i - 1]) {
+      result.push(result[i-1] * (1 + (closes[i] - closes[i-1]) / (closes[i-1] || 1)));
+    } else {
+      result.push(result[i-1]);
+    }
+  }
+  return result;
+}
+
+/** Negative Volume Index (NVI) */
+function _nvi(closes: number[], volumes: number[]): number[] {
+  const result: number[] = [1000];
+  for (let i = 1; i < closes.length; i++) {
+    if (volumes[i] < volumes[i - 1]) {
+      result.push(result[i-1] * (1 + (closes[i] - closes[i-1]) / (closes[i-1] || 1)));
+    } else {
+      result.push(result[i-1]);
+    }
+  }
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADDITIONAL OSCILLATORS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Balance of Power (BOP) */
+function _bop(opens: number[], highs: number[], lows: number[], closes: number[], smooth = 14): number[] {
+  const raw = closes.map((c, i) => {
+    const hl = highs[i] - lows[i];
+    return hl !== 0 ? (c - opens[i]) / hl : 0;
+  });
+  return _ema(raw, smooth);
+}
+
+/** Rex Oscillator */
+function _rex(opens: number[], highs: number[], lows: number[], closes: number[], period = 14): number[] {
+  const tvs = closes.map((c, i) => 3 * c - (lows[i] + opens[i] + highs[i]));
+  return _ema(tvs, period);
+}
+
+/** Linear Regression Channel */
+function _linearRegChannel(closes: number[], period = 100, stdDevMult = 2) {
+  const mid: number[] = [], upper: number[] = [], lower: number[] = [];
+  for (let i = 0; i < closes.length; i++) {
+    if (i < period - 1) { mid.push(NaN); upper.push(NaN); lower.push(NaN); continue; }
+    const y = closes.slice(i - period + 1, i + 1);
+    const n = period;
+    const x = Array.from({ length: n }, (_, j) => j);
+    const sx = x.reduce((a, b) => a + b, 0);
+    const sy = y.reduce((a, b) => a + b, 0);
+    const sxy = x.reduce((a, b, j) => a + b * y[j], 0);
+    const sx2 = x.reduce((a, b) => a + b * b, 0);
+    const d = n * sx2 - sx * sx;
+    const m2 = d !== 0 ? (n * sxy - sx * sy) / d : 0;
+    const b2 = (sy - m2 * sx) / n;
+    const regY = x.map(xi => m2 * xi + b2);
+    const res = y.map((v, j) => v - regY[j]);
+    const std = Math.sqrt(res.reduce((a, b) => a + b * b, 0) / n);
+    const midVal = m2 * (n - 1) + b2;
+    mid.push(midVal);
+    upper.push(midVal + stdDevMult * std);
+    lower.push(midVal - stdDevMult * std);
+  }
+  return { mid, upper, lower };
+}
+
+/** Heikin-Ashi transformation */
+function _heikinAshi(opens: number[], highs: number[], lows: number[], closes: number[]) {
+  const haO: number[] = [], haH: number[] = [], haL: number[] = [], haC: number[] = [];
+  for (let i = 0; i < closes.length; i++) {
+    const c = (opens[i] + highs[i] + lows[i] + closes[i]) / 4;
+    const o = i === 0 ? (opens[i] + closes[i]) / 2 : (haO[i-1] + haC[i-1]) / 2;
+    haC.push(c);
+    haO.push(o);
+    haH.push(Math.max(highs[i], o, c));
+    haL.push(Math.min(lows[i], o, c));
+  }
+  return { open: haO, high: haH, low: haL, close: haC };
+}
+
+/** EMA Ribbon (multiple EMAs: 3,5,8,13,21,34,55,89) */
+function _emaRibbon(closes: number[]) {
+  const periods = [3, 5, 8, 13, 21, 34, 55, 89];
+  const result: Record<string, number[]> = {};
+  for (const p of periods) result[`ema${p}`] = _ema(closes, p);
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SIGNAL ENGINE
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -810,6 +1227,7 @@ export function computeIndicators(
   _highs:   number[],
   _lows:    number[],
   _volumes: number[],
+  _opens:   number[] = _closes.map((c, i) => i === 0 ? c : _closes[i - 1]),
 ) {
   return {
     // Moving Averages
@@ -875,6 +1293,46 @@ export function computeIndicators(
 
     // SMC
     detectSMC: () => _detectSMC(_closes, _highs, _lows),
+
+    // Adaptive Moving Averages
+    kama:      (period = 10) => _kama(_closes, period),
+    mcginley:  (period = 14) => _mcginley(_closes, period),
+    t3:        (period = 5)  => _t3(_closes, period),
+    smma:      (period: number) => _smma(_closes, period),
+    lsma:      (period = 25) => _lsma(_closes, period),
+    vidya:     (period = 14) => _vidya(_closes, period),
+    emaRibbon: () => _emaRibbon(_closes),
+
+    // Advanced Oscillators
+    waveTrend:   (n1 = 10, n2 = 21)     => _waveTrend(_highs, _lows, _closes, n1, n2),
+    stc:         (p = 10, f = 23, s = 50) => _stc(_closes, p, f, s),
+    connorsRsi:  (rsiP = 3, strP = 2, rocP = 100) => _connorsRsi(_closes, rsiP, strP, rocP),
+    rvi:         (period = 10)           => _rvi(_opens, _highs, _lows, _closes, period),
+    smi:         (period = 13)           => _smi(_highs, _lows, _closes, period),
+    chandeKroll: (p = 10, q = 9)        => _chandeKrollStop(_highs, _lows, _closes, p, q),
+    hullRsi:     (rsiP = 14, hmaP = 14) => _hullRsi(_closes, rsiP, hmaP),
+    laguerreRsi: (gamma = 0.5)          => _laguerreRsi(_closes, gamma),
+
+    // Bill Williams
+    alligator:     () => _alligator(_highs, _lows),
+    fractals:      () => _fractals(_highs, _lows),
+    awesomeOsc:    () => _awesomeOscillator(_highs, _lows),
+    acceleratorOsc:() => _acceleratorOscillator(_highs, _lows),
+    bwMfi:         () => _bwMfi(_highs, _lows, _volumes),
+    gator:         () => _gator(_highs, _lows),
+
+    // Volume Advanced
+    pvt:  () => _pvt(_closes, _volumes),
+    emv:  (period = 14) => _emv(_highs, _lows, _volumes, period),
+    kvo:  (fast = 34, slow = 55, sig = 13) => _kvo(_highs, _lows, _closes, _volumes, fast, slow, sig),
+    pvi:  () => _pvi(_closes, _volumes),
+    nvi:  () => _nvi(_closes, _volumes),
+
+    // Additional
+    bop:          (smooth = 14)  => _bop(_opens, _highs, _lows, _closes, smooth),
+    rex:          (period = 14)  => _rex(_opens, _highs, _lows, _closes, period),
+    linRegChannel:(period = 100) => _linearRegChannel(_closes, period),
+    heikinAshi:   () => _heikinAshi(_opens, _highs, _lows, _closes),
 
     // Signal
     latestSignal: () => _generateSignal(_closes, _highs, _lows, _volumes),

@@ -49,6 +49,13 @@ const CATEGORIES: Category[] = [
       { id: 'ICHIMOKU',   name: 'Ichimoku Cloud', desc: 'Ichimoku Kinko Hyo cloud system' },
       { id: 'SUPERTREND', name: 'Supertrend',     desc: 'ATR-based trend-following indicator' },
       { id: 'ADX_PANEL',  name: 'ADX (14)',       desc: 'Average Directional Index, trend strength' },
+      { id: 'KAMA',       name: 'KAMA (10)',       desc: 'Kaufman Adaptive Moving Average' },
+      { id: 'MCGINLEY',   name: 'McGinley Dyn',   desc: 'McGinley Dynamic MA, auto-adjusting speed' },
+      { id: 'T3',         name: 'T3 (5)',          desc: "Tim Tillson's T3 — 5th-order EMA" },
+      { id: 'SMMA',       name: 'SMMA / RMA (14)',desc: "Smoothed MA (Wilder's running average)" },
+      { id: 'LSMA',       name: 'LSMA (25)',       desc: 'Least Squares / Linear Regression MA' },
+      { id: 'VIDYA',      name: 'VIDYA (14)',      desc: 'Variable Index Dynamic Average (adaptive)' },
+      { id: 'EMA_RIBBON', name: 'EMA Ribbon',      desc: 'Multiple EMAs: 3,5,8,13,21,34,55,89' },
     ],
   },
   {
@@ -75,6 +82,13 @@ const CATEGORIES: Category[] = [
       { id: 'ULT_OSC',       name: 'Ultimate Oscillator',   desc: 'Combines 3 timeframes of momentum' },
       { id: 'FISHER',        name: 'Fisher Transform',       desc: 'Converts price to Gaussian distribution' },
       { id: 'COPPOCK',       name: 'Coppock Curve',         desc: 'Long-term momentum indicator' },
+      { id: 'WAVETREND',     name: 'WaveTrend (10,21)',      desc: 'LazyBear WaveTrend Oscillator — WT1/WT2' },
+      { id: 'STC',           name: 'Schaff Trend Cycle',     desc: 'MACD + stochastic double-smoothed cycle' },
+      { id: 'CONNORS_RSI',   name: 'Connors RSI',            desc: '3-component RSI: RSI2 + streak + percentile' },
+      { id: 'RVI_PANEL',     name: 'Relative Vigor Index',   desc: 'Open/Close vs High/Low momentum symmetry' },
+      { id: 'SMI_PANEL',     name: 'Stoch Momentum Index',   desc: 'Centered stochastic oscillator (SMI)' },
+      { id: 'HULL_RSI',      name: 'Hull RSI (14)',          desc: 'RSI smoothed with Hull Moving Average' },
+      { id: 'LAG_RSI',       name: 'Laguerre RSI',           desc: 'Ehlers Laguerre RSI — reduced whipsaw' },
     ],
   },
   {
@@ -89,7 +103,9 @@ const CATEGORIES: Category[] = [
       { id: 'CHANDELIER',name: 'Chandelier Exit',   desc: 'ATR-based trailing stop system' },
       { id: 'HIST_VOL',  name: 'Historical Volatility', desc: 'Realized volatility (annualized)' },
       { id: 'ZSCORE',    name: 'Z-Score',            desc: 'Standard deviations from mean' },
-      { id: 'SQUEEZE',   name: 'Squeeze Momentum',  desc: 'BB inside Keltner squeeze indicator' },
+      { id: 'SQUEEZE',       name: 'Squeeze Momentum',      desc: 'BB inside Keltner squeeze indicator' },
+      { id: 'CHANDE_KROLL',  name: 'Chande Kroll Stop',     desc: 'ATR-based dual stop-loss system' },
+      { id: 'LIN_REG_CHAN',  name: 'Linear Reg Channel',    desc: 'Regression channel with std-dev bands' },
     ],
   },
   {
@@ -105,6 +121,11 @@ const CATEGORIES: Category[] = [
       { id: 'AD_LINE',   name: 'Accum/Distribution',   desc: 'Accumulation/distribution line' },
       { id: 'MFI_PANEL', name: 'Money Flow Index',     desc: 'RSI using volume-weighted prices' },
       { id: 'PVO',       name: 'Pct Volume Osc',       desc: 'Percentage Volume Oscillator' },
+      { id: 'PVT',       name: 'Price Volume Trend',   desc: 'Cumulative % price change × volume' },
+      { id: 'EMV_PANEL', name: 'Ease of Movement',     desc: 'Price movement relative to volume' },
+      { id: 'KVO_PANEL', name: 'Klinger Vol Osc',      desc: 'Volume trend oscillator by Stephen Klinger' },
+      { id: 'PVI_PANEL', name: 'Positive Volume Idx',  desc: 'Tracks price change on rising volume days' },
+      { id: 'NVI_PANEL', name: 'Negative Volume Idx',  desc: 'Tracks price change on falling volume days' },
     ],
   },
   {
@@ -132,6 +153,22 @@ const CATEGORIES: Category[] = [
       { id: 'MASS_IDX',  name: 'Mass Index',            desc: 'Range expansion reversal signal' },
       { id: 'SR_LEVELS', name: 'Support/Resistance',   desc: 'Auto-detected S/R price levels' },
       { id: 'PIVOTS',    name: 'Pivot Points',          desc: 'Daily standard pivot point levels' },
+      { id: 'BOP_PANEL', name: 'Balance of Power',      desc: 'Bull/bear strength: (Close-Open)/(High-Low)' },
+      { id: 'REX_PANEL', name: 'Rex Oscillator',        desc: 'TVS oscillator — price vs OHLC midpoint' },
+      { id: 'HEIKIN_ASHI',name: 'Heikin-Ashi',         desc: 'Smoothed candle chart for trend clarity' },
+    ],
+  },
+  {
+    id: 'BillWilliams',
+    label: 'Bill Williams',
+    color: '#e91e63',
+    items: [
+      { id: 'ALLIGATOR',  name: 'Alligator',            desc: 'Three SMMA lines: Jaw (13), Teeth (8), Lips (5)' },
+      { id: 'FRACTALS',   name: 'Fractals',             desc: 'Up/down fractal reversal points (Bill Williams)' },
+      { id: 'AO_PANEL',   name: 'Awesome Oscillator',  desc: '5-34 SMA of midpoints — market momentum' },
+      { id: 'AC_PANEL',   name: 'Accelerator Osc',     desc: 'AO minus 5-SMA of AO — acceleration of momentum' },
+      { id: 'GATOR_PANEL',name: 'Gator Oscillator',    desc: 'Alligator jaw-teeth-lips divergence histogram' },
+      { id: 'BWMFI_PANEL',name: 'Market Facilitation', desc: 'BW MFI — tick volume facilitation index' },
     ],
   },
   {
@@ -218,7 +255,7 @@ export default function IndicatorModal() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <button className="indmod-close" onClick={handleClose}>
+          <button type="button" className="indmod-close" onClick={handleClose} title="Close indicators panel" aria-label="Close">
             <X size={15} />
           </button>
         </div>
@@ -234,6 +271,7 @@ export default function IndicatorModal() {
                 return (
                   <button
                     key={cat.id}
+                    type="button"
                     className={`indmod-cat-btn ind-cat-item${activeCat === cat.id ? ' active' : ''}`}
                     onClick={() => setActiveCat(cat.id)}
                     style={activeCat === cat.id ? { borderLeftColor: cat.color } : {}}
@@ -299,10 +337,10 @@ export default function IndicatorModal() {
           <span className="indmod-active-count">
             {activeIndicators.length} active
           </span>
-          <button className="indmod-reset-btn" onClick={handleReset}>
+          <button type="button" className="indmod-reset-btn" onClick={handleReset}>
             Reset defaults
           </button>
-          <button className="indmod-apply-btn" onClick={handleClose}>
+          <button type="button" className="indmod-apply-btn" onClick={handleClose}>
             Apply &amp; Close
           </button>
         </div>
