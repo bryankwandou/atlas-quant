@@ -14,13 +14,18 @@ const CandlestickChartIcon = ({ size = 14 }: { size?: number }) => (
 );
 
 const SUB_PANELS = [
-  { id: 'rsi',      label: 'RSI(7)'   },
+  { id: 'rsi',      label: 'RSI'      },
   { id: 'macd',     label: 'MACD'     },
-  { id: 'williams', label: '%R(14)'   },
+  { id: 'williams', label: '%R'       },
   { id: 'stochrsi', label: 'StochRSI' },
-  { id: 'mfi',      label: 'MFI(14)'  },
-  { id: 'cci',      label: 'CCI(14)'  },
+  { id: 'mfi',      label: 'MFI'      },
+  { id: 'cci',      label: 'CCI'      },
   { id: 'adx',      label: 'ADX'      },
+  { id: 'obv',      label: 'OBV'      },
+  { id: 'aroon',    label: 'Aroon'    },
+  { id: 'cmf',      label: 'CMF'      },
+  { id: 'atr',      label: 'ATR'      },
+  { id: 'elder',    label: 'Elder'    },
 ];
 
 const CHART_TYPES = [
@@ -218,6 +223,75 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       dnS.setData(times.map((t: number, i: number) => ({ time: t, value: st.direction[i] === -1 ? st.upper[i] : NaN })).filter((d: any) => !isNaN(d.value)));
     }
 
+    // WMA / VWMA
+    if (activeIndicators.includes('WMA_20'))   addLine(ind.wma(20),   '#ef9a9a', 'WMA(20)');
+    if (activeIndicators.includes('VWMA'))     addLine(ind.vwma(20),  '#80cbc4', 'VWMA(20)');
+
+    // Donchian Channel
+    if (activeIndicators.includes('DONCHIAN')) {
+      const dc = ind.donchian(20);
+      addLine(dc.upper, 'rgba(255,193,7,0.7)', 'DC Upper', 0, 0.8);
+      addLine(dc.middle,'rgba(255,193,7,0.4)', 'DC Mid',   2, 0.6);
+      addLine(dc.lower, 'rgba(255,193,7,0.7)', 'DC Lower', 0, 0.8);
+    }
+
+    // VWAP Bands
+    if (activeIndicators.includes('VWAP_BANDS')) {
+      const vb = ind.vwapBands(2);
+      addLine(vb.upper, 'rgba(0,188,212,0.5)', 'VWAP+2σ', 2, 0.8);
+      addLine(vb.lower, 'rgba(0,188,212,0.5)', 'VWAP-2σ', 2, 0.8);
+    }
+
+    // Chandelier Exit
+    if (activeIndicators.includes('CHANDELIER')) {
+      const ce = ind.chandelierExit(22, 3);
+      const upS = (main as any).addSeries(LineSeries, { color: '#26c6da', lineWidth: 1.5, lineStyle: 0, priceLineVisible: false, lastValueVisible: false });
+      upS.setData(times.map((t: number, i: number) => ({ time: t, value: ce.longStop[i] })).filter((d: any) => !isNaN(d.value) && d.value > 0));
+      const dnS = (main as any).addSeries(LineSeries, { color: '#ef5350', lineWidth: 1.5, lineStyle: 0, priceLineVisible: false, lastValueVisible: false });
+      dnS.setData(times.map((t: number, i: number) => ({ time: t, value: ce.shortStop[i] })).filter((d: any) => !isNaN(d.value) && d.value > 0));
+    }
+
+    // Support & Resistance
+    if (activeIndicators.includes('SR_LEVELS')) {
+      const srData = ind.supportResistance(20);
+      const supports = srData.supports || [];
+      const resistances = srData.resistances || [];
+      supports.slice(0, 3).forEach((sr: any) => {
+        try { candleSeries.createPriceLine({ price: sr.price, color: 'rgba(8,153,129,0.6)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'S' }); } catch {}
+      });
+      resistances.slice(0, 3).forEach((sr: any) => {
+        try { candleSeries.createPriceLine({ price: sr.price, color: 'rgba(242,54,69,0.6)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'R' }); } catch {}
+      });
+    }
+
+    // Pivot Points
+    if (activeIndicators.includes('PIVOTS')) {
+      const pp = ind.pivotPoints();
+      const pivotColors: Record<string, string> = {
+        pp: '#f7a600', r1: '#f23645', r2: '#f23645', r3: '#f23645',
+        s1: '#089981', s2: '#089981', s3: '#089981',
+      };
+      Object.entries(pp).forEach(([key, val]) => {
+        if (typeof val === 'number' && !isNaN(val) && val > 0) {
+          try {
+            candleSeries.createPriceLine({ price: val, color: pivotColors[key] || '#888', lineWidth: 1, lineStyle: 3, axisLabelVisible: true, title: key.toUpperCase() });
+          } catch {}
+        }
+      });
+    }
+
+    // SMC Fair Value Gaps
+    if (activeIndicators.includes('SMC_FVG')) {
+      const smc = ind.detectSMC();
+      (smc.fvg ?? []).slice(-8).forEach((fvg: any) => {
+        const color = fvg.type === 'bullish' ? 'rgba(8,153,129,0.25)' : 'rgba(242,54,69,0.25)';
+        try {
+          candleSeries.createPriceLine({ price: fvg.top ?? fvg.high, color, lineWidth: 1, lineStyle: 4, axisLabelVisible: false, title: '' });
+          candleSeries.createPriceLine({ price: fvg.bottom ?? fvg.low, color, lineWidth: 1, lineStyle: 4, axisLabelVisible: false, title: fvg.type === 'bullish' ? 'FVG▲' : 'FVG▼' });
+        } catch {}
+      });
+    }
+
     // SMC Order Blocks
     if (activeIndicators.includes('SMC_OB')) {
       const smc = ind.detectSMC();
@@ -304,6 +378,28 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         addSubLine(adxV.plusDI, '#089981', '+DI', 1);
         addSubLine(adxV.minusDI, '#f23645', '-DI', 1);
         addLevel(25, 'rgba(255,255,255,0.15)');
+      } else if (subPanel === 'obv') {
+        addSubLine(ind.obv(), '#26c6da', 'OBV');
+      } else if (subPanel === 'aroon') {
+        const ar = ind.aroon(25);
+        addSubLine(ar.up,   '#089981', 'Up',   1.2);
+        addSubLine(ar.down, '#f23645', 'Down', 1.2);
+        addSubLine(ar.osc, '#f7a600', 'Osc', 1);
+        addLevel(0, 'rgba(255,255,255,0.1)');
+      } else if (subPanel === 'cmf') {
+        const cmfV = ind.cmf(20);
+        const cmfHist = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
+        cmfHist.setData(times.map((t: number, i: number) => ({ time: t, value: cmfV[i], color: (cmfV[i] || 0) >= 0 ? 'rgba(8,153,129,0.7)' : 'rgba(242,54,69,0.7)' })).filter((d: any) => !isNaN(d.value)));
+        addLevel(0, 'rgba(255,255,255,0.1)');
+      } else if (subPanel === 'atr') {
+        addSubLine(ind.atr(14), '#ab47bc', 'ATR(14)');
+      } else if (subPanel === 'elder') {
+        const er = ind.elderRay(13);
+        const bullPow = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
+        bullPow.setData(times.map((t: number, i: number) => ({ time: t, value: er.bullPower[i], color: 'rgba(8,153,129,0.7)' })).filter((d: any) => !isNaN(d.value)));
+        const bearPow = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
+        bearPow.setData(times.map((t: number, i: number) => ({ time: t, value: er.bearPower[i], color: 'rgba(242,54,69,0.7)' })).filter((d: any) => !isNaN(d.value)));
+        addLevel(0, 'rgba(255,255,255,0.1)');
       }
 
       // Sync timescales

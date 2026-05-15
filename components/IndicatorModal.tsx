@@ -43,6 +43,7 @@ const CATEGORIES: Category[] = [
       { id: 'DEMA',       name: 'DEMA (21)',      desc: 'Double Exponential Moving Average' },
       { id: 'TEMA',       name: 'TEMA (21)',      desc: 'Triple Exponential Moving Average' },
       { id: 'ZLEMA',      name: 'ZLEMA (21)',     desc: 'Zero-Lag Exponential Moving Average' },
+      { id: 'WMA_20',     name: 'WMA (20)',       desc: 'Weighted Moving Average, period 20' },
       { id: 'VWMA',       name: 'VWMA (20)',      desc: 'Volume-Weighted Moving Average' },
       { id: 'PSAR',       name: 'Parabolic SAR',  desc: 'Parabolic Stop and Reverse' },
       { id: 'ICHIMOKU',   name: 'Ichimoku Cloud', desc: 'Ichimoku Kinko Hyo cloud system' },
@@ -129,6 +130,8 @@ const CATEGORIES: Category[] = [
       { id: 'FORCE',     name: 'Force Index',           desc: 'Elder Force Index (power of move)' },
       { id: 'ELDER_RAY', name: 'Elder Ray',             desc: 'Bull/Bear power from EMA' },
       { id: 'MASS_IDX',  name: 'Mass Index',            desc: 'Range expansion reversal signal' },
+      { id: 'SR_LEVELS', name: 'Support/Resistance',   desc: 'Auto-detected S/R price levels' },
+      { id: 'PIVOTS',    name: 'Pivot Points',          desc: 'Daily standard pivot point levels' },
     ],
   },
   {
