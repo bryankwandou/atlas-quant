@@ -11,8 +11,11 @@
   ],
   "functions": {
     "app/api/market/ohlcv/route.ts":        { "maxDuration": 30 },
-    "app/api/quant/signals/route.ts":       { "maxDuration": 30 },
+    "app/api/quant/signals/route.ts":       { "maxDuration": 45 },
+    "app/api/quant/regime/route.ts":        { "maxDuration": 45 },
     "app/api/quant/backtest/route.ts":      { "maxDuration": 60 },
+    "app/api/macro/data/route.ts":          { "maxDuration": 30 },
+    "app/api/macro/signal/route.ts":        { "maxDuration": 45 },
     "app/api/ai/analyze/route.ts":          { "maxDuration": 60 },
     "app/api/cron/market-refresh/route.ts": { "maxDuration": 60 }
   }

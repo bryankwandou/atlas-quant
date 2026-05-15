@@ -1,82 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { SYMBOL_CATALOG } from '@/src/data/symbolCatalog';
+import { searchSymbols, groupHitsByAssetClass } from '@/src/core/search/symbolSearch';
+import type { AssetClass } from '@/src/data/symbolCatalog';
 
 const BINANCE_BASE = process.env.BINANCE_BASE_URL || 'https://api.binance.com/api/v3';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const raw = searchParams.get('q') || '';
-  const q   = raw.trim();
+  const raw = (searchParams.get('q') || '').trim();
+  const ac = (searchParams.get('class') || 'all') as AssetClass | 'all';
+  const limit = Math.max(1, Math.min(50, parseInt(searchParams.get('limit') || '25', 10)));
+  const grouped = searchParams.get('grouped') === '1';
 
-  if (!q || q.length < 1) {
-    // Return top defaults when no query
-    const defaults = SYMBOL_CATALOG.slice(0, 12).map(s => ({
-      symbol: s.symbol, name: s.name, exchange: s.exchange, assetClass: s.assetClass,
-    }));
-    return NextResponse.json({ results: defaults, query: '' });
-  }
+  const baseHits = searchSymbols(raw, { limit, assetClass: ac });
 
-  const ql = q.toLowerCase();
-  const qu = q.toUpperCase();
-
-  // 1. Search local catalog (symbol + name)
-  const exactSym  = SYMBOL_CATALOG.filter(s => s.symbol.toUpperCase() === qu);
-  const startsSym = SYMBOL_CATALOG.filter(s => s.symbol.toUpperCase().startsWith(qu) && s.symbol.toUpperCase() !== qu);
-  const startsName= SYMBOL_CATALOG.filter(s =>
-    !s.symbol.toUpperCase().startsWith(qu) &&
-    s.name.toLowerCase().startsWith(ql)
-  );
-  const containsSym = SYMBOL_CATALOG.filter(s =>
-    !s.symbol.toUpperCase().startsWith(qu) &&
-    !s.name.toLowerCase().startsWith(ql) &&
-    s.symbol.toUpperCase().includes(qu)
-  );
-  const containsName= SYMBOL_CATALOG.filter(s =>
-    !s.symbol.toUpperCase().startsWith(qu) &&
-    !s.name.toLowerCase().startsWith(ql) &&
-    !s.symbol.toUpperCase().includes(qu) &&
-    s.name.toLowerCase().includes(ql)
-  );
-
-  const catalogResults = [...exactSym, ...startsSym, ...startsName, ...containsSym, ...containsName]
-    .slice(0, 12)
-    .map(s => ({
-      symbol:     s.symbol,
-      name:       s.name,
-      exchange:   s.exchange,
-      assetClass: s.assetClass,
-    }));
-
-  // 2. If fewer than 8 results and query looks like crypto, augment from Binance live
-  const looksLikeCrypto = /^[A-Z0-9]{2,10}(USDT|BTC|ETH|BNB)?$/i.test(q);
-  if (catalogResults.length < 8 && looksLikeCrypto) {
+  let liveAugmented = baseHits;
+  if (raw && baseHits.length < 8 && /^[A-Z0-9]{2,12}(USDT|BTC|ETH|BNB|USDC|FDUSD)?$/i.test(raw)) {
     try {
       const res = await fetch(`${BINANCE_BASE}/ticker/24hr`, { next: { revalidate: 120 } });
       if (res.ok) {
-        const tickers = await res.json();
-        const binanceResults = (tickers as any[])
-          .filter((t: any) =>
+        const tickers = (await res.json()) as any[];
+        const qu = raw.toUpperCase();
+        const liveResults = tickers
+          .filter((t) =>
             t.symbol.includes(qu) &&
-            t.symbol.endsWith('USDT') &&
-            !catalogResults.some(c => c.symbol === t.symbol)
+            (t.symbol.endsWith('USDT') || t.symbol.endsWith('USDC')) &&
+            !baseHits.some((c) => c.symbol === t.symbol),
           )
-          .sort((a: any, b: any) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
-          .slice(0, 8 - catalogResults.length)
-          .map((t: any) => ({
-            symbol:     t.symbol,
-            name:       t.symbol.replace('USDT', ''),
-            exchange:   'BINANCE',
-            assetClass: 'crypto',
-            price:      parseFloat(t.lastPrice),
-            change24h:  parseFloat(t.priceChangePercent),
+          .sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
+          .slice(0, Math.max(0, 8 - baseHits.length))
+          .map((t) => ({
+            symbol: t.symbol,
+            name: t.symbol.replace(/USDT$|USDC$/, ''),
+            exchange: 'BINANCE',
+            assetClass: 'crypto' as AssetClass,
+            category: 'Spot',
+            score: 300,
+            highlight: t.symbol,
+            price: parseFloat(t.lastPrice),
+            change24h: parseFloat(t.priceChangePercent),
+            volume24h: parseFloat(t.quoteVolume),
           }));
-        return NextResponse.json({
-          results: [...catalogResults, ...binanceResults].slice(0, 12),
-          query:   q,
-        });
+        liveAugmented = [...baseHits, ...liveResults];
       }
     } catch { /* fall through */ }
   }
 
-  return NextResponse.json({ results: catalogResults, query: q });
+  if (grouped) {
+    return NextResponse.json({
+      query: raw,
+      assetClass: ac,
+      total: liveAugmented.length,
+      grouped: groupHitsByAssetClass(liveAugmented),
+    });
+  }
+
+  return NextResponse.json({
+    query: raw,
+    assetClass: ac,
+    total: liveAugmented.length,
+    results: liveAugmented,
+  });
 }

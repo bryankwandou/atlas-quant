@@ -1,302 +1,357 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { deriveClientKeypair, signMessageClient } from '@/src/utils/crypto-browser';
 
-type LoginMode = 'wallet' | 'password';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import '../auth.css';
+
+type AuthTab = 'wallet' | 'email' | 'username';
+
+interface PhantomProvider {
+  isPhantom: boolean;
+  publicKey: { toString(): string; toBase58(): string } | null;
+  connect(opts?: { onlyIfTrusted?: boolean }): Promise<{ publicKey: { toString(): string; toBase58(): string } }>;
+  signMessage(msg: Uint8Array, encoding: string): Promise<{ signature: Uint8Array }>;
+  disconnect(): Promise<void>;
+  isConnected?: boolean;
+}
 
 declare global {
   interface Window {
-    solana?: {
-      isPhantom?: boolean;
-      publicKey?: { toBase58(): string };
-      connect(): Promise<{ publicKey: { toBase58(): string } }>;
-      disconnect(): Promise<void>;
-      signMessage(msg: Uint8Array, encoding: 'utf8'): Promise<{ signature: Uint8Array }>;
-      isConnected?: boolean;
-    };
+    solana?: PhantomProvider;
   }
 }
 
-export default function Login() {
-  const [mode, setMode]         = useState<LoginMode>('wallet');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError]       = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [walletPubkey, setWalletPubkey] = useState<string | null>(null);
-  const [phantomAvailable, setPhantomAvailable] = useState(false);
+function getPhantom(): PhantomProvider | null {
+  if (typeof window === 'undefined') return null;
+  return window.solana?.isPhantom ? window.solana : null;
+}
+
+export default function LoginPage() {
   const router = useRouter();
 
+  const [tab, setTab] = useState<AuthTab>('wallet');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [walletPubkey, setWalletPubkey] = useState<string | null>(null);
+  const [phantomAvailable, setPhantomAvailable] = useState(false);
+
+  // Check for existing session on mount; detect Phantom
   useEffect(() => {
-    // Check Phantom availability after mount
+    const token = localStorage.getItem('session_token');
+    const user = localStorage.getItem('atlas_user');
+    if (token && user) {
+      router.replace('/');
+      return;
+    }
     const checkPhantom = () => {
-      if (typeof window !== 'undefined' && window.solana?.isPhantom) {
-        setPhantomAvailable(true);
-        if (window.solana.isConnected && window.solana.publicKey) {
-          setWalletPubkey(window.solana.publicKey.toBase58());
-        }
+      const p = getPhantom();
+      setPhantomAvailable(!!p);
+      if (p?.isConnected && p.publicKey) {
+        setWalletPubkey(p.publicKey.toBase58());
       }
     };
     checkPhantom();
     window.addEventListener('load', checkPhantom);
     return () => window.removeEventListener('load', checkPhantom);
-  }, []);
+  }, [router]);
 
-  async function doAuth(publicKeyBase58: string, signFn: (msg: string) => Promise<string>) {
-    // 1. Get challenge
-    const chalRes = await fetch('/api/auth/challenge', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ publicKey: publicKeyBase58 }),
-    });
-    const chalData = await chalRes.json();
-    if (!chalRes.ok) throw new Error(chalData.error || 'Challenge failed');
+  const clearMessages = () => { setError(''); setInfo(''); };
 
-    // 2. Sign challenge
-    const signature = await signFn(chalData.message);
+  // ── Credential login (email or username) ──────────────────────────────
+  const handleCredentialLogin = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      clearMessages();
 
-    // 3. Verify
-    const verRes = await fetch('/api/auth/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ publicKey: publicKeyBase58, signature, challenge: chalData }),
-    });
-    const verData = await verRes.json();
-    if (!verRes.ok) {
-      if (verData.status === 'pending') { router.push('/pending-approval'); return; }
-      throw new Error(verData.error || 'Verification failed');
-    }
-    localStorage.setItem('session_token', verData.token);
-    localStorage.setItem('user_pubkey', publicKeyBase58);
-    router.push('/');
-  }
-
-  async function handleWalletConnect() {
-    setError(''); setLoading(true);
-    try {
-      if (!window.solana?.isPhantom) throw new Error('Phantom wallet not found. Install from phantom.app');
-      const resp = await window.solana.connect();
-      const pubkey = resp.publicKey.toBase58();
-      setWalletPubkey(pubkey);
-      await doAuth(pubkey, async (msg: string) => {
-        const msgBytes = new TextEncoder().encode(msg);
-        const signed = await window.solana!.signMessage(msgBytes, 'utf8');
-        // Convert Uint8Array to bs58 string
-        const { default: bs58 } = await import('bs58');
-        return bs58.encode(signed.signature);
-      });
-    } catch (e: any) { setError(e.message); } finally { setLoading(false); }
-  }
-
-  async function handleDisconnect() {
-    if (window.solana) await window.solana.disconnect();
-    setWalletPubkey(null);
-  }
-
-  async function handlePasswordLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setError(''); setLoading(true);
-    try {
-      // Check admin bypass first
-      const adminRes = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      const adminData = await adminRes.json();
-      if (adminData.session_token || adminData.adminToken) {
-        localStorage.setItem('session_token', adminData.session_token || adminData.adminToken);
-        router.push('/'); return;
+      if (!identifier.trim() || !password) {
+        setError('Please enter your ' + (tab === 'email' ? 'email' : 'username') + ' and password.');
+        return;
       }
 
-      const { publicKeyBase58, secretKeyBytes } = await deriveClientKeypair(username, password);
-      await doAuth(publicKeyBase58, async (msg: string) => signMessageClient(msg, secretKeyBytes));
-    } catch (e: any) { setError(e.message); } finally { setLoading(false); }
-  }
+      setLoading(true);
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: identifier.trim(), password }),
+        });
+        const data = await res.json();
 
-  const pubkeyShort = walletPubkey ? `${walletPubkey.slice(0, 6)}...${walletPubkey.slice(-4)}` : '';
+        if (!res.ok || !data.success) {
+          setError(data.error ?? 'Login failed. Please check your credentials.');
+          return;
+        }
+
+        localStorage.setItem('session_token', data.access_token ?? data.token ?? '');
+        localStorage.setItem('atlas_user', JSON.stringify(data.user ?? {}));
+        if (data.refresh_token) {
+          localStorage.setItem('refresh_token', data.refresh_token);
+        }
+        router.replace('/');
+      } catch {
+        setError('Network error. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [identifier, password, tab, router]
+  );
+
+  // ── Phantom wallet login ──────────────────────────────────────────────
+  const handleWalletLogin = useCallback(async () => {
+    clearMessages();
+    const phantom = getPhantom();
+    if (!phantom) {
+      setError('Phantom wallet not detected. Please install the Phantom browser extension.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 1. Connect
+      const resp = await phantom.connect();
+      const pubkey = resp.publicKey.toBase58();
+      setWalletPubkey(pubkey);
+      setInfo('Wallet connected. Requesting challenge…');
+
+      // 2. Get challenge
+      const challengeRes = await fetch('/api/auth/challenge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicKey: pubkey }),
+      });
+      const challenge = await challengeRes.json();
+      if (!challengeRes.ok) throw new Error(challenge.error ?? 'Challenge request failed');
+
+      setInfo('Please sign the message in Phantom…');
+
+      // 3. Sign
+      const msgBytes = new TextEncoder().encode(challenge.message);
+      const { signature: sigBytes } = await phantom.signMessage(msgBytes, 'utf8');
+
+      const bs58 = await import('bs58');
+      const signatureBase58 = bs58.default.encode(sigBytes);
+
+      setInfo('Verifying signature…');
+
+      // 4. Verify
+      const verifyRes = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicKey: pubkey, signature: signatureBase58, challenge }),
+      });
+      const verifyData = await verifyRes.json();
+
+      if (!verifyRes.ok) {
+        if (verifyData.status === 'pending') {
+          router.replace('/pending-approval');
+          return;
+        }
+        throw new Error(verifyData.error ?? 'Signature verification failed');
+      }
+
+      localStorage.setItem('session_token', verifyData.token ?? '');
+      localStorage.setItem('user_pubkey', pubkey);
+      localStorage.setItem('atlas_user', JSON.stringify({ publicKey: pubkey, role: 'user' }));
+      router.replace('/');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Wallet authentication failed.';
+      setError(msg);
+      setInfo('');
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
+
+  const handleDisconnect = async () => {
+    if (window.solana) await window.solana.disconnect();
+    setWalletPubkey(null);
+  };
+
+  const pubkeyShort = walletPubkey
+    ? `${walletPubkey.slice(0, 6)}…${walletPubkey.slice(-4)}`
+    : '';
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0b0e17', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', fontFamily: 'Roboto Mono, monospace' }}>
-      <div style={{ width: '100%', maxWidth: '440px' }}>
-        {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <div style={{ fontSize: '28px', fontWeight: 700, color: '#fff', letterSpacing: '-0.5px' }}>
-            <span style={{ color: '#2962ff' }}>ATLAS</span>
-            <span style={{ color: '#089981' }}>-</span>
-            <span style={{ color: '#fff' }}>QUANT</span>
-          </div>
-          <div style={{ fontSize: '11px', color: '#4a5568', marginTop: '4px', letterSpacing: '2px' }}>
-            MULTI-FACTOR QUANTITATIVE PLATFORM v2.0
-          </div>
+    <div className="auth-root">
+      <div className="auth-card">
+        {/* Tabs */}
+        <div className="auth-tabs">
+          {(['wallet', 'email', 'username'] as AuthTab[]).map((t) => (
+            <button
+              key={t}
+              className={`auth-tab${tab === t ? ' active' : ''}`}
+              onClick={() => { setTab(t); clearMessages(); setIdentifier(''); setPassword(''); }}
+              type="button"
+            >
+              {t === 'wallet' ? '🔐 Wallet' : t === 'email' ? '📧 Email' : '👤 Username'}
+            </button>
+          ))}
         </div>
 
-        {/* Card */}
-        <div style={{ background: '#131722', border: '1px solid #2a2e39', borderRadius: '12px', overflow: 'hidden' }}>
-          {/* Tabs */}
-          <div style={{ display: 'flex', borderBottom: '1px solid #2a2e39' }}>
-            {(['wallet', 'password'] as LoginMode[]).map(m => (
-              <button
-                key={m}
-                onClick={() => { setMode(m); setError(''); }}
-                style={{
-                  flex: 1, padding: '14px', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase',
-                  background: mode === m ? '#1e2230' : 'transparent',
-                  color: mode === m ? '#fff' : '#4a5568',
-                  borderBottom: mode === m ? '2px solid #2962ff' : '2px solid transparent',
-                  transition: 'all 0.15s',
-                }}
-              >
-                {m === 'wallet' ? '⬡ Phantom Wallet' : '⚿ Local Identity'}
-              </button>
-            ))}
+        <div className="auth-body">
+          {/* Logo */}
+          <div className="auth-logo">
+            <div className="auth-logo-title">
+              <span style={{ color: '#2962ff' }}>ATLAS</span>
+              <span>-QUANT</span>
+            </div>
+            <div className="auth-logo-sub">QUANTITATIVE TRADING PLATFORM</div>
           </div>
 
-          <div style={{ padding: '28px' }}>
-            {mode === 'wallet' ? (
-              <div>
-                <p style={{ fontSize: '12px', color: '#787b86', marginBottom: '20px', lineHeight: 1.6 }}>
-                  Connect your Solana wallet. A cryptographic challenge will be signed locally — your private key never leaves your device.
-                </p>
-
-                {!walletPubkey ? (
-                  <>
-                    <button
-                      onClick={handleWalletConnect}
-                      disabled={loading}
-                      style={{
-                        width: '100%', padding: '14px', borderRadius: '8px', border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
-                        background: loading ? '#1e2230' : 'linear-gradient(135deg, #9945FF, #14F195)',
-                        color: '#fff', fontWeight: 700, fontSize: '13px', letterSpacing: '0.5px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                        opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s',
-                      }}
-                    >
-                      {loading ? (
-                        <><span style={spinnerStyle} />Authenticating...</>
-                      ) : (
-                        <>
-                          <svg width="20" height="20" viewBox="0 0 128 128" fill="none">
-                            <path d="M64 0C28.7 0 0 28.7 0 64s28.7 64 64 64 64-28.7 64-64S99.3 0 64 0z" fill="#AB9FF2"/>
-                            <path d="M110.5 64.9H89.3c-3.6 0-6.5 2.9-6.5 6.5v13c0 3.6 2.9 6.5 6.5 6.5h21.2V64.9z" fill="#fff"/>
-                          </svg>
-                          Connect Phantom
-                        </>
-                      )}
-                    </button>
-
-                    {!phantomAvailable && (
-                      <p style={{ fontSize: '11px', color: '#f7a600', marginTop: '12px', textAlign: 'center' }}>
-                        Phantom not detected.{' '}
-                        <a href="https://phantom.app" target="_blank" rel="noreferrer" style={{ color: '#2962ff' }}>
-                          Install Phantom
-                        </a>
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <div>
-                    <div style={{ background: '#0d1117', border: '1px solid #2a2e39', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
-                      <div style={{ fontSize: '10px', color: '#4a5568', marginBottom: '4px' }}>CONNECTED WALLET</div>
-                      <div style={{ fontSize: '14px', color: '#14F195', fontWeight: 600 }}>{pubkeyShort}</div>
-                    </div>
-                    <button
-                      onClick={handleWalletConnect}
-                      disabled={loading}
-                      style={{
-                        width: '100%', padding: '14px', borderRadius: '8px', border: 'none', cursor: 'pointer',
-                        background: '#2962ff', color: '#fff', fontWeight: 700, fontSize: '13px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                        opacity: loading ? 0.6 : 1,
-                      }}
-                    >
-                      {loading ? <><span style={spinnerStyle} />Signing...</> : 'Sign & Authenticate'}
-                    </button>
-                    <button
-                      onClick={handleDisconnect}
-                      style={{ width: '100%', padding: '10px', marginTop: '8px', borderRadius: '8px', border: '1px solid #2a2e39', background: 'transparent', color: '#4a5568', fontSize: '12px', cursor: 'pointer' }}
-                    >
-                      Disconnect
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <form onSubmit={handlePasswordLogin}>
-                <p style={{ fontSize: '12px', color: '#787b86', marginBottom: '20px', lineHeight: 1.6 }}>
-                  Credentials are hashed locally to derive a unique keypair. No password is ever transmitted.
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div>
-                    <label style={{ fontSize: '10px', color: '#4a5568', letterSpacing: '1px', display: 'block', marginBottom: '6px' }}>IDENTITY</label>
-                    <input
-                      type="text"
-                      placeholder="username"
-                      value={username}
-                      onChange={e => setUsername(e.target.value)}
-                      required
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '10px', color: '#4a5568', letterSpacing: '1px', display: 'block', marginBottom: '6px' }}>PASSPHRASE</label>
-                    <input
-                      type="password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      required
-                      style={inputStyle}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    style={{
-                      width: '100%', padding: '14px', borderRadius: '8px', border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
-                      background: loading ? '#1e2230' : '#2962ff',
-                      color: '#fff', fontWeight: 700, fontSize: '13px', letterSpacing: '0.5px', marginTop: '4px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                      opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s',
-                    }}
-                  >
-                    {loading ? <><span style={spinnerStyle} />Authenticating...</> : 'Authenticate →'}
-                  </button>
+          {/* ── Wallet Tab ── */}
+          {tab === 'wallet' && (
+            <div>
+              {walletPubkey && (
+                <div className="wallet-info">
+                  <strong>Connected Wallet</strong>
+                  {pubkeyShort}
                 </div>
-                <p style={{ fontSize: '11px', color: '#4a5568', textAlign: 'center', marginTop: '16px' }}>
-                  No account?{' '}
-                  <a href="/register" style={{ color: '#2962ff', textDecoration: 'none' }}>Create local identity</a>
+              )}
+              {!walletPubkey ? (
+                <button
+                  className="auth-btn auth-btn-wallet"
+                  onClick={handleWalletLogin}
+                  disabled={loading}
+                  type="button"
+                >
+                  {loading
+                    ? 'Connecting…'
+                    : phantomAvailable
+                    ? 'Connect Phantom Wallet'
+                    : 'Phantom Not Detected'}
+                </button>
+              ) : (
+                <>
+                  <button
+                    className="auth-btn auth-btn-wallet"
+                    onClick={handleWalletLogin}
+                    disabled={loading}
+                    type="button"
+                    style={{ marginBottom: 8 }}
+                  >
+                    {loading ? 'Signing…' : 'Sign & Authenticate'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDisconnect}
+                    style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #2a2e39', background: 'transparent', color: '#4a5568', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    Disconnect
+                  </button>
+                </>
+              )}
+              {!phantomAvailable && !walletPubkey && (
+                <p className="auth-footer" style={{ marginTop: 12 }}>
+                  <a href="https://phantom.app" target="_blank" rel="noopener noreferrer" className="auth-link">
+                    Install Phantom
+                  </a>{' '}
+                  to use wallet login.
                 </p>
-              </form>
-            )}
+              )}
+            </div>
+          )}
 
-            {/* Error */}
-            {error && (
-              <div style={{ marginTop: '16px', padding: '12px 16px', background: 'rgba(242,54,69,0.1)', border: '1px solid rgba(242,54,69,0.3)', borderRadius: '8px', fontSize: '12px', color: '#f23645' }}>
-                ⚠ {error}
+          {/* ── Email Tab ── */}
+          {tab === 'email' && (
+            <form onSubmit={handleCredentialLogin} noValidate>
+              <div className="auth-field">
+                <label className="auth-label" htmlFor="email-input">EMAIL ADDRESS</label>
+                <input
+                  id="email-input"
+                  className="auth-input"
+                  type="email"
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  disabled={loading}
+                  required
+                />
               </div>
-            )}
-          </div>
-        </div>
+              <div className="auth-field">
+                <label className="auth-label" htmlFor="email-password">PASSWORD</label>
+                <input
+                  id="email-password"
+                  className="auth-input"
+                  type="password"
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                  required
+                />
+              </div>
+              <div style={{ textAlign: 'right', marginBottom: 14 }}>
+                <a href="/forgot-password" className="auth-link" style={{ fontSize: 11 }}>
+                  Forgot password?
+                </a>
+              </div>
+              <button className="auth-btn auth-btn-primary" type="submit" disabled={loading}>
+                {loading ? 'Signing in…' : 'Sign In'}
+              </button>
+              <div className="auth-footer">
+                Don&apos;t have an account?{' '}
+                <a href="/register" className="auth-link">Register</a>
+              </div>
+            </form>
+          )}
 
-        {/* Footer */}
-        <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '10px', color: '#2a2e39', letterSpacing: '1px' }}>
-          ATLAS-QUANT © 2025 · CRYPTOGRAPHIC AUTH · ZERO-CUSTODY
+          {/* ── Username Tab ── */}
+          {tab === 'username' && (
+            <form onSubmit={handleCredentialLogin} noValidate>
+              <div className="auth-field">
+                <label className="auth-label" htmlFor="username-input">USERNAME</label>
+                <input
+                  id="username-input"
+                  className="auth-input"
+                  type="text"
+                  placeholder="your_username"
+                  autoComplete="username"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  disabled={loading}
+                  required
+                />
+              </div>
+              <div className="auth-field">
+                <label className="auth-label" htmlFor="username-password">PASSWORD</label>
+                <input
+                  id="username-password"
+                  className="auth-input"
+                  type="password"
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                  required
+                />
+              </div>
+              <div style={{ textAlign: 'right', marginBottom: 14 }}>
+                <a href="/forgot-password" className="auth-link" style={{ fontSize: 11 }}>
+                  Forgot password?
+                </a>
+              </div>
+              <button className="auth-btn auth-btn-primary" type="submit" disabled={loading}>
+                {loading ? 'Signing in…' : 'Sign In'}
+              </button>
+              <div className="auth-footer">
+                Don&apos;t have an account?{' '}
+                <a href="/register" className="auth-link">Register</a>
+              </div>
+            </form>
+          )}
+
+          {/* Feedback */}
+          {info && <div className="auth-success" style={{ marginTop: 14 }}>{info}</div>}
+          {error && <div className="auth-error">{error}</div>}
         </div>
       </div>
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '12px 14px', borderRadius: '8px', border: '1px solid #2a2e39',
-  background: '#0d1117', color: '#fff', fontSize: '13px', outline: 'none', boxSizing: 'border-box',
-  fontFamily: 'Roboto Mono, monospace',
-};
-
-const spinnerStyle: React.CSSProperties = {
-  display: 'inline-block', width: '12px', height: '12px',
-  borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)',
-  borderTopColor: '#fff', animation: 'spin 0.6s linear infinite',
-};

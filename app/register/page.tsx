@@ -1,60 +1,234 @@
 'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { deriveClientKeypair } from '@/utils/crypto-browser';
 
-export default function Register() {
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const router = useRouter();
+import { useState, useCallback } from 'react';
+import '../auth.css';
 
-    const handleRegister = async (e: React.FormEvent) => {
-        e.preventDefault();
-        try {
-            // Deterministic key generation from inputs
-            const { publicKeyBase58 } = await deriveClientKeypair(username, password);
+type StrengthLevel = 'weak' | 'medium' | 'strong';
 
-            const res = await fetch('/api/auth/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ publicKey: publicKeyBase58 })
-            });
+function getPasswordStrength(pw: string): StrengthLevel | null {
+  if (!pw) return null;
+  const hasLetter = /[a-zA-Z]/.test(pw);
+  const hasNumber = /[0-9]/.test(pw);
+  const hasSpecial = /[^a-zA-Z0-9]/.test(pw);
+  const score = [pw.length >= 8, hasLetter, hasNumber, hasSpecial, pw.length >= 12].filter(Boolean).length;
+  if (score <= 2) return 'weak';
+  if (score <= 3) return 'medium';
+  return 'strong';
+}
 
-            if (res.ok) {
-                alert('Created local identity. Please ask Master for Solana Devnet approval of your public key:\n' + publicKeyBase58);
-                router.push('/login');
-            } else {
-                const data = await res.json();
-                setError(data.error);
-            }
-        } catch (err: any) {
-            setError(err.message);
+const strengthLabel: Record<StrengthLevel, string> = {
+  weak: 'WEAK',
+  medium: 'MEDIUM',
+  strong: 'STRONG',
+};
+
+const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export default function RegisterPage() {
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const strength = getPasswordStrength(password);
+
+  const validate = (): string | null => {
+    if (!username || !USERNAME_RE.test(username)) {
+      return 'Username must be 3-20 characters: letters, numbers, or underscores only.';
+    }
+    if (!email || !EMAIL_RE.test(email)) {
+      return 'Please enter a valid email address.';
+    }
+    if (!password || password.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+      return 'Password must contain at least one letter and one number.';
+    }
+    if (password !== confirm) {
+      return 'Passwords do not match.';
+    }
+    return null;
+  };
+
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError('');
+
+      const validationError = validate();
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, username, password }),
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          setError(data.error ?? 'Registration failed. Please try again.');
+          return;
         }
-    };
 
+        setSuccess(true);
+      } catch {
+        setError('Network error. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [email, username, password, confirm]
+  );
+
+  if (success) {
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-neutral-900 text-white p-4">
-            <h1 className="text-3xl font-bold mb-8">Atlas-Quant | Register</h1>
-            <form onSubmit={handleRegister} className="flex flex-col gap-4 w-full max-w-sm bg-neutral-800 p-6 rounded-lg">
-                <input
-                    type="text"
-                    placeholder="Username"
-                    className="p-3 bg-neutral-700 rounded text-white"
-                    value={username} onChange={e => setUsername(e.target.value)} required
-                />
-                <input
-                    type="password"
-                    placeholder="Password"
-                    className="p-3 bg-neutral-700 rounded text-white"
-                    value={password} onChange={e => setPassword(e.target.value)} required
-                />
-                <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 p-3 rounded font-bold transition">
-                    Generate Identity
-                </button>
-                {error && <p className="text-red-400 text-sm">{error}</p>}
-                <p className="text-sm mt-4 text-center">Identity is derived locally. No passwords leave your device.</p>
-            </form>
+      <div className="auth-root">
+        <div className="auth-card">
+          <div className="auth-body" style={{ textAlign: 'center' }}>
+            <div className="auth-logo">
+              <div className="auth-logo-title">
+                <span style={{ color: '#2962ff' }}>ATLAS</span>
+                <span>-QUANT</span>
+              </div>
+              <div className="auth-logo-sub">QUANTITATIVE TRADING PLATFORM</div>
+            </div>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>✅</div>
+            <div className="auth-success" style={{ marginBottom: 20, textAlign: 'left' }}>
+              Account created successfully! You can now log in with your credentials.
+            </div>
+            <a href="/login">
+              <button className="auth-btn auth-btn-primary" type="button">
+                Go to Login
+              </button>
+            </a>
+          </div>
         </div>
+      </div>
     );
+  }
+
+  return (
+    <div className="auth-root">
+      <div className="auth-card">
+        <div className="auth-body">
+          {/* Logo */}
+          <div className="auth-logo">
+            <div className="auth-logo-title">
+              <span style={{ color: '#2962ff' }}>ATLAS</span>
+              <span>-QUANT</span>
+            </div>
+            <div className="auth-logo-sub">CREATE ACCOUNT</div>
+          </div>
+
+          <form onSubmit={handleSubmit} noValidate>
+            {/* Username */}
+            <div className="auth-field">
+              <label className="auth-label" htmlFor="reg-username">USERNAME</label>
+              <input
+                id="reg-username"
+                className="auth-input"
+                type="text"
+                placeholder="your_username"
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={loading}
+                required
+              />
+              {username && !USERNAME_RE.test(username) && (
+                <div style={{ fontSize: 10, color: '#f23645', marginTop: 4 }}>
+                  3-20 chars, letters/numbers/underscore only
+                </div>
+              )}
+            </div>
+
+            {/* Email */}
+            <div className="auth-field">
+              <label className="auth-label" htmlFor="reg-email">EMAIL ADDRESS</label>
+              <input
+                id="reg-email"
+                className="auth-input"
+                type="email"
+                placeholder="you@example.com"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
+                required
+              />
+            </div>
+
+            {/* Password */}
+            <div className="auth-field">
+              <label className="auth-label" htmlFor="reg-password">PASSWORD</label>
+              <input
+                id="reg-password"
+                className="auth-input"
+                type="password"
+                placeholder="••••••••"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                required
+              />
+              {strength && (
+                <>
+                  <div className={`pw-strength ${strength}`} />
+                  <div className={`pw-strength-label ${strength}`}>{strengthLabel[strength]}</div>
+                </>
+              )}
+            </div>
+
+            {/* Confirm Password */}
+            <div className="auth-field">
+              <label className="auth-label" htmlFor="reg-confirm">CONFIRM PASSWORD</label>
+              <input
+                id="reg-confirm"
+                className="auth-input"
+                type="password"
+                placeholder="••••••••"
+                autoComplete="new-password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                disabled={loading}
+                required
+              />
+              {confirm && password !== confirm && (
+                <div style={{ fontSize: 10, color: '#f23645', marginTop: 4 }}>
+                  Passwords do not match
+                </div>
+              )}
+            </div>
+
+            <button
+              className="auth-btn auth-btn-primary"
+              type="submit"
+              disabled={loading}
+              style={{ marginTop: 6 }}
+            >
+              {loading ? 'Creating account…' : 'Create Account'}
+            </button>
+
+            {error && <div className="auth-error">{error}</div>}
+          </form>
+
+          <div className="auth-footer">
+            Already have an account?{' '}
+            <a href="/login" className="auth-link">Sign In</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

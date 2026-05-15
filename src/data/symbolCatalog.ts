@@ -741,12 +741,28 @@ export const SYMBOL_CATALOG: SymbolMeta[] = [
 
 // ─── Lookup helpers ────────────────────────────────────────────────────────────
 
+// Merge programmatic generators (de-duped by symbol)
+import { generateAllAutoSymbols } from './symbolsAuto';
+(function mergeAutoSymbols() {
+  const existing = new Set(SYMBOL_CATALOG.map((s) => s.symbol.toUpperCase()));
+  for (const s of generateAllAutoSymbols()) {
+    if (!existing.has(s.symbol.toUpperCase())) {
+      SYMBOL_CATALOG.push(s);
+      existing.add(s.symbol.toUpperCase());
+    }
+  }
+})();
+
 const _catalogMap = new Map<string, SymbolMeta>(
   SYMBOL_CATALOG.map((s) => [s.symbol.toUpperCase(), s])
 );
 
 export function getSymbolMeta(symbol: string): SymbolMeta | undefined {
   return _catalogMap.get(symbol.toUpperCase());
+}
+
+export function getCatalogSize(): number {
+  return SYMBOL_CATALOG.length;
 }
 
 export function getSymbolsByClass(assetClass: AssetClass): SymbolMeta[] {
