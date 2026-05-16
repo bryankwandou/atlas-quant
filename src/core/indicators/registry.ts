@@ -20,6 +20,7 @@ import { FIBONACCI_INDICATORS } from './fibonacci';
 import { SMC_INDICATORS } from './smc';
 import { RENAISSANCE_INDICATORS } from './renaissance';
 import { T1MO_INDICATORS } from './t1mo';
+import { GENERATED_INDICATORS } from './generated-pack';
 
 export interface RegisteredIndicator {
   def: IndicatorDef;
@@ -35,6 +36,7 @@ export const INDICATOR_REGISTRY: RegisteredIndicator[] = [
   ...SMC_INDICATORS,
   ...RENAISSANCE_INDICATORS,
   ...T1MO_INDICATORS,
+  ...GENERATED_INDICATORS,
 ] as RegisteredIndicator[];
 
 export const INDICATOR_BY_CODE: Record<string, RegisteredIndicator> = Object.fromEntries(
