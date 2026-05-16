@@ -129,6 +129,58 @@ export const PARAM_SCHEMAS: Record<string, ParamSchema> = {
   // Composite / Atlas
   latestSignal: { id: 'latestSignal', category: 'Composite', fields: [{ key: 'mode', type: 'select', label: 'Mode', defaultValue: 'ensemble', options: [{ value: 'ensemble', label: 'Ensemble' }, { value: 'renaissance', label: 'Renaissance' }] }] },
   detectSMC:    { id: 'detectSMC',    category: 'Smart Money', fields: [{ key: 'swingLookback', type: 'number', label: 'Swing Lookback', defaultValue: 5, min: 2, max: 50, step: 1 }] },
+
+  // ───── Open-source / TV creator-style additions ─────
+  // SuperTrend variants
+  supertrendKfr:  { id: 'supertrendKfr', category: 'Trend (open-source)', fields: [{ key: 'atrLength', type: 'number', label: 'ATR Length', defaultValue: 10, min: 1, max: 100, step: 1 }, { key: 'multiplier', type: 'number', label: 'Multiplier', defaultValue: 3, min: 0.1, max: 20, step: 0.1 }] },
+  utBot:          { id: 'utBot', category: 'Trend (open-source)', fields: [{ key: 'keyValue', type: 'number', label: 'Key Value', defaultValue: 1, min: 0.1, max: 10, step: 0.1 }, { key: 'atrLength', type: 'number', label: 'ATR Length', defaultValue: 10, min: 1, max: 100, step: 1 }] },
+  hullSuiteMad:   { id: 'hullSuiteMad', category: 'Trend (open-source)', fields: [lengthField(55), { key: 'thicknessMode', type: 'select', label: 'Style', defaultValue: 'thick', options: [{ value: 'thick', label: 'Thick' }, { value: 'thin', label: 'Thin' }] }] },
+  doubleEma:      { id: 'doubleEma', category: 'Moving Average', fields: [{ key: 'shortLen', type: 'number', label: 'Short EMA', defaultValue: 9, min: 1, max: 200, step: 1 }, { key: 'longLen', type: 'number', label: 'Long EMA', defaultValue: 21, min: 1, max: 500, step: 1 }] },
+  tripleEma:      { id: 'tripleEma', category: 'Moving Average', fields: [{ key: 'len1', type: 'number', label: 'EMA 1', defaultValue: 9, min: 1, max: 500, step: 1 }, { key: 'len2', type: 'number', label: 'EMA 2', defaultValue: 21, min: 1, max: 500, step: 1 }, { key: 'len3', type: 'number', label: 'EMA 3', defaultValue: 55, min: 1, max: 500, step: 1 }] },
+  // Adaptive / smoothing
+  jurikMA:        { id: 'jurikMA', category: 'Moving Average', fields: [lengthField(7), { key: 'phase', type: 'number', label: 'Phase', defaultValue: 50, min: -100, max: 100, step: 1 }, { key: 'power', type: 'number', label: 'Power', defaultValue: 2, min: 1, max: 10, step: 1 }] },
+  arnaudLegoux:   { id: 'arnaudLegoux', category: 'Moving Average', fields: [lengthField(9), { key: 'sigma', type: 'number', label: 'Sigma', defaultValue: 6, min: 0.1, max: 20, step: 0.1 }, { key: 'offset', type: 'number', label: 'Offset', defaultValue: 0.85, min: 0, max: 1, step: 0.01 }] },
+  // Oscillators (open-source community)
+  laguerre:       { id: 'laguerre', category: 'Momentum (open-source)', fields: [{ key: 'gamma', type: 'number', label: 'Gamma', defaultValue: 0.7, min: 0.01, max: 0.99, step: 0.01 }] },
+  schaffTC:       { id: 'schaffTC', category: 'Momentum (open-source)', fields: [{ key: 'short', type: 'number', label: 'Short EMA', defaultValue: 23, min: 1, max: 200, step: 1 }, { key: 'long', type: 'number', label: 'Long EMA', defaultValue: 50, min: 1, max: 500, step: 1 }, { key: 'cycle', type: 'number', label: 'Cycle', defaultValue: 10, min: 1, max: 100, step: 1 }] },
+  qqe:            { id: 'qqe', category: 'Momentum (open-source)', fields: [{ key: 'rsiLength', type: 'number', label: 'RSI Length', defaultValue: 14, min: 1, max: 100, step: 1 }, { key: 'smoothing', type: 'number', label: 'Smoothing', defaultValue: 5, min: 1, max: 100, step: 1 }, { key: 'qqeFactor', type: 'number', label: 'QQE Factor', defaultValue: 4.238, min: 0.1, max: 20, step: 0.001 }] },
+  rsiSmooth:      { id: 'rsiSmooth', category: 'Momentum (open-source)', fields: [lengthField(14), { key: 'smoothLength', type: 'number', label: 'EMA Smooth', defaultValue: 5, min: 1, max: 50, step: 1 }] },
+  awesome:        { id: 'awesome', category: 'Momentum', fields: [{ key: 'fast', type: 'number', label: 'Fast', defaultValue: 5, min: 1, max: 200, step: 1 }, { key: 'slow', type: 'number', label: 'Slow', defaultValue: 34, min: 1, max: 500, step: 1 }] },
+  accelerator:    { id: 'accelerator', category: 'Momentum', fields: [{ key: 'aoFast', type: 'number', label: 'AO Fast', defaultValue: 5, min: 1, max: 200, step: 1 }, { key: 'aoSlow', type: 'number', label: 'AO Slow', defaultValue: 34, min: 1, max: 500, step: 1 }, { key: 'smaLen', type: 'number', label: 'SMA Smooth', defaultValue: 5, min: 1, max: 100, step: 1 }] },
+  alligator:      { id: 'alligator', category: 'Trend', fields: [{ key: 'jawLength', type: 'number', label: 'Jaw Len', defaultValue: 13, min: 1, max: 100, step: 1 }, { key: 'jawOffset', type: 'number', label: 'Jaw Offset', defaultValue: 8, min: 0, max: 50, step: 1 }, { key: 'teethLength', type: 'number', label: 'Teeth Len', defaultValue: 8, min: 1, max: 100, step: 1 }, { key: 'teethOffset', type: 'number', label: 'Teeth Offset', defaultValue: 5, min: 0, max: 50, step: 1 }, { key: 'lipsLength', type: 'number', label: 'Lips Len', defaultValue: 5, min: 1, max: 100, step: 1 }, { key: 'lipsOffset', type: 'number', label: 'Lips Offset', defaultValue: 3, min: 0, max: 50, step: 1 }] },
+  fractals:       { id: 'fractals', category: 'Bill Williams', fields: [{ key: 'periods', type: 'number', label: 'Periods', defaultValue: 2, min: 1, max: 10, step: 1 }] },
+  // Volume / Liquidity
+  vp:             { id: 'vp', category: 'Volume Profile', fields: [{ key: 'rows', type: 'number', label: 'Rows', defaultValue: 24, min: 4, max: 200, step: 1 }, { key: 'lookback', type: 'number', label: 'Lookback', defaultValue: 200, min: 10, max: 5000, step: 10 }] },
+  poc:            { id: 'poc', category: 'Volume Profile', fields: [{ key: 'lookback', type: 'number', label: 'Lookback', defaultValue: 200, min: 10, max: 5000, step: 10 }] },
+  vwmaCustom:     { id: 'vwmaCustom', category: 'Volume', fields: [lengthField(20), sourceField] },
+  ad:             { id: 'ad', category: 'Volume', fields: [] },
+  vortexCustom:   { id: 'vortexCustom', category: 'Trend', fields: [lengthField(14)] },
+  trendStrengthIdx: { id: 'trendStrengthIdx', category: 'Trend', fields: [lengthField(14), { key: 'smooth', type: 'number', label: 'Smoothing', defaultValue: 7, min: 1, max: 50, step: 1 }] },
+  // Bands / channels (extra)
+  kcCustom:       { id: 'kcCustom', category: 'Volatility', fields: [{ key: 'length', type: 'number', label: 'Length', defaultValue: 20, min: 1, max: 500, step: 1 }, { key: 'multiplier', type: 'number', label: 'Multiplier', defaultValue: 1.5, min: 0.1, max: 10, step: 0.1 }, sourceField] },
+  donchianCustom: { id: 'donchianCustom', category: 'Volatility', fields: [lengthField(20)] },
+  bbCustom:       { id: 'bbCustom', category: 'Volatility', fields: [{ key: 'length', type: 'number', label: 'Length', defaultValue: 20, min: 1, max: 500, step: 1 }, { key: 'stddev', type: 'number', label: 'StdDev', defaultValue: 2, min: 0.1, max: 10, step: 0.1 }, sourceField] },
+  bbW:            { id: 'bbW', category: 'Volatility', fields: [lengthField(20), { key: 'stddev', type: 'number', label: 'StdDev', defaultValue: 2, min: 0.1, max: 10, step: 0.1 }] },
+  // SMC / ICT / Wyckoff add-ons
+  fairValueGap:   { id: 'fairValueGap', category: 'Smart Money', fields: [{ key: 'minPct', type: 'number', label: 'Min Gap %', defaultValue: 0.05, min: 0.001, max: 5, step: 0.001 }, { key: 'showFilled', type: 'boolean', label: 'Show filled', defaultValue: false }] },
+  orderBlock:     { id: 'orderBlock', category: 'Smart Money', fields: [{ key: 'swingLookback', type: 'number', label: 'Swing Lookback', defaultValue: 5, min: 2, max: 50, step: 1 }, { key: 'showBearish', type: 'boolean', label: 'Show bearish', defaultValue: true }, { key: 'showBullish', type: 'boolean', label: 'Show bullish', defaultValue: true }] },
+  liquiditySweep: { id: 'liquiditySweep', category: 'Smart Money', fields: [{ key: 'lookback', type: 'number', label: 'Lookback', defaultValue: 20, min: 5, max: 200, step: 1 }, { key: 'wickThreshold', type: 'number', label: 'Wick %', defaultValue: 0.3, min: 0.05, max: 1, step: 0.01 }] },
+  bos:            { id: 'bos', category: 'Smart Money', fields: [{ key: 'swingLookback', type: 'number', label: 'Swing Lookback', defaultValue: 5, min: 2, max: 50, step: 1 }] },
+  choch:          { id: 'choch', category: 'Smart Money', fields: [{ key: 'swingLookback', type: 'number', label: 'Swing Lookback', defaultValue: 5, min: 2, max: 50, step: 1 }] },
+  wyckoffPhase:   { id: 'wyckoffPhase', category: 'Smart Money', fields: [{ key: 'lookback', type: 'number', label: 'Lookback', defaultValue: 100, min: 20, max: 1000, step: 10 }] },
+  ictKillzone:    { id: 'ictKillzone', category: 'ICT', fields: [{ key: 'zone', type: 'select', label: 'Killzone', defaultValue: 'london', options: [{ value: 'london', label: 'London' }, { value: 'ny', label: 'New York' }, { value: 'asia', label: 'Asia' }, { value: 'silver_bullet', label: 'Silver Bullet' }] }] },
+  // Statistical / Renaissance-style
+  zscoreCustom:   { id: 'zscoreCustom', category: 'Statistics', fields: [lengthField(20), sourceField] },
+  hurstExponent:  { id: 'hurstExponent', category: 'Statistics', fields: [lengthField(100), { key: 'mode', type: 'select', label: 'Mode', defaultValue: 'rs', options: [{ value: 'rs', label: 'R/S' }, { value: 'dfa', label: 'DFA' }] }] },
+  fractalDim:     { id: 'fractalDim', category: 'Statistics', fields: [lengthField(30)] },
+  histVol:        { id: 'histVol', category: 'Volatility', fields: [lengthField(20), { key: 'annualize', type: 'number', label: 'Annualize', defaultValue: 252, min: 1, max: 365, step: 1 }] },
+  garman:         { id: 'garman', category: 'Volatility', fields: [lengthField(20)] },
+  parkinson:      { id: 'parkinson', category: 'Volatility', fields: [lengthField(20)] },
+  // Cross-asset
+  betaBeta:       { id: 'betaBeta', category: 'Cross-Asset', fields: [{ key: 'benchmark', type: 'select', label: 'Benchmark', defaultValue: 'SPY', options: [{ value: 'SPY', label: 'SPY' }, { value: 'QQQ', label: 'QQQ' }, { value: 'BTC-USD', label: 'BTC' }, { value: 'DX-Y.NYB', label: 'DXY' }] }, lengthField(60)] },
+  correlation:    { id: 'correlation', category: 'Cross-Asset', fields: [{ key: 'pair', type: 'select', label: 'Pair', defaultValue: 'BTC-USD', options: [{ value: 'BTC-USD', label: 'BTC' }, { value: 'ETH-USD', label: 'ETH' }, { value: 'GC=F', label: 'Gold' }, { value: '^VIX', label: 'VIX' }] }, lengthField(60)] },
+  // Renaissance multi-factor scorer
+  ensembleScore:  { id: 'ensembleScore', category: 'Atlas Engine', fields: [{ key: 'horizon', type: 'select', label: 'Horizon', defaultValue: '5b', options: [{ value: '1b', label: '1 bar' }, { value: '3b', label: '3 bars' }, { value: '5b', label: '5 bars' }, { value: '10b', label: '10 bars' }] }, { key: 'weightTech', type: 'number', label: 'Weight tech', defaultValue: 0.42, min: 0, max: 1, step: 0.01 }, { key: 'weightML', type: 'number', label: 'Weight ML', defaultValue: 0.17, min: 0, max: 1, step: 0.01 }] },
 };
 
 /** Resolve a schema for a given registry preset id (e.g. "rsi_14" → "rsi"). */

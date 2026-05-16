@@ -743,9 +743,16 @@ export const SYMBOL_CATALOG: SymbolMeta[] = [
 
 // Merge programmatic generators (de-duped by symbol)
 import { generateAllAutoSymbols } from './symbolsAuto';
+import { SYMBOLS_BULK } from './symbolsBulk';
 (function mergeAutoSymbols() {
   const existing = new Set(SYMBOL_CATALOG.map((s) => s.symbol.toUpperCase()));
   for (const s of generateAllAutoSymbols()) {
+    if (!existing.has(s.symbol.toUpperCase())) {
+      SYMBOL_CATALOG.push(s);
+      existing.add(s.symbol.toUpperCase());
+    }
+  }
+  for (const s of SYMBOLS_BULK) {
     if (!existing.has(s.symbol.toUpperCase())) {
       SYMBOL_CATALOG.push(s);
       existing.add(s.symbol.toUpperCase());

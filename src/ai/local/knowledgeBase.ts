@@ -32,6 +32,12 @@ export interface KBPattern {
   candleBodyZ?: [number, number];
   upperWickRatio?: [number, number];
   lowerWickRatio?: [number, number];
+  momentum10?: [number, number];
+  returnPct5?: [number, number];
+  returnPct20?: [number, number];
+  atrPct?: [number, number];
+  cmf20?: [number, number];
+  mfi14?: [number, number];
   /** Required signal direction (BUY / SELL / NEUTRAL) — optional. */
   signal?: 'BUY' | 'SELL' | 'NEUTRAL';
   /** Macro regime hints. */
@@ -536,8 +542,11 @@ const RISK: KBEntry[] = [
   },
 ];
 
+import { KB_EXPANSION } from './kbExpansion';
+
 export const KNOWLEDGE_BASE: KBEntry[] = [
   ...TREND, ...MEAN_REVERT, ...SQUEEZE, ...DIVERGENCE, ...VOLUME, ...MACRO, ...RISK,
+  ...KB_EXPANSION,
 ];
 
 export function kbCount(): number {
