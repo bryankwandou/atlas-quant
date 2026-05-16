@@ -1,13 +1,19 @@
 /**
- * OpenRouter integration — gives access to open-source models like
- *   - deepseek/deepseek-chat
- *   - deepseek/deepseek-r1
- *   - meta-llama/llama-3.3-70b-instruct
- *   - qwen/qwen-2.5-72b-instruct
+ * Atlas Quant · AI Commentary
+ * --------------------------------------------------------------------
+ * The DEFAULT path is the fully local "atlas-local-llm" — a deterministic
+ * retrieval-augmented NLG engine that runs entirely inside this Next.js
+ * runtime. NO API key. NO external model download. NO outbound request.
  *
- * If OPENROUTER_API_KEY is missing we fall back to a deterministic
- * local explanation derived from the logistic ensemble result.
+ * If the caller explicitly opts in via `{ allowRemote: true }` AND the
+ * server has OPENROUTER_API_KEY set, we *also* call OpenRouter (DeepSeek /
+ * Llama / Qwen open-source models) and merge the response. Otherwise the
+ * local engine is the source of truth.
  */
+
+import { generateLocalCommentary, type NLGInput, type NLGResult } from './local/nlg';
+import { extractFeatures } from './featureExtractor';
+import type { OHLCVBar } from './featureExtractor';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -20,62 +26,117 @@ export interface AICommentaryInput {
   factors: string[];
   layerScores: Record<string, number>;
   ensembleVotes?: Array<{ name: string; signal: string; confidence: number }>;
+  /** Candle history — required for the local LLM (feature extraction). */
+  candles?: OHLCVBar[];
+  /** Optional macro / sentiment context for richer retrieval. */
+  macroRiskScore?: number;
+  vix?: number;
+  fearGreedValue?: number;
+  politicalRiskIndex?: number;
+  mlProbability?: number;
+  kelly?: number;
+  tp1?: number; tp2?: number; tp3?: number; sl?: number; rrRatio?: number;
 }
 
 export interface AICommentaryResult {
   model: string;
-  source: 'openrouter' | 'local';
+  source: 'atlas-local-llm' | 'openrouter+local' | 'local-only';
   commentary: string;
   bullets: string[];
   riskNote: string;
+  /** Scenarios the local retriever matched against. */
+  matchedScenarios?: NLGResult['matchedScenarios'];
+  /** Local model metadata. */
+  modelDetails?: NLGResult['modelDetails'];
+  /** Remote response when OpenRouter was used. */
+  remote?: { model: string; commentary: string };
   raw?: any;
 }
 
-const SYSTEM = `You are Atlas Quant's quantitative analyst. You write
-concise, professional trade commentary in plain English, in the spirit of
-Renaissance Technologies and the T1MO scientific scoring system. You speak
-in numbers, not adjectives. You never invent facts; you only summarise the
-ensemble scores and factor notes you were given. Maximum 3 short paragraphs.`;
+const SYSTEM = `You are Atlas Quant's quantitative analyst. You speak in
+numbers, not adjectives. You never invent facts; you only refine the
+local engine's analysis with concise, professional prose. Max 3 short
+paragraphs, then 3-5 bullets, then a one-line risk note.`;
 
-function fallbackCommentary(input: AICommentaryInput): AICommentaryResult {
-  const sign = input.signal === 'BUY' ? '↑' : input.signal === 'SELL' ? '↓' : '↔';
-  const top = Object.entries(input.layerScores)
-    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
-    .slice(0, 3)
-    .map(([k, v]) => `${k}: ${v >= 0 ? '+' : ''}${v.toFixed(1)}`)
-    .join(' · ');
+/**
+ * The main entry point. Runs the local LLM and (optionally) layers
+ * OpenRouter on top.
+ *
+ * Default: `allowRemote: false` → local-only, zero external calls.
+ */
+export async function getAICommentary(
+  input: AICommentaryInput,
+  options: { allowRemote?: boolean; modelHint?: string } = {},
+): Promise<AICommentaryResult> {
+  const { allowRemote = false, modelHint } = options;
 
-  return {
-    model: 'local-fallback',
-    source: 'local',
-    commentary: `${input.symbol} ${input.timeframe} prints a ${input.signal} ${sign} at ${input.confidence}% confidence. Dominant factors: ${top}. ${input.factors.slice(0, 2).join(' ')}`,
-    bullets: input.factors.slice(0, 5),
-    riskNote: input.signal === 'NEUTRAL'
-      ? 'No edge detected. Stand aside or wait for re-test.'
-      : `Stops should respect 1×ATR. Size position per Kelly fraction.`,
-  };
-}
+  // ── Local LLM (always runs, never fails) ─────────────────────────────
+  const localFeatures = input.candles ? extractFeatures(input.candles) : null;
+  let local: NLGResult;
+  if (localFeatures) {
+    const nlgInput: NLGInput = {
+      symbol: input.symbol,
+      timeframe: input.timeframe,
+      signal: input.signal,
+      confidence: input.confidence,
+      price: input.price,
+      features: localFeatures,
+      factors: input.factors,
+      layerScores: input.layerScores,
+      macroRiskScore: input.macroRiskScore,
+      vix: input.vix,
+      fearGreedValue: input.fearGreedValue,
+      politicalRiskIndex: input.politicalRiskIndex,
+      ensembleVotes: input.ensembleVotes,
+      mlProbability: input.mlProbability,
+      kelly: input.kelly,
+      tp1: input.tp1, tp2: input.tp2, tp3: input.tp3, sl: input.sl, rrRatio: input.rrRatio,
+    };
+    local = generateLocalCommentary(nlgInput);
+  } else {
+    // Without candles we can still produce a basic synthesis from layerScores
+    local = {
+      source: 'atlas-local-llm',
+      model: 'atlas-local-llm:v1',
+      commentary: `${input.symbol} ${input.timeframe} engine output: ${input.signal} at ${input.confidence}% confidence.`,
+      bullets: input.factors.slice(0, 5),
+      riskNote: 'Respect 1×ATR stop; size by Kelly fraction.',
+      matchedScenarios: [],
+      modelDetails: { knowledgeBaseSize: 0, primaryConfidence: 0, factorOverrides: [] },
+    };
+  }
 
-export async function getAICommentary(input: AICommentaryInput, modelHint?: string): Promise<AICommentaryResult> {
+  // ── Optional remote enhancement ──────────────────────────────────────
   const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) return fallbackCommentary(input);
+  if (!allowRemote || !apiKey) {
+    return {
+      model: local.model,
+      source: 'atlas-local-llm',
+      commentary: local.commentary,
+      bullets: local.bullets,
+      riskNote: local.riskNote,
+      matchedScenarios: local.matchedScenarios,
+      modelDetails: local.modelDetails,
+    };
+  }
 
   const model = modelHint ?? process.env.OPENROUTER_MODEL ?? 'deepseek/deepseek-chat';
-
-  const userPrompt = `Symbol: ${input.symbol} · TF: ${input.timeframe}\n` +
+  const userPrompt =
+    `Symbol: ${input.symbol} · TF: ${input.timeframe}\n` +
     `Engine signal: ${input.signal} · confidence ${input.confidence}\n` +
     `Price: ${input.price}\n` +
     `Layer scores: ${JSON.stringify(input.layerScores)}\n` +
+    `Matched scenarios:\n${(local.matchedScenarios ?? []).map((m) => `  - ${m.title} (${m.score})`).join('\n')}\n` +
     `Factor notes:\n${input.factors.map((f) => '  - ' + f).join('\n')}\n` +
-    (input.ensembleVotes ? `Votes: ${input.ensembleVotes.map((v) => `${v.name}=${v.signal}(${v.confidence})`).join(', ')}\n` : '') +
-    `\nWrite 2-3 short paragraphs of trade commentary, then 3-5 bullet points (key drivers), then 1 sentence on risk.`;
+    `Local NLG draft:\n${local.commentary}\n\n` +
+    `Refine the above commentary in 2-3 paragraphs, then 3-5 bullets, then a 1-line risk note. Stay grounded in the local numbers.`;
 
   try {
     const res = await fetch(OPENROUTER_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
         'HTTP-Referer': process.env.OPENROUTER_REFERER ?? 'https://atlas-quant.vercel.app',
         'X-Title': 'Atlas Quant',
       },
@@ -89,26 +150,50 @@ export async function getAICommentary(input: AICommentaryInput, modelHint?: stri
         max_tokens: 600,
       }),
     });
-    if (!res.ok) return fallbackCommentary(input);
+    if (!res.ok) {
+      return {
+        model: local.model,
+        source: 'atlas-local-llm',
+        commentary: local.commentary,
+        bullets: local.bullets,
+        riskNote: local.riskNote,
+        matchedScenarios: local.matchedScenarios,
+        modelDetails: local.modelDetails,
+      };
+    }
     const data = await res.json();
-    const text = (data?.choices?.[0]?.message?.content ?? '').trim();
-    if (!text) return fallbackCommentary(input);
-
-    // Crude split into paragraphs / bullets / risk
-    const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
-    const bullets = lines.filter((l: string) => /^[-•*]/.test(l)).map((l: string) => l.replace(/^[-•*]\s*/, ''));
-    const riskLine = lines.find((l: string) => /risk|stop|drawdown|var|expectancy/i.test(l)) ?? lines[lines.length - 1] ?? '';
-    const paragraph = lines.filter((l: string) => !/^[-•*]/.test(l) && l !== riskLine).join(' ');
-
+    const remoteText = (data?.choices?.[0]?.message?.content ?? '').trim();
+    if (!remoteText) {
+      return {
+        model: local.model,
+        source: 'atlas-local-llm',
+        commentary: local.commentary,
+        bullets: local.bullets,
+        riskNote: local.riskNote,
+        matchedScenarios: local.matchedScenarios,
+        modelDetails: local.modelDetails,
+      };
+    }
     return {
       model,
-      source: 'openrouter',
-      commentary: paragraph || text,
-      bullets: bullets.length ? bullets : input.factors.slice(0, 5),
-      riskNote: riskLine || 'Mind position sizing per Kelly fraction; respect 1×ATR stop.',
+      source: 'openrouter+local',
+      commentary: remoteText,
+      bullets: local.bullets,
+      riskNote: local.riskNote,
+      matchedScenarios: local.matchedScenarios,
+      modelDetails: local.modelDetails,
+      remote: { model, commentary: remoteText },
       raw: data,
     };
   } catch {
-    return fallbackCommentary(input);
+    return {
+      model: local.model,
+      source: 'atlas-local-llm',
+      commentary: local.commentary,
+      bullets: local.bullets,
+      riskNote: local.riskNote,
+      matchedScenarios: local.matchedScenarios,
+      modelDetails: local.modelDetails,
+    };
   }
 }

@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
   const symbol = (searchParams.get('symbol') || 'BTCUSDT').toUpperCase();
   const timeframe = searchParams.get('interval') || '1h';
   const includeAI = searchParams.get('ai') !== 'false';
+  // Local-only by default. Pass ?remote=1 to also call OpenRouter when key is set.
+  const allowRemote = searchParams.get('remote') === '1';
 
   try {
     const [{ getMultiSource }, { extractFeatures }, { predictLogistic, decideFromLogistic }, { runRenaissanceSignal }] = await Promise.all([
@@ -51,7 +53,12 @@ export async function GET(req: NextRequest) {
         factors: renaissance.factors,
         layerScores: renaissance.layerScores,
         ensembleVotes: renaissance.votes,
-      });
+        candles: multi.candles,
+        mlProbability: renaissance.mlProbability,
+        kelly: renaissance.kelly,
+        tp1: renaissance.tp1, tp2: renaissance.tp2, tp3: renaissance.tp3,
+        sl: renaissance.sl, rrRatio: renaissance.rrRatio,
+      }, { allowRemote });
     }
 
     return NextResponse.json({
