@@ -1,8 +1,10 @@
 'use client';
 import Link from 'next/link';
+import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useChartStore } from '@/store/chartStore';
 import { useLanguage } from '@/hooks/useLanguage';
+import FibRRModal from '@/components/FibRRModal';
 import {
   BarChart2, Zap, BookOpen, FlaskConical, Search, Settings,
   MousePointer, Crosshair, Minus, ArrowUpRight, MoveHorizontal, MoveVertical,
@@ -78,6 +80,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { drawingTool, setDrawingTool } = useChartStore();
   const { lang } = useLanguage();
+  const [fibOpen, setFibOpen] = useState(false);
 
   const navLabels: Record<string, string> = {
     dashboard: lang === 'id' ? 'Beranda'   : 'Dashboard',
@@ -113,21 +116,29 @@ export default function Sidebar() {
       {/* ── Drawing Tools ─────────────────────────────────── */}
       <div className="sidebar-tools">
         {DRAW_GROUPS.map((group, gi) => (
-          <>
-            {gi > 0 && <div key={`sep-${gi}`} className="sidebar-tool-sep" />}
+          <div key={`group-${gi}`} style={{ display: 'contents' }}>
+            {gi > 0 && <div className="sidebar-tool-sep" />}
             {group.tools.map(({ id, icon: Icon, tip }) => (
               <button
                 key={id}
+                type="button"
                 className={`sidebar-tool-btn ${drawingTool === id ? 'active' : ''}`}
                 title={tip}
-                onClick={() => setDrawingTool(id)}
+                onDoubleClick={() => { if (id === 'fib' || id === 'rr') setFibOpen(true); }}
+                onClick={() => {
+                  setDrawingTool(id);
+                  if (id === 'fib' || id === 'rr') setFibOpen(true);
+                }}
               >
                 <Icon size={14} />
               </button>
             ))}
-          </>
+          </div>
         ))}
       </div>
+
+      {/* Fib R:R configuration modal */}
+      <FibRRModal open={fibOpen} onClose={() => setFibOpen(false)} />
 
       {/* ── Bottom Controls ───────────────────────────────── */}
       <div className="sidebar-divider" />
@@ -141,10 +152,10 @@ export default function Sidebar() {
           <Settings size={15} />
         </Link>
         <button
+          type="button"
           className="sidebar-nav-btn"
           title="AI Assistant"
           onClick={() => {
-            /* handled by RightPanel tab */
             document.dispatchEvent(new CustomEvent('atlas:set-right-tab', { detail: 'ai' }));
           }}
         >

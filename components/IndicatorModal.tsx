@@ -1,8 +1,9 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { X, Search, Layers, Check, Library } from 'lucide-react';
+import { X, Search, Layers, Check, Library, Settings } from 'lucide-react';
 import { useChartStore } from '@/store/chartStore';
 import { INDICATOR_REGISTRY, type IndicatorPreset } from '@/src/core/indicators/registry';
+import IndicatorParamModal from './IndicatorParamModal';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DEFAULT SET (for Reset)
@@ -285,6 +286,7 @@ export default function IndicatorModal() {
   const [search, setSearch]   = useState('');
   const [activeCat, setActiveCat] = useState('Trend');
   const [tooltip, setTooltip] = useState<string | null>(null);
+  const [paramFor, setParamFor] = useState<string | null>(null);
 
   const allFlat = useMemo(() => flattenAll(), []);
 
@@ -409,11 +411,21 @@ export default function IndicatorModal() {
                     </div>
                   </div>
                 </div>
-                <div className="indmod-item-right">
+                <div className="indmod-item-right" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {item.disabled && (
                     <span className="indmod-default-badge" style={{ background: 'var(--tv-bg3)', color: 'var(--tv-text2)' }}>
                       Soon
                     </span>
+                  )}
+                  {!item.disabled && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setParamFor(item.id); }}
+                      title="Configure parameters"
+                      style={{ background: 'transparent', border: '1px solid #2a2e39', borderRadius: 4, padding: 4, color: '#787b86', cursor: 'pointer' }}
+                    >
+                      <Settings size={11} />
+                    </button>
                   )}
                 </div>
               </div>
@@ -438,6 +450,9 @@ export default function IndicatorModal() {
           </button>
         </div>
       </div>
+
+      {/* Per-indicator parameter editor */}
+      <IndicatorParamModal presetId={paramFor} onClose={() => setParamFor(null)} />
     </div>
   );
 }

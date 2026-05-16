@@ -26,6 +26,8 @@
  */
 
 import { runEnsembleSignal, type OHLCV, type MacroContext, type EnsembleSignal } from './ensemble-signal';
+import { extractFeatures } from '@/src/ai/featureExtractor';
+import { predictLogistic } from '@/src/ai/logisticModel';
 
 export interface RenaissanceContext extends MacroContext {
   // Macro feeds
@@ -64,6 +66,7 @@ export interface RenaissanceSignal extends EnsembleSignal {
     weather: number;
     onchain: number;
     microstructure: number;
+    ml: number;
   };
   factors: string[];                 // human notes
   /** Probability estimate of profitable trade (0-1). */
@@ -72,6 +75,10 @@ export interface RenaissanceSignal extends EnsembleSignal {
   pNoEdge: number;
   /** Recommended position size as fraction of equity. */
   kelly: number;
+  /** Local logistic-ensemble probability of an up-move (0-1). */
+  mlProbability?: number;
+  /** Top contributing features from the local model. */
+  mlTopContributions?: Array<{ key: string; weight: number; value: number; contribution: number }>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -206,7 +213,7 @@ export function runRenaissanceSignal(
     return {
       ...fallback,
       renaissanceScore: fallback.rawScore,
-      layerScores: { technical: fallback.rawScore, macro: 0, sentiment: 0, political: 0, weather: 0, onchain: 0, microstructure: 0 },
+      layerScores: { technical: fallback.rawScore, macro: 0, sentiment: 0, political: 0, weather: 0, onchain: 0, microstructure: 0, ml: 0 },
       factors: ['Insufficient data — using technical layer only'],
       pWin: 0.5,
       pNoEdge: 1.0,
@@ -223,15 +230,27 @@ export function runRenaissanceSignal(
   const onchain    = scoreOnchain(ctx);
   const micro      = scoreMicrostructure(ctx);
 
+  // ── ML logistic-ensemble layer ────────────────────────────────────────────
+  const features = extractFeatures(candles);
+  const logistic = features ? predictLogistic(features) : null;
+  const mlScore = logistic ? (logistic.pBuy - 0.5) * 200 : 0;   // -100..+100
+  const mlNotes: string[] = [];
+  if (logistic) {
+    if (mlScore > 30)  mlNotes.push(`ML P(up)=${logistic.pBuy.toFixed(2)} bullish bias`);
+    if (mlScore < -30) mlNotes.push(`ML P(up)=${logistic.pBuy.toFixed(2)} bearish bias`);
+    if (logistic.contributions[0]) mlNotes.push(`ML top driver: ${logistic.contributions[0].key} (${logistic.contributions[0].contribution >= 0 ? '+' : ''}${logistic.contributions[0].contribution})`);
+  }
+
   // Layer weights (sum to 1.0) — technical dominates but factors bend it
   const W = {
-    technical:       0.50,
-    macro:           0.14,
-    sentiment:       0.10,
-    political:       0.08,
-    weather:         0.04,
-    onchain:         0.06,
-    microstructure:  0.08,
+    technical:       0.42,
+    macro:           0.12,
+    sentiment:       0.08,
+    political:       0.07,
+    weather:         0.03,
+    onchain:         0.05,
+    microstructure:  0.06,
+    ml:              0.17,
   };
 
   const renaissanceScore =
@@ -241,7 +260,8 @@ export function runRenaissanceSignal(
     political.score* W.political +
     weather.score  * W.weather +
     onchain.score  * W.onchain +
-    micro.score    * W.microstructure;
+    micro.score    * W.microstructure +
+    mlScore        * W.ml;
 
   const factors = [
     ...(base.macroNotes || []),
@@ -251,6 +271,7 @@ export function runRenaissanceSignal(
     ...weather.notes,
     ...onchain.notes,
     ...micro.notes,
+    ...mlNotes,
   ].filter(Boolean);
 
   // Adjust signal direction if external factors are extreme
@@ -296,10 +317,13 @@ export function runRenaissanceSignal(
       weather:        parseFloat(weather.score.toFixed(2)),
       onchain:        parseFloat(onchain.score.toFixed(2)),
       microstructure: parseFloat(micro.score.toFixed(2)),
+      ml:             parseFloat(mlScore.toFixed(2)),
     },
     factors,
     pWin: parseFloat(pWin.toFixed(3)),
     pNoEdge: parseFloat(pNoEdge.toFixed(3)),
     kelly: parseFloat(kelly.toFixed(4)),
+    mlProbability: logistic?.pBuy,
+    mlTopContributions: logistic?.contributions.slice(0, 5).map((c) => ({ ...c, key: String(c.key) })),
   };
 }
