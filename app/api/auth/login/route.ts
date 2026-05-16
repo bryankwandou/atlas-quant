@@ -1,49 +1,19 @@
-import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { supabaseAuth } from '@/src/services/supabase-auth';
 import { getEmailByUsername, getUsernameByUserId } from '@/src/services/auth';
+import { isUserLocked } from '@/src/services/admin/store';
 
-const SESSION_SECRET = process.env.CRON_SECRET || 'fallback-secret';
-
-/** Issue a legacy HMAC token for the admin bypass path. */
-function issueAdminToken(publicKey: string): string {
-  const payload = Buffer.from(
-    JSON.stringify({ publicKey, exp: Date.now() + 24 * 60 * 60 * 1000 })
-  ).toString('base64');
-  const signature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
-  return `${payload}.${signature}`;
-}
-
+/**
+ * NOTE: The previous hardcoded admin bypass + hardcoded Solana wallet
+ * address have been removed. Admin access is now handled exclusively
+ * via /api/admin/login + cookie-session (admins cannot impersonate users
+ * via this endpoint).
+ */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { identifier, password } = body as { identifier?: string; password?: string };
 
-    // ── Admin bypass ────────────────────────────────────────────────────────
-    if (identifier === 'nayrbryanGaming' && password === 'nayrbryanGaming') {
-      const adminPublicKey =
-        process.env.MASTER_PUBLIC_KEY || 'BgpTkU2YVazAhBvbBxBgMncZ7kAaTXRFvygv7GQqbUgA';
-      const token = issueAdminToken(adminPublicKey);
-      return NextResponse.json({
-        success: true,
-        message: 'MASTER_ADMIN_VERIFIED',
-        token,
-        session_token: token,
-        access_token: token,
-        refresh_token: null,
-        publicKey: adminPublicKey,
-        role: 'master',
-        bypass: true,
-        user: {
-          id: 'master',
-          email: 'admin@atlas-quant.internal',
-          username: 'nayrbryanGaming',
-          role: 'master',
-        },
-      });
-    }
-
-    // ── Basic validation ────────────────────────────────────────────────────
     if (!identifier || !password) {
       return NextResponse.json({ error: 'Identifier and password are required.' }, { status: 400 });
     }
@@ -66,6 +36,14 @@ export async function POST(request: Request) {
     if (error || !data.session || !data.user) {
       const msg = error?.message ?? 'Invalid credentials.';
       return NextResponse.json({ error: msg }, { status: 401 });
+    }
+
+    // Admin lock check
+    if (await isUserLocked(data.user.id)) {
+      return NextResponse.json(
+        { error: 'Account locked by administrator. Contact support.' },
+        { status: 403 }
+      );
     }
 
     // Resolve username from profile (best-effort — fall back to user_metadata)

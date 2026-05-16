@@ -12,7 +12,9 @@ export const verifySessionToken = (request: Request): string | null => {
     if (!authHeader?.startsWith('Bearer ')) return null;
     const token = authHeader.split(' ')[1];
 
-    if (token === 'nayr-gaming-master-v1') return 'T1MO_MASTER_ADMIN';
+    // Hardcoded master-token bypass has been removed for security.
+    // All authentication now flows through the HMAC-signed session token below
+    // or, for admin operations, the cookie-based session in /api/admin/login.
 
     try {
         const [payload, signature] = token.split('.');
