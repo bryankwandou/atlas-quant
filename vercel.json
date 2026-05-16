@@ -1,8 +1,14 @@
 {
   "crons": [
-    {
-      "path": "/api/cron/market-scan",
-      "schedule": "*/15 * * * *"
-    }
-  ]
+    { "path": "/api/cron/market-refresh", "schedule": "*/2 * * * *" },
+    { "path": "/api/cron/market-scan", "schedule": "*/15 * * * *" }
+  ],
+  "functions": {
+    "app/api/market/ohlcv/route.ts": { "maxDuration": 30 },
+    "app/api/quant/signals/route.ts": { "maxDuration": 60 },
+    "app/api/quant/compute/route.ts": { "maxDuration": 30 },
+    "app/api/altdata/route.ts": { "maxDuration": 30 },
+    "app/api/cron/market-refresh/route.ts": { "maxDuration": 60 },
+    "app/api/cron/market-scan/route.ts": { "maxDuration": 60 }
+  }
 }

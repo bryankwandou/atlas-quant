@@ -9,13 +9,29 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@noble/hashes": "^2.2.0",
     "@solana/web3.js": "^1.98.4",
+    "@supabase/supabase-js": "^2.105.4",
+    "bcryptjs": "^3.0.3",
     "bs58": "^6.0.0",
+    "clsx": "^2.1.1",
+    "dayjs": "^1.11.20",
+    "framer-motion": "^12.38.0",
+    "fuse.js": "^7.3.0",
+    "jsonwebtoken": "^9.0.3",
     "lightweight-charts": "^5.1.0",
+    "lucide-react": "^1.16.0",
+    "mathjs": "^15.2.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "tweetnacl": "^1.0.3"
+    "react-hot-toast": "^2.6.0",
+    "sonner": "^2.0.7",
+    "swr": "^2.4.1",
+    "tailwind-merge": "^3.6.0",
+    "tweetnacl": "^1.0.3",
+    "uuid": "^14.0.0",
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
