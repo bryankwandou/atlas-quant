@@ -32,8 +32,11 @@ export async function GET(req: Request) {
     });
   }
 
+  const all = INDICATOR_REGISTRY.map((r) => r.def);
   return NextResponse.json({
     stats: indicatorStats(),
-    all: INDICATOR_REGISTRY.map((r) => r.def).slice(0, limit),
+    indicators: all.slice(0, limit),
+    all: all.slice(0, limit),
+    total: all.length,
   });
 }
