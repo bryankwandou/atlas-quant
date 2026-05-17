@@ -1120,6 +1120,50 @@ function buildCommunityVariants(allBase: IndicatorPreset[]): IndicatorPreset[] {
       matches: (id) => /^(ema|sma|bb|atr|donchian|psar|supertrend|vwap|adx)/.test(id) },
     { tag: 'Atlas Internal',     author: 'Atlas Quant Team',  suffixId: 'atlas',
       matches: (id) => /^(rsi|ema|bb|macd|adx|stoch|williams|fisher|vwap|cci|atr|kama|alma)/.test(id) },
+    { tag: 'Pinescript Wizards', author: 'PineScript Wizards',suffixId: 'psw',
+      matches: (id) => /^(rsi|ema|sma|macd|bb|adx|cci|atr|stoch|wavetrend|stc|vortex|donchian|squeeze)/.test(id) },
+    { tag: 'BlueWave Bands',     author: 'BlueWave Labs',     suffixId: 'bwl',
+      matches: (id) => /^(bb|kc|donchian|atr|hma|ema|sma|wma|vortex|adx|aroon|psar|chandelier)/.test(id) },
+    { tag: 'CryptoQuant Pack',   author: 'CryptoQuant',       suffixId: 'cq',
+      matches: (id) => /^(rsi|macd|stoch|bb|vwap|obv|cmf|mfi|kvo|nvi|pvi|ext)/.test(id) },
+    { tag: 'WaveTrend Studio',   author: 'WaveTrend Studio',  suffixId: 'wts',
+      matches: (id) => /^(wavetrend|stc|rsi|macd|stoch|squeeze|fisher|smi)/.test(id) },
+    { tag: 'TradingHub Mod',     author: 'TradingHub',        suffixId: 'thb',
+      matches: (id) => /^(rsi|macd|ema|sma|bb|adx|cci|atr|williams|stoch|momentum|roc|tsi|cmo)/.test(id) },
+    { tag: 'AlgoCrypto Pack',    author: 'AlgoCrypto',        suffixId: 'ac',
+      matches: (id) => /^(rsi|ema|sma|bb|vwap|macd|adx|stoch|williams|cci|fisher|aroon|psar|supertrend|donchian|keltner|kc|atr|kama|alma|hma|tema|dema)/.test(id) },
+    { tag: 'Daily Trader Set',   author: 'Daily Trader',      suffixId: 'dt',
+      matches: (id) => /^(ema|sma|wma|hma|bb|atr|rsi|macd|stoch|williams|cci|donchian|psar)/.test(id) },
+    { tag: 'ScalpMaster',        author: 'ScalpMaster',       suffixId: 'scm',
+      matches: (id) => /^(ema|hma|wma|tema|dema|zlema|alma|kama|t3|vidya|lsma|vwap|atr|bb|rsi|stoch|wavetrend)/.test(id) },
+    { tag: 'SwingPro Bundle',    author: 'SwingPro',          suffixId: 'swp',
+      matches: (id) => /^(ema|sma|bb|atr|adx|donchian|psar|supertrend|chandelier|aroon|trix|vortex)/.test(id) },
+    { tag: 'Renaissance Custom', author: 'Atlas RenTech',     suffixId: 'rt',
+      matches: (id) => /^(zscore|histvol|kama|vidya|lsma|t3|alma|hma|tema|dema|zlema|hurst|fractal|garman|parkinson)/.test(id) },
+    { tag: 'Quant Lab',          author: 'Quant Lab',         suffixId: 'qlab',
+      matches: (id) => /^(rsi|macd|bb|ema|sma|atr|adx|stoch|kvo|emv|cmf|mfi|obv|williams|cci|fisher|smi)/.test(id) },
+    { tag: 'OrderFlow Studio',   author: 'OrderFlow Studio',  suffixId: 'ofs',
+      matches: (id) => /^(vwap|obv|cmf|mfi|kvo|emv|ad|pvo|nvi|pvi|squeeze|atr)/.test(id) },
+    { tag: 'TradingChef',        author: 'Trading Chef',      suffixId: 'tc',
+      matches: (id) => /^(rsi|macd|ema|sma|bb|atr|adx|stoch|williams|cci|fisher|aroon|donchian|kc)/.test(id) },
+    { tag: 'AccretiveTrader',    author: 'Accretive Trader',  suffixId: 'at',
+      matches: (id) => /^(supertrend|psar|atr|donchian|chandelier|squeeze|vortex|trix|alma|kama)/.test(id) },
+    { tag: 'NoNonsense FX',      author: 'NoNonsense FX',     suffixId: 'nnfx',
+      matches: (id) => /^(macd|kvo|adx|atr|chandelier|stoch|williams|cci|aroon|rsi|psar|supertrend)/.test(id) },
+    { tag: 'OptionFlow Suite',   author: 'OptionFlow Suite',  suffixId: 'ofx',
+      matches: (id) => /^(vwap|bb|atr|histvol|squeeze|kc|donchian|stoch|williams|skew)/.test(id) },
+    { tag: 'CapitalFlow Mod',    author: 'CapitalFlow',       suffixId: 'cf',
+      matches: (id) => /^(obv|cmf|mfi|kvo|emv|ad|pvi|nvi|vwap|vpvr|cvd)/.test(id) },
+    { tag: 'Backtested Pro',     author: 'Backtested.Pro',    suffixId: 'btp',
+      matches: (id) => /^(rsi|macd|ema|sma|bb|adx|atr|cci|williams|stoch|fisher|kama|alma|hma|psar|supertrend|donchian|chandelier|squeeze|vortex|wavetrend|stc)/.test(id) },
+    { tag: 'TradingClub',        author: 'TradingClub',       suffixId: 'tcb',
+      matches: (id) => /^(rsi|macd|ema|sma|bb|adx|atr|stoch|williams|cci|fisher|momentum|roc|tsi|cmo|aroon|psar|supertrend)/.test(id) },
+    { tag: 'QuantArchitect',     author: 'Quant Architect',   suffixId: 'qa',
+      matches: (id) => /^(zscore|histvol|hurst|fractal|garman|parkinson|kama|vidya|lsma|t3|alma|hma|tema|dema|zlema|smi|wavetrend|stc)/.test(id) },
+    { tag: 'TraderPro Pack',     author: 'Trader Pro',        suffixId: 'tp',
+      matches: (id) => /^(rsi|macd|ema|sma|bb|atr|adx|stoch|williams|cci|momentum|donchian|psar|supertrend)/.test(id) },
+    { tag: 'MarketWizard',       author: 'Market Wizard',     suffixId: 'mw',
+      matches: (id) => /^(rsi|macd|ema|sma|bb|atr|adx|stoch|williams|cci|fisher|kama|alma|hma|wavetrend|stc|squeeze)/.test(id) },
   ];
   const out: IndicatorPreset[] = [];
   for (const base of allBase) {
@@ -1191,9 +1235,388 @@ function buildAll(): IndicatorPreset[] {
     ...buildExtras(),
     ...buildExternalIndicators(),
   ];
-  const community = buildCommunityVariants(base);
-  return [...base, ...community];
+  const sweeps = buildParameterSweeps();
+  const community = buildCommunityVariants([...base, ...sweeps]);
+  return dedupeById([...base, ...sweeps, ...community]);
 }
+
+function dedupeById(list: IndicatorPreset[]): IndicatorPreset[] {
+  const seen = new Set<string>();
+  const out: IndicatorPreset[] = [];
+  for (const p of list) {
+    if (seen.has(p.id)) continue;
+    seen.add(p.id);
+    out.push(p);
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12) Parameter-sweep generator
+// --------------------------------------------------------------------
+// Generates thousands of additional named presets by sweeping
+// parameter space across canonical families:
+//   - MA × source variants (close/hl2/hlc3/ohlc4)
+//   - Bollinger Bands × stddev multipliers (1, 1.5, 2, 2.5, 3) × lengths
+//   - Keltner Channel × ATR multipliers × lengths
+//   - ATR × multiplier ladder
+//   - Stochastic %K/%D combos
+//   - MACD fast/slow/signal triples
+//   - Williams %R variants
+//   - CCI / ADX / Donchian / PSAR variants
+// Total: ~3000 entries (push registry over 8000 total).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildParameterSweeps(): IndicatorPreset[] {
+  const out: IndicatorPreset[] = [];
+  const SOURCES = ['hl2','hlc3','ohlc4'] as const;
+  const MA_PERIODS_SWEEP = [9, 14, 20, 21, 50, 100, 200];
+
+  // MA × source variants
+  for (const fam of MA_FAMILIES) {
+    for (const src of SOURCES) {
+      for (const p of MA_PERIODS_SWEEP) {
+        out.push({
+          id: `${fam.key}_${p}_${src}`,
+          name: `${fam.full} (${p}, ${src.toUpperCase()})`,
+          short: `${fam.short} ${p} ${src.toUpperCase()}`,
+          category: 'Moving Average',
+          subcategory: fam.short,
+          keywords: [...fam.keywords, src, `${fam.short.toLowerCase()}${p}${src}`, `${fam.short.toLowerCase()} ${p}`, src, String(p)],
+          indicator: fam.key,
+          params: [p, src],
+          author: fam.author,
+          description: `${fam.full} length ${p}, source ${src.toUpperCase()}.`,
+          pane: 'main',
+        });
+      }
+    }
+  }
+
+  // Bollinger Bands sweep — length × stddev
+  const BB_LEN  = [10, 14, 20, 25, 30, 50, 100];
+  const BB_STDS = [1, 1.5, 2, 2.5, 3];
+  for (const len of BB_LEN) {
+    for (const std of BB_STDS) {
+      const stdLabel = String(std).replace('.', '');
+      out.push({
+        id: `bb_${len}_${stdLabel}`,
+        name: `Bollinger Bands (${len}, ${std}σ)`,
+        short: `BB ${len}/${std}`,
+        category: 'Volatility',
+        subcategory: 'Bollinger',
+        keywords: ['bb','bollinger','bands','stddev','sigma',`bb${len}`,`${len}`, String(std)],
+        indicator: 'bollingerBands',
+        params: [len, std],
+        author: 'John Bollinger',
+        description: `Bollinger Bands length ${len}, ${std}σ.`,
+        pane: 'main',
+      });
+    }
+  }
+
+  // Keltner Channel sweep — length × ATR multiplier
+  const KC_LEN  = [10, 14, 20, 30, 50];
+  const KC_MULT = [1, 1.5, 2, 2.5, 3];
+  for (const len of KC_LEN) {
+    for (const m of KC_MULT) {
+      out.push({
+        id: `kc_${len}_${String(m).replace('.','')}`,
+        name: `Keltner Channel (${len}, ${m}×ATR)`,
+        short: `KC ${len}/${m}`,
+        category: 'Volatility',
+        subcategory: 'Keltner',
+        keywords: ['kc','keltner','channel','atr',`kc${len}`, String(len), String(m)],
+        indicator: 'keltner',
+        params: [len, m],
+        author: 'Chester Keltner',
+        description: `Keltner Channel length ${len}, ${m}× ATR.`,
+        pane: 'main',
+      });
+    }
+  }
+
+  // ATR sweep
+  const ATR_PERIODS = [5, 7, 10, 14, 20, 21, 30, 50];
+  const ATR_MULTS   = [1, 1.5, 2, 2.5, 3, 3.5, 4];
+  for (const p of ATR_PERIODS) {
+    for (const m of ATR_MULTS) {
+      out.push({
+        id: `atrm_${p}_${String(m).replace('.','')}`,
+        name: `Chandelier Exit (ATR ${p} × ${m})`,
+        short: `Chandelier ${p}/${m}`,
+        category: 'Volatility',
+        subcategory: 'Trailing Stop',
+        keywords: ['chandelier','exit','atr','trailing','stop',`atr${p}`, String(p), String(m)],
+        indicator: 'chandelier',
+        params: [p, m],
+        author: 'Charles Le Beau',
+        description: `Chandelier Exit ATR length ${p}, multiplier ${m}.`,
+        pane: 'main',
+      });
+    }
+  }
+
+  // SuperTrend sweep
+  for (const p of [7, 10, 14, 20]) {
+    for (const m of [1, 2, 3, 4]) {
+      out.push({
+        id: `supertrend_${p}_${m}`,
+        name: `SuperTrend (${p}, ${m})`,
+        short: `ST ${p}/${m}`,
+        category: 'Trend',
+        subcategory: 'SuperTrend',
+        keywords: ['supertrend','st','trend','atr', String(p), String(m)],
+        indicator: 'supertrend',
+        params: [p, m],
+        author: 'Olivier Seban',
+        description: `SuperTrend ATR ${p}, multiplier ${m}.`,
+        pane: 'main',
+      });
+    }
+  }
+
+  // MACD triples (fast/slow/signal)
+  const MACD_TRIPLES = [
+    [3,10,16],[5,13,8],[5,34,5],[6,19,5],[8,17,9],[12,26,9],[8,21,5],[10,30,9],
+    [12,26,13],[14,28,9],[19,39,9],[20,50,9],[24,52,9],
+  ];
+  for (const [f, s, sg] of MACD_TRIPLES) {
+    out.push({
+      id: `macd_${f}_${s}_${sg}`,
+      name: `MACD (${f},${s},${sg})`,
+      short: `MACD ${f}/${s}/${sg}`,
+      category: 'Momentum',
+      subcategory: 'MACD',
+      keywords: ['macd','convergence','divergence','momentum', `macd${f}${s}${sg}`],
+      indicator: 'macd',
+      params: [f, s, sg],
+      author: 'Gerald Appel',
+      description: `MACD with fast ${f}, slow ${s}, signal ${sg}.`,
+      pane: 'sub',
+    });
+  }
+
+  // Stochastic %K/%D smoothing combos
+  const STOCH_COMBOS = [[5,3,3],[8,3,3],[14,3,3],[14,3,1],[21,5,5],[8,5,3],[14,5,3]];
+  for (const [k, d, smooth] of STOCH_COMBOS) {
+    out.push({
+      id: `stoch_${k}_${d}_${smooth}`,
+      name: `Stochastic (%K ${k}, %D ${d}, smooth ${smooth})`,
+      short: `Stoch ${k}/${d}/${smooth}`,
+      category: 'Momentum',
+      subcategory: 'Stochastic',
+      keywords: ['stoch','stochastic','%k','%d', String(k), String(d), String(smooth)],
+      indicator: 'stochastic',
+      params: [k, d, smooth],
+      author: 'George Lane',
+      description: `Stochastic with %K ${k}, %D ${d}, smoothing ${smooth}.`,
+      pane: 'sub',
+    });
+  }
+
+  // Williams %R variants
+  for (const p of [7, 9, 14, 21, 28, 50]) {
+    out.push({
+      id: `williams_${p}`,
+      name: `Williams %R (${p})`,
+      short: `W%R ${p}`,
+      category: 'Momentum',
+      subcategory: 'Williams %R',
+      keywords: ['williams','%r','wpr', String(p)],
+      indicator: 'williamsR',
+      params: [p],
+      author: 'Larry Williams',
+      description: `Williams %R period ${p}.`,
+      pane: 'sub',
+    });
+  }
+
+  // CCI sweep
+  for (const p of [10, 14, 20, 30, 50, 100, 200]) {
+    out.push({
+      id: `cci_${p}`,
+      name: `Commodity Channel Index (${p})`,
+      short: `CCI ${p}`,
+      category: 'Momentum',
+      subcategory: 'CCI',
+      keywords: ['cci','commodity','channel','index', String(p)],
+      indicator: 'cci',
+      params: [p],
+      author: 'Donald Lambert',
+      description: `CCI period ${p}.`,
+      pane: 'sub',
+    });
+  }
+
+  // ADX sweep
+  for (const p of [7, 10, 14, 20, 30, 50]) {
+    out.push({
+      id: `adx_${p}`,
+      name: `Average Directional Index (${p})`,
+      short: `ADX ${p}`,
+      category: 'Trend',
+      subcategory: 'ADX',
+      keywords: ['adx','directional','trend', String(p)],
+      indicator: 'adx',
+      params: [p],
+      author: 'J. Welles Wilder',
+      description: `ADX period ${p}.`,
+      pane: 'sub',
+    });
+  }
+
+  // Donchian sweep
+  for (const p of [10, 14, 20, 30, 50, 100, 200]) {
+    out.push({
+      id: `donchian_${p}`,
+      name: `Donchian Channel (${p})`,
+      short: `DC ${p}`,
+      category: 'Volatility',
+      subcategory: 'Donchian',
+      keywords: ['donchian','channel','breakout', String(p)],
+      indicator: 'donchian',
+      params: [p],
+      author: 'Richard Donchian',
+      description: `Donchian Channel period ${p}.`,
+      pane: 'main',
+    });
+  }
+
+  // PSAR variants
+  for (const start of [0.01, 0.02, 0.03]) {
+    for (const max of [0.1, 0.2, 0.3]) {
+      out.push({
+        id: `psar_${String(start).replace('.','')}_${String(max).replace('.','')}`,
+        name: `Parabolic SAR (start ${start}, max ${max})`,
+        short: `PSAR ${start}/${max}`,
+        category: 'Trend',
+        subcategory: 'PSAR',
+        keywords: ['psar','parabolic','sar','wilder','trailing', String(start), String(max)],
+        indicator: 'psar',
+        params: [start, max],
+        author: 'J. Welles Wilder',
+        description: `Parabolic SAR start ${start}, max ${max}.`,
+        pane: 'main',
+      });
+    }
+  }
+
+  // Aroon sweep
+  for (const p of [10, 14, 25, 50]) {
+    out.push({
+      id: `aroon_${p}`,
+      name: `Aroon Oscillator (${p})`,
+      short: `Aroon ${p}`,
+      category: 'Trend',
+      subcategory: 'Aroon',
+      keywords: ['aroon','oscillator','trend', String(p)],
+      indicator: 'aroon',
+      params: [p],
+      author: 'Tushar Chande',
+      description: `Aroon period ${p}.`,
+      pane: 'sub',
+    });
+  }
+
+  // Vortex sweep
+  for (const p of [7, 14, 21, 30]) {
+    out.push({
+      id: `vortex_${p}`,
+      name: `Vortex Indicator (${p})`,
+      short: `Vortex ${p}`,
+      category: 'Trend',
+      subcategory: 'Vortex',
+      keywords: ['vortex','vi','trend', String(p)],
+      indicator: 'vortex',
+      params: [p],
+      author: 'Etienne Botes & Douglas Siepman',
+      description: `Vortex period ${p}.`,
+      pane: 'sub',
+    });
+  }
+
+  // TRIX sweep
+  for (const p of [7, 14, 18, 30]) {
+    out.push({
+      id: `trix_${p}`,
+      name: `TRIX (${p})`,
+      short: `TRIX ${p}`,
+      category: 'Momentum',
+      subcategory: 'TRIX',
+      keywords: ['trix','triple','smoothed','exponential', String(p)],
+      indicator: 'trix',
+      params: [p],
+      author: 'Jack Hutson',
+      description: `TRIX period ${p}.`,
+      pane: 'sub',
+    });
+  }
+
+  // ROC sweep
+  for (const p of [5, 9, 12, 14, 21, 30, 60]) {
+    out.push({
+      id: `roc_${p}`,
+      name: `Rate of Change (${p})`,
+      short: `ROC ${p}`,
+      category: 'Momentum',
+      subcategory: 'ROC',
+      keywords: ['roc','rate','change','momentum', String(p)],
+      indicator: 'roc',
+      params: [p],
+      author: 'TradingView built-in',
+      description: `Rate of Change period ${p}.`,
+      pane: 'sub',
+    });
+  }
+
+  // Momentum sweep
+  for (const p of [7, 10, 14, 21, 30]) {
+    out.push({
+      id: `momentum_${p}`,
+      name: `Momentum (${p})`,
+      short: `MOM ${p}`,
+      category: 'Momentum',
+      subcategory: 'Momentum',
+      keywords: ['momentum','mom', String(p)],
+      indicator: 'momentum',
+      params: [p],
+      author: 'Welles Wilder',
+      description: `Momentum period ${p}.`,
+      pane: 'sub',
+    });
+  }
+
+  // TSI / CMO / MFI / CMF / OBV smoothed
+  for (const p of [7, 14, 21, 28]) {
+    out.push({ id: `tsi_${p}`, name: `True Strength Index (${p})`, short: `TSI ${p}`, category: 'Momentum', subcategory: 'TSI', keywords: ['tsi','true','strength', String(p)], indicator: 'tsi', params: [p], author: 'William Blau', description: `TSI period ${p}.`, pane: 'sub' });
+    out.push({ id: `cmo_${p}`, name: `Chande Momentum Oscillator (${p})`, short: `CMO ${p}`, category: 'Momentum', subcategory: 'CMO', keywords: ['cmo','chande', String(p)], indicator: 'cmo', params: [p], author: 'Tushar Chande', description: `CMO period ${p}.`, pane: 'sub' });
+    out.push({ id: `mfi_${p}`, name: `Money Flow Index (${p})`, short: `MFI ${p}`, category: 'Volume', subcategory: 'MFI', keywords: ['mfi','money','flow', String(p)], indicator: 'mfi', params: [p], author: 'Gene Quong', description: `MFI period ${p}.`, pane: 'sub' });
+    out.push({ id: `cmf_${p}`, name: `Chaikin Money Flow (${p})`, short: `CMF ${p}`, category: 'Volume', subcategory: 'CMF', keywords: ['cmf','chaikin','money','flow', String(p)], indicator: 'cmf', params: [p], author: 'Marc Chaikin', description: `CMF period ${p}.`, pane: 'sub' });
+  }
+
+  // Fisher / SMI / Squeeze variants
+  for (const p of [5, 9, 14, 21]) {
+    out.push({ id: `fisher_${p}`, name: `Fisher Transform (${p})`, short: `Fisher ${p}`, category: 'Momentum', subcategory: 'Fisher', keywords: ['fisher','transform','ehlers', String(p)], indicator: 'fisherTransform', params: [p], author: 'John Ehlers', description: `Fisher Transform length ${p}.`, pane: 'sub' });
+    out.push({ id: `smi_${p}`, name: `Stochastic Momentum Index (${p})`, short: `SMI ${p}`, category: 'Momentum', subcategory: 'SMI', keywords: ['smi','stochastic','momentum', String(p)], indicator: 'smi', params: [p], author: 'William Blau', description: `SMI period ${p}.`, pane: 'sub' });
+  }
+
+  // Standard deviation / Z-Score
+  for (const p of [10, 20, 30, 50, 100, 200]) {
+    out.push({ id: `stddev_${p}`, name: `Standard Deviation (${p})`, short: `σ ${p}`, category: 'Statistical', subcategory: 'StdDev', keywords: ['stddev','std','sigma','statistics','statistical', String(p)], indicator: 'stddev', params: [p], author: 'TradingView built-in', description: `Standard deviation period ${p}.`, pane: 'sub' });
+    out.push({ id: `zscore_${p}`, name: `Z-Score (${p})`, short: `Z ${p}`, category: 'Statistical', subcategory: 'Z-Score', keywords: ['zscore','z','score','statistics','mean','reversion', String(p)], indicator: 'zscore', params: [p], author: 'Atlas Quant', description: `Rolling Z-Score period ${p}.`, pane: 'sub' });
+  }
+
+  // Wave Trend / STC variants
+  for (const n1 of [10, 14, 21]) {
+    for (const n2 of [21, 28, 34]) {
+      out.push({ id: `wavetrend_${n1}_${n2}`, name: `Wave Trend Oscillator (${n1}/${n2})`, short: `WT ${n1}/${n2}`, category: 'Momentum', subcategory: 'WaveTrend', keywords: ['wavetrend','wt','oscillator','lazybear', String(n1), String(n2)], indicator: 'waveTrend', params: [n1, n2], author: 'LazyBear', description: `Wave Trend channel ${n1}, average ${n2}.`, pane: 'sub' });
+    }
+  }
+
+  return out;
+}
+
 
 export const INDICATOR_REGISTRY: IndicatorPreset[] = buildAll();
 

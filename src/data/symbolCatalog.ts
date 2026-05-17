@@ -744,20 +744,18 @@ export const SYMBOL_CATALOG: SymbolMeta[] = [
 // Merge programmatic generators (de-duped by symbol)
 import { generateAllAutoSymbols } from './symbolsAuto';
 import { SYMBOLS_BULK } from './symbolsBulk';
+import { SYMBOLS_MEGA } from './symbolsMega';
 (function mergeAutoSymbols() {
   const existing = new Set(SYMBOL_CATALOG.map((s) => s.symbol.toUpperCase()));
-  for (const s of generateAllAutoSymbols()) {
-    if (!existing.has(s.symbol.toUpperCase())) {
-      SYMBOL_CATALOG.push(s);
-      existing.add(s.symbol.toUpperCase());
+  const addList = (list: SymbolMeta[]) => {
+    for (const s of list) {
+      const k = s.symbol.toUpperCase();
+      if (!existing.has(k)) { SYMBOL_CATALOG.push(s); existing.add(k); }
     }
-  }
-  for (const s of SYMBOLS_BULK) {
-    if (!existing.has(s.symbol.toUpperCase())) {
-      SYMBOL_CATALOG.push(s);
-      existing.add(s.symbol.toUpperCase());
-    }
-  }
+  };
+  addList(generateAllAutoSymbols());
+  addList(SYMBOLS_BULK);
+  addList(SYMBOLS_MEGA);
 })();
 
 const _catalogMap = new Map<string, SymbolMeta>(
