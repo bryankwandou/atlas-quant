@@ -147,7 +147,7 @@ export default function TradingViewChart({ data }: { data: any[] }) {
                 const sData = [];
                 const mData = [];
 
-                // T1MO Entry Signal Markers (SCIENTIFIC v1.0.15)
+                // Entry signal markers (Atlas Quant v2 quant engine)
                 let ema50 = processed[0].close;
                 let ema10 = processed[0].close;
                 const k50 = 2 / (50 + 1);
@@ -195,7 +195,7 @@ export default function TradingViewChart({ data }: { data: any[] }) {
                     // Momentum Pulse (Histogram bars)
                     mData.push({ time: t, value: 3, color: momEMA > 0 ? '#00e676' : '#ff1744' });
 
-                    // T1MO Final Signal Rules (Scientific v1.0.15)
+                    // Signal classification rules (Atlas Quant v2)
                     const prevMom = i > 3 ? momHistory[i - 3] : 0;
                     const isStrongUp = momEMA > 0 && momEMA > prevMom;
                     const isStrongDown = momEMA < 0 && momEMA < prevMom;
@@ -234,23 +234,6 @@ export default function TradingViewChart({ data }: { data: any[] }) {
     return (
         <div className="w-full h-full relative group">
             <div ref={chartContainerRef} className="w-full h-full min-h-[600px]" />
-
-            {/* AKELATRADER Watermark */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-[0.03] text-[8vw] font-black text-gray-900 select-none whitespace-nowrap tracking-tighter uppercase z-0">
-                AKELATRADER
-            </div>
-
-            {/* Strength Banner Overlay - Top Right Area of Chart */}
-            <div className="absolute top-4 right-[160px] z-10 hidden lg:flex items-center gap-2 bg-[#2196f3] text-white px-3 py-1 rounded shadow-lg pointer-events-none select-none">
-                <span className="text-[10px] font-black uppercase tracking-tighter">Strength to QQQ</span>
-            </div>
-
-            {/* Scientific Compliance Tag */}
-            <div className="absolute bottom-20 right-4 z-10 flex flex-col items-end pointer-events-none">
-                <span className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] bg-[#1e222d]/90 px-3 py-1 rounded shadow-sm border border-[#2a2e39]">
-                    T1MO_SCIENTIFIC_V1.0.15
-                </span>
-            </div>
         </div>
     );
 }
