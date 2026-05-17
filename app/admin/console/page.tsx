@@ -43,6 +43,51 @@ export default function AdminDashboard() {
   const [newPass, setNewPass] = useState('');
   const [newPass2, setNewPass2] = useState('');
 
+  // Automation panels
+  const [migrating, setMigrating] = useState(false);
+  const [migrateResult, setMigrateResult] = useState<any>(null);
+  const [backtesting, setBacktesting] = useState(false);
+  const [backtestResult, setBacktestResult] = useState<any>(null);
+  const [training, setTraining] = useState(false);
+  const [trainResult, setTrainResult] = useState<any>(null);
+
+  async function runMigration() {
+    setMigrating(true); setMigrateResult(null);
+    try {
+      const r = await fetch('/api/admin/migrate', { method: 'POST' });
+      const j = await r.json();
+      setMigrateResult(j);
+    } catch (e: any) {
+      setMigrateResult({ error: e?.message ?? 'Migration failed' });
+    } finally { setMigrating(false); }
+  }
+  async function runBacktest() {
+    setBacktesting(true); setBacktestResult(null);
+    try {
+      const r = await fetch('/api/admin/backtest', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','AAPL','TSLA','SPY'], timeframe: '1h', minConfidence: 60 }),
+      });
+      const j = await r.json();
+      setBacktestResult(j);
+    } catch (e: any) {
+      setBacktestResult({ error: e?.message ?? 'Backtest failed' });
+    } finally { setBacktesting(false); }
+  }
+  async function runTraining() {
+    setTraining(true); setTrainResult(null);
+    try {
+      const r = await fetch('/api/admin/train-ml', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timeframe: '1h', horizon: 5, epochs: 6 }),
+      });
+      const j = await r.json();
+      setTrainResult(j);
+    } catch (e: any) {
+      setTrainResult({ error: e?.message ?? 'Training failed' });
+    } finally { setTraining(false); }
+  }
+
   const checkSession = useCallback(async () => {
     try {
       const r = await fetch('/api/admin/me', { cache: 'no-store' });
@@ -253,6 +298,47 @@ export default function AdminDashboard() {
           <div className="text-xs text-neutral-500 uppercase tracking-wide mb-2">Password last changed</div>
           <div className="text-sm">{config?.passwordChangedAt ? new Date(config.passwordChangedAt).toLocaleString() : '—'}</div>
           <p className="text-[11px] text-neutral-500 mt-1">Admin has no impersonation or session-mint power.</p>
+        </div>
+      </section>
+
+      {/* ── Automation panel ───────────────────────────────────────────────── */}
+      <section className="px-6 pb-4">
+        <h2 className="text-sm font-semibold mb-2">Automation · zero-touch operations</h2>
+        <p className="text-[11px] text-neutral-500 mb-3">Every operation that previously required opening Supabase SQL editor / running scripts / training a model is now a one-click button. No human SQL.</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Migration */}
+          <div className="bg-[#111114] border border-neutral-800 rounded-lg p-4">
+            <div className="text-xs text-neutral-500 uppercase tracking-wide mb-1">1 · Run Supabase migration</div>
+            <p className="text-[11px] text-neutral-500 mb-3">Creates / updates all tables: market_ohlcv, indicators_cache, quant_signals, trade_journal, watchlist, user_settings, backtest_runs, ml_model_weights, views + RLS. Idempotent.</p>
+            <button onClick={runMigration} disabled={migrating} className="text-xs px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 transition w-full">
+              {migrating ? 'Running migration…' : 'Run migration'}
+            </button>
+            {migrateResult && (
+              <pre className="mt-3 text-[10px] bg-black border border-neutral-800 rounded p-2 max-h-48 overflow-auto whitespace-pre-wrap">{JSON.stringify(migrateResult, null, 2)}</pre>
+            )}
+          </div>
+          {/* Backtest */}
+          <div className="bg-[#111114] border border-neutral-800 rounded-lg p-4">
+            <div className="text-xs text-neutral-500 uppercase tracking-wide mb-1">2 · Walk-forward backtest</div>
+            <p className="text-[11px] text-neutral-500 mb-3">Runs the Renaissance composite signal across 6 reference symbols and reports actual win-rate / RR / Sharpe / max DD. No fabricated numbers.</p>
+            <button onClick={runBacktest} disabled={backtesting} className="text-xs px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition w-full">
+              {backtesting ? 'Running backtest…' : 'Run backtest'}
+            </button>
+            {backtestResult && (
+              <pre className="mt-3 text-[10px] bg-black border border-neutral-800 rounded p-2 max-h-48 overflow-auto whitespace-pre-wrap">{JSON.stringify(backtestResult, null, 2)}</pre>
+            )}
+          </div>
+          {/* Train ML */}
+          <div className="bg-[#111114] border border-neutral-800 rounded-lg p-4">
+            <div className="text-xs text-neutral-500 uppercase tracking-wide mb-1">3 · Re-train local ML model</div>
+            <p className="text-[11px] text-neutral-500 mb-3">Builds (feature, label) pairs from historical OHLCV across 12 symbols, runs 6-epoch SGD on the logistic ensemble. New weights persisted to <code>ml_model_weights</code>.</p>
+            <button onClick={runTraining} disabled={training} className="text-xs px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 disabled:opacity-50 transition w-full">
+              {training ? 'Training…' : 'Train ML model'}
+            </button>
+            {trainResult && (
+              <pre className="mt-3 text-[10px] bg-black border border-neutral-800 rounded p-2 max-h-48 overflow-auto whitespace-pre-wrap">{JSON.stringify(trainResult, null, 2)}</pre>
+            )}
+          </div>
         </div>
       </section>
 
