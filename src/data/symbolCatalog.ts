@@ -743,9 +743,10 @@ export const SYMBOL_CATALOG: SymbolMeta[] = [
 
 // Merge programmatic generators (de-duped by symbol)
 import { generateAllAutoSymbols } from './symbolsAuto';
-import { SYMBOLS_BULK } from './symbolsBulk';
-import { SYMBOLS_MEGA } from './symbolsMega';
-import { SYMBOLS_ULTRA } from './symbolsUltra';
+import { SYMBOLS_BULK }    from './symbolsBulk';
+import { SYMBOLS_MEGA }    from './symbolsMega';
+import { SYMBOLS_ULTRA }   from './symbolsUltra';
+import { SYMBOLS_RUSSELL } from './symbolsRussell';
 (function mergeAutoSymbols() {
   const existing = new Set(SYMBOL_CATALOG.map((s) => s.symbol.toUpperCase()));
   const addList = (list: SymbolMeta[]) => {
@@ -758,6 +759,7 @@ import { SYMBOLS_ULTRA } from './symbolsUltra';
   addList(SYMBOLS_BULK);
   addList(SYMBOLS_MEGA);
   addList(SYMBOLS_ULTRA);
+  addList(SYMBOLS_RUSSELL);
 })();
 
 const _catalogMap = new Map<string, SymbolMeta>(

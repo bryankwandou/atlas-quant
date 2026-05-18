@@ -1614,6 +1614,194 @@ function buildParameterSweeps(): IndicatorPreset[] {
     }
   }
 
+  // ── Deep parameter sweeps (pushes registry past 15K) ──────────────────────
+
+  // RSI × source variants × OB/OS bands
+  const RSI_OBOS = [[70, 30], [75, 25], [80, 20], [65, 35]];
+  for (const p of [7, 9, 14, 21]) {
+    for (const src of SOURCES) {
+      for (const [ob, os] of RSI_OBOS) {
+        out.push({
+          id: `rsi_${p}_${src}_${ob}_${os}`,
+          name: `RSI (${p}, ${src.toUpperCase()}, OB ${ob} / OS ${os})`,
+          short: `RSI ${p} ${src.toUpperCase()} ${ob}/${os}`,
+          category: 'Momentum',
+          subcategory: 'RSI Variants',
+          keywords: ['rsi', src, String(p), `ob${ob}`, `os${os}`, 'overbought','oversold'],
+          indicator: 'rsi',
+          params: [p, src, ob, os],
+          author: 'TradingView built-in',
+          description: `RSI(${p}) on ${src.toUpperCase()} with bands ${ob}/${os}.`,
+          pane: 'sub',
+        });
+      }
+    }
+  }
+
+  // MACD × source matrix
+  for (const [f, s, sg] of [[12,26,9],[5,35,5],[8,21,5]]) {
+    for (const src of SOURCES) {
+      out.push({
+        id: `macd_${f}_${s}_${sg}_${src}`,
+        name: `MACD (${f},${s},${sg}, ${src.toUpperCase()})`,
+        short: `MACD ${f}/${s}/${sg} ${src.toUpperCase()}`,
+        category: 'Momentum',
+        subcategory: 'MACD Variants',
+        keywords: ['macd', src, String(f), String(s), String(sg)],
+        indicator: 'macd',
+        params: [f, s, sg, src],
+        author: 'Gerald Appel',
+        description: `MACD ${f}/${s}/${sg} on ${src.toUpperCase()} source.`,
+        pane: 'sub',
+      });
+    }
+  }
+
+  // Bollinger Bands × source matrix
+  for (const len of [14, 20, 30, 50]) {
+    for (const std of [1, 2, 3]) {
+      for (const src of SOURCES) {
+        out.push({
+          id: `bb_${len}_${String(std).replace('.','')}_${src}`,
+          name: `Bollinger Bands (${len}, ${std}σ, ${src.toUpperCase()})`,
+          short: `BB ${len}/${std} ${src.toUpperCase()}`,
+          category: 'Volatility',
+          subcategory: 'BB Variants',
+          keywords: ['bb','bollinger','bands', String(len), String(std), src],
+          indicator: 'bollingerBands',
+          params: [len, std, src],
+          author: 'John Bollinger',
+          description: `Bollinger Bands ${len} length, ${std}σ, on ${src.toUpperCase()}.`,
+          pane: 'main',
+        });
+      }
+    }
+  }
+
+  // Stochastic %K × %D × smooth deep matrix
+  for (const k of [5, 9, 14, 21]) {
+    for (const d of [3, 5, 7]) {
+      for (const sm of [1, 3, 5]) {
+        out.push({
+          id: `stoch_deep_${k}_${d}_${sm}`,
+          name: `Stochastic Deep (${k}, ${d}, ${sm})`,
+          short: `StochD ${k}/${d}/${sm}`,
+          category: 'Momentum',
+          subcategory: 'Stochastic Deep',
+          keywords: ['stoch','stochastic','deep', String(k), String(d), String(sm)],
+          indicator: 'stochastic',
+          params: [k, d, sm],
+          author: 'George Lane',
+          description: `Stochastic deep matrix ${k}/${d}/${sm}.`,
+          pane: 'sub',
+        });
+      }
+    }
+  }
+
+  // ATR multiplier × period deep
+  for (const p of [5, 7, 10, 14, 20, 30]) {
+    for (const m of [1, 1.5, 2, 2.5, 3, 3.5, 4, 5]) {
+      out.push({
+        id: `atrband_${p}_${String(m).replace('.','')}`,
+        name: `ATR Bands (${p}, ${m}×)`,
+        short: `ATRB ${p}/${m}`,
+        category: 'Volatility',
+        subcategory: 'ATR Bands',
+        keywords: ['atr','bands','volatility', String(p), String(m)],
+        indicator: 'atr',
+        params: [p, m],
+        author: 'J. Welles Wilder',
+        description: `ATR-based bands ${p} period × ${m} multiplier.`,
+        pane: 'main',
+      });
+    }
+  }
+
+  // Hull MA / TEMA / DEMA / ZLEMA deep
+  for (const fam of ['hma','tema','dema','zlema','t3','kama','vidya','alma'] as const) {
+    for (const p of [5, 7, 9, 12, 14, 18, 21, 26, 34, 50, 89, 100, 144, 200]) {
+      out.push({
+        id: `${fam}_deep_${p}`,
+        name: `${fam.toUpperCase()} Deep (${p})`,
+        short: `${fam.toUpperCase()}D ${p}`,
+        category: 'Moving Average',
+        subcategory: `${fam.toUpperCase()} Deep`,
+        keywords: [fam,'deep', String(p)],
+        indicator: fam,
+        params: [p],
+        author: 'TradingView built-in',
+        description: `${fam.toUpperCase()} deep variant with period ${p}.`,
+        pane: 'main',
+      });
+    }
+  }
+
+  // Volume Profile rows × lookback matrix
+  for (const rows of [12, 24, 48, 100]) {
+    for (const lookback of [50, 100, 200, 500, 1000]) {
+      out.push({
+        id: `vp_${rows}_${lookback}`,
+        name: `Volume Profile (${rows} rows, ${lookback} bars)`,
+        short: `VP ${rows}/${lookback}`,
+        category: 'Volume',
+        subcategory: 'Volume Profile',
+        keywords: ['vp','volume','profile','poc','vah','val', String(rows), String(lookback)],
+        indicator: 'volumeProfile',
+        params: [rows, lookback],
+        author: 'J. Peter Steidlmayer',
+        description: `Volume Profile ${rows} rows, ${lookback}-bar lookback.`,
+        pane: 'main',
+      });
+    }
+  }
+
+  // Ichimoku variants × conversion/base/span
+  for (const conv of [7, 9, 12]) {
+    for (const base of [22, 26, 30]) {
+      for (const span of [44, 52, 60]) {
+        out.push({
+          id: `ichimoku_${conv}_${base}_${span}`,
+          name: `Ichimoku (${conv}/${base}/${span})`,
+          short: `Ichi ${conv}/${base}/${span}`,
+          category: 'Trend',
+          subcategory: 'Ichimoku',
+          keywords: ['ichimoku','cloud','kumo', String(conv), String(base), String(span)],
+          indicator: 'ichimoku',
+          params: [conv, base, span],
+          author: 'Goichi Hosoda',
+          description: `Ichimoku ${conv}/${base}/${span}.`,
+          pane: 'main',
+        });
+      }
+    }
+  }
+
+  // ── SMC / ICT presets ────────────────────────────────────────────────────
+  for (const lookback of [3, 5, 7, 10, 15, 20]) {
+    out.push({ id: `smc_ob_${lookback}`, name: `SMC Order Block (lookback ${lookback})`, short: `OB ${lookback}`, category: 'Smart Money', subcategory: 'Order Block', keywords: ['smc','order','block','ob','smart','money','displacement', String(lookback)], indicator: 'orderBlock', params: [lookback], author: 'SMC Community', description: `Smart Money Order Block detector, swing lookback ${lookback}.`, pane: 'main' });
+    out.push({ id: `smc_fvg_${lookback}`, name: `SMC Fair Value Gap (lookback ${lookback})`, short: `FVG ${lookback}`, category: 'Smart Money', subcategory: 'FVG', keywords: ['smc','fvg','fair','value','gap','imbalance', String(lookback)], indicator: 'fairValueGap', params: [lookback], author: 'SMC Community', description: `Fair Value Gap detector, lookback ${lookback}.`, pane: 'main' });
+    out.push({ id: `smc_bos_${lookback}`, name: `SMC Break of Structure (${lookback})`, short: `BoS ${lookback}`, category: 'Smart Money', subcategory: 'BoS', keywords: ['smc','bos','break','structure','swing', String(lookback)], indicator: 'bos', params: [lookback], author: 'SMC Community', description: `Break of Structure with swing lookback ${lookback}.`, pane: 'main' });
+    out.push({ id: `smc_choch_${lookback}`, name: `SMC Change of Character (${lookback})`, short: `ChoCH ${lookback}`, category: 'Smart Money', subcategory: 'ChoCH', keywords: ['smc','choch','change','character','reversal', String(lookback)], indicator: 'choch', params: [lookback], author: 'SMC Community', description: `Change of Character with swing lookback ${lookback}.`, pane: 'main' });
+  }
+
+  // ICT killzones × asset class
+  for (const zone of ['london','newyork','asia','silver_bullet','power_hour'] as const) {
+    out.push({
+      id: `ict_killzone_${zone}`,
+      name: `ICT Killzone: ${zone.replace('_',' ')}`,
+      short: `KZ ${zone}`,
+      category: 'Smart Money',
+      subcategory: 'ICT Killzone',
+      keywords: ['ict','killzone','session','time', zone],
+      indicator: 'ictKillzone',
+      params: [zone],
+      author: 'Inner Circle Trader',
+      description: `ICT killzone overlay for ${zone.replace('_',' ')} session.`,
+      pane: 'main',
+    });
+  }
+
   return out;
 }
 
