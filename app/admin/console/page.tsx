@@ -50,6 +50,10 @@ export default function AdminDashboard() {
   const [backtestResult, setBacktestResult] = useState<any>(null);
   const [training, setTraining] = useState(false);
   const [trainResult, setTrainResult] = useState<any>(null);
+  const [seeding, setSeeding] = useState(false);
+  const [seedResult, setSeedResult] = useState<any>(null);
+  const [factoring, setFactoring] = useState(false);
+  const [factorResult, setFactorResult] = useState<any>(null);
 
   async function runMigration() {
     setMigrating(true); setMigrateResult(null);
@@ -86,6 +90,29 @@ export default function AdminDashboard() {
     } catch (e: any) {
       setTrainResult({ error: e?.message ?? 'Training failed' });
     } finally { setTraining(false); }
+  }
+  async function runSeed() {
+    setSeeding(true); setSeedResult(null);
+    try {
+      const r = await fetch('/api/admin/seed-ohlcv', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timeframes: ['1h','4h','1d'], perSymbolLimit: 500 }),
+      });
+      const j = await r.json();
+      setSeedResult(j);
+    } catch (e: any) {
+      setSeedResult({ error: e?.message ?? 'Seed failed' });
+    } finally { setSeeding(false); }
+  }
+  async function runFactors() {
+    setFactoring(true); setFactorResult(null);
+    try {
+      const r = await fetch('/api/admin/factors?symbol=BTCUSDT', { cache: 'no-store' });
+      const j = await r.json();
+      setFactorResult(j);
+    } catch (e: any) {
+      setFactorResult({ error: e?.message ?? 'Factor probe failed' });
+    } finally { setFactoring(false); }
   }
 
   const checkSession = useCallback(async () => {
@@ -337,6 +364,28 @@ export default function AdminDashboard() {
             </button>
             {trainResult && (
               <pre className="mt-3 text-[10px] bg-black border border-neutral-800 rounded p-2 max-h-48 overflow-auto whitespace-pre-wrap">{JSON.stringify(trainResult, null, 2)}</pre>
+            )}
+          </div>
+          {/* Seed OHLCV */}
+          <div className="bg-[#111114] border border-neutral-800 rounded-lg p-4">
+            <div className="text-xs text-neutral-500 uppercase tracking-wide mb-1">4 · Seed market data</div>
+            <p className="text-[11px] text-neutral-500 mb-3">Bulk-ingests ~55 reference symbols × 3 timeframes × 500 bars (Crypto + US mega-caps + ETFs + FX + commodities + indices) into <code>market_ohlcv</code>. Pure real data via multi-source aggregator — no dummy rows.</p>
+            <button onClick={runSeed} disabled={seeding} className="text-xs px-3 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 transition w-full">
+              {seeding ? 'Seeding…' : 'Seed OHLCV (≈80K rows)'}
+            </button>
+            {seedResult && (
+              <pre className="mt-3 text-[10px] bg-black border border-neutral-800 rounded p-2 max-h-48 overflow-auto whitespace-pre-wrap">{JSON.stringify(seedResult, null, 2)}</pre>
+            )}
+          </div>
+          {/* Live factors probe */}
+          <div className="bg-[#111114] border border-neutral-800 rounded-lg p-4">
+            <div className="text-xs text-neutral-500 uppercase tracking-wide mb-1">5 · Live external-factor probe</div>
+            <p className="text-[11px] text-neutral-500 mb-3">Calls every external-factor fetcher (GDELT, OpenMeteo, F&G, Binance funding/OI, macro feeds, Reddit, Google Trends) and shows which populated vs missing. Proves the engine reads live data.</p>
+            <button onClick={runFactors} disabled={factoring} className="text-xs px-3 py-1.5 rounded bg-fuchsia-600 hover:bg-fuchsia-500 disabled:opacity-50 transition w-full">
+              {factoring ? 'Probing…' : 'Probe live factors'}
+            </button>
+            {factorResult && (
+              <pre className="mt-3 text-[10px] bg-black border border-neutral-800 rounded p-2 max-h-48 overflow-auto whitespace-pre-wrap">{JSON.stringify(factorResult, null, 2)}</pre>
             )}
           </div>
         </div>
