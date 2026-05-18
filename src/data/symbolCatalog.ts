@@ -745,6 +745,7 @@ export const SYMBOL_CATALOG: SymbolMeta[] = [
 import { generateAllAutoSymbols } from './symbolsAuto';
 import { SYMBOLS_BULK } from './symbolsBulk';
 import { SYMBOLS_MEGA } from './symbolsMega';
+import { SYMBOLS_ULTRA } from './symbolsUltra';
 (function mergeAutoSymbols() {
   const existing = new Set(SYMBOL_CATALOG.map((s) => s.symbol.toUpperCase()));
   const addList = (list: SymbolMeta[]) => {
@@ -756,6 +757,7 @@ import { SYMBOLS_MEGA } from './symbolsMega';
   addList(generateAllAutoSymbols());
   addList(SYMBOLS_BULK);
   addList(SYMBOLS_MEGA);
+  addList(SYMBOLS_ULTRA);
 })();
 
 const _catalogMap = new Map<string, SymbolMeta>(

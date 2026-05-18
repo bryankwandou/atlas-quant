@@ -4,10 +4,9 @@ import ChartContainer from '@/components/chart/ChartContainer';
 
 export default function DashboardPage() {
   const { symbol, timeframe } = useChartStore();
-
   return (
-    <div className="dash-home" style={{ height: '100%', overflow: 'hidden' }}>
-      <div className="dash-chart-wrap">
+    <div className="chart-area">
+      <div className="chart-panels">
         <ChartContainer symbol={symbol} timeframe={timeframe} />
       </div>
     </div>

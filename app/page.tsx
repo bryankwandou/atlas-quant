@@ -5,14 +5,12 @@ import DashboardHome from './(dashboard)/page';
 
 export default function RootPage() {
   return (
-    <div className="layout-root">
+    <div className="atlas-app device-laptop">
       <TopBar />
-      <div className="layout-body">
-        <Sidebar />
-        <main className="main-content">
-          <DashboardHome />
-        </main>
-      </div>
+      <Sidebar />
+      <main className="main-area">
+        <DashboardHome />
+      </main>
       <StatusBar />
     </div>
   );
