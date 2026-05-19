@@ -67,13 +67,15 @@ export async function GET(req: NextRequest) {
           });
         } else {
           // Cache has wrong-interval data (e.g., monthly stored as 1d) — purge it
-          supabaseAdmin
-            .from('market_ohlcv')
-            .delete()
-            .eq('symbol', symbol.toUpperCase())
-            .eq('timeframe', timeframe)
-            .then(() => {})
-            .catch(() => {});
+          void (async () => {
+            try {
+              await supabaseAdmin
+                .from('market_ohlcv')
+                .delete()
+                .eq('symbol', symbol.toUpperCase())
+                .eq('timeframe', timeframe);
+            } catch {}
+          })();
         }
       }
     } catch {
