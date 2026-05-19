@@ -742,20 +742,8 @@ html,body,#root{height:100%;overflow:hidden;}
 body{
   font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
   font-size:12px;line-height:1.4;
-  background:var(--tv-bg,#131722);
-  color:var(--tv-text,#d1d4dc);
-  --tv-bg:#131722;--tv-bg2:#1e222d;--tv-bg3:#2a2e39;
-  --tv-surface:#1e222d;--tv-border:#2a2e39;--tv-border2:#363c4e;
-  --tv-text:#d1d4dc;--tv-text2:#787b86;--tv-text3:#494c55;
-  --tv-blue:#2962ff;--tv-blue-light:rgba(41,98,255,0.15);
-  --tv-up:#089981;--tv-down:#f23645;
-  --tv-up-bg:rgba(8,153,129,0.12);--tv-down-bg:rgba(242,54,69,0.12);
-  --tv-neutral:#ff9800;--tv-neutral-bg:rgba(255,152,0,0.12);
-  --tv-grid:rgba(255,255,255,0.04);
-  --tv-shadow:0 4px 24px rgba(0,0,0,0.5);--tv-shadow2:0 2px 8px rgba(0,0,0,0.3);
-  --tv-ema9:#f7a600;--tv-ema21:#2962ff;--tv-ema50:#e91e63;--tv-ema200:#9c27b0;
-  --tv-vwap:#00bcd4;--tv-bb:#42a5f5;
-  --sidebar-w:56px;--topbar-h:48px;--right-w:300px;--status-h:26px;
+  background:var(--tv-bg);
+  color:var(--tv-text);
 }
 .mono{font-family:'Roboto Mono',monospace;}
 .fw{font-weight:500;}
