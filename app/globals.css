@@ -612,6 +612,8 @@ body {
 .status-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--tv-text2); }
 .status-dot  { width: 5px; height: 5px; border-radius: 50%; background: var(--tv-up); }
 .status-dot.disconnected { background: var(--tv-down); }
+.status-spacer { flex: 1; }
+.status-muted  { opacity: 0.4; }
 
 /* ── Signal / BuySell Styles ─────────────────────────────────── */
 .signal-buy     { color: var(--tv-up);   background: var(--tv-up-bg);   border: 1px solid rgba(8,153,129,0.3); }

@@ -8,42 +8,46 @@ export default function StatusBar() {
   const [now, setNow] = useState('');
 
   useEffect(() => {
-    const pingServer = async () => {
-      const start = Date.now();
+    const ping = async () => {
+      const t = Date.now();
       try {
         await fetch('/api/market/price?symbol=' + symbol);
-        setLatency(Date.now() - start);
+        setLatency(Date.now() - t);
       } catch {
         setLatency(null);
       }
     };
-    pingServer();
-    const iv = setInterval(pingServer, 30000);
+    ping();
+    const iv = setInterval(ping, 30_000);
     return () => clearInterval(iv);
   }, [symbol]);
 
   useEffect(() => {
-    const tick = () => setNow(new Date().toLocaleTimeString());
+    const tick = () => setNow(new Date().toLocaleTimeString('en-GB'));
     tick();
     const iv = setInterval(tick, 1000);
     return () => clearInterval(iv);
   }, []);
 
+  const isOnline = latency !== null && latency < 2000;
+
   return (
-    <div style={{
-      height: 'var(--statusbar-h)', background: 'var(--bg-secondary)',
-      borderTop: '1px solid var(--border)',
-      display: 'flex', alignItems: 'center', padding: '0 12px',
-      gap: 16, fontSize: 11, color: 'var(--text-muted)',
-      flexShrink: 0,
-    }}>
-      <span style={{ color: latency !== null && latency < 500 ? 'var(--buy)' : 'var(--sell)' }}>
-        ● {latency !== null ? `${latency}ms` : 'offline'}
-      </span>
-      <span>{symbol} · {timeframe}</span>
-      <span style={{ flex: 1 }} />
-      <span>Atlas-Quant v2.0</span>
-      <span style={{ fontFamily: 'monospace' }}>{now}</span>
+    <div className="status-bar">
+      <div className="status-item">
+        <span className={`status-dot${isOnline ? '' : ' disconnected'}`} />
+        <span className="mono">{latency != null ? `${latency}ms` : 'offline'}</span>
+      </div>
+      <div className="status-item">
+        <span>{symbol}</span>
+        <span className="status-muted">·</span>
+        <span className="mono">{timeframe}</span>
+      </div>
+      <div className="status-spacer" />
+      <div className="status-item">
+        <span>Atlas-Quant</span>
+        <span className="status-muted">v2.12</span>
+      </div>
+      <div className="status-item mono">{now}</div>
     </div>
   );
 }
