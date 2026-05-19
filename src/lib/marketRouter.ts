@@ -129,7 +129,8 @@ function yahooRange(limit: number, interval: string): string {
   if (limit <= 30)   return '1mo';
   if (limit <= 252)  return '1y';
   if (limit <= 504)  return '2y';
-  return '5y';
+  if (limit <= 1260) return '5y';
+  return 'max';
 }
 
 // ─── Binance ──────────────────────────────────────────────────────────────────

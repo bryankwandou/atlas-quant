@@ -340,11 +340,11 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         '1s':  180, '15s': 120, '30s': 90,
         '1m':  120, '3m':  100, '5m':  100,
         '10m': 96,  '15m': 96,  '30m': 90, '45m': 80,
-        '1h':  90,  '2h':  72,  '3h':  60, '4h':  90,
-        '6h':  60,  '8h':  60,  '12h': 60,
-        '1d':  180, '2d':  90,  '3d':  60,
-        '1w':  104, '2w':  52,
-        '1M':  36,  '3M':  16,  '6M':  10, '12M': 6,
+        '1h':  168, '2h':  120, '3h':  90, '4h':  180,
+        '6h':  90,  '8h':  60,  '12h': 60,
+        '1d':  365, '2d':  180, '3d':  120,
+        '1w':  156, '2w':  78,
+        '1M':  60,  '3M':  24,  '6M':  12, '12M': 8,
       };
       const defaultCandles = ZOOM_CANDLES[timeframe] ?? 120;
       if (formatted.length > defaultCandles) {

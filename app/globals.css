@@ -1092,6 +1092,81 @@ select{cursor:pointer;}
 .score-bar-fill{height:4px;border-radius:2px;min-width:2px;max-width:60px;flex-shrink:0;}
 .score-bar-val{font-family:'Roboto Mono',monospace;font-size:9px;}
 
+/* ══════════════════════════════════════════════════════════════
+   RIGHTPANEL SIGNAL TAB — T1MO "LAST PERFORMANCE" layout
+   (CSS classes for all JSX that previously used inline styles)
+══════════════════════════════════════════════════════════════ */
+
+/* Symbol header (above tabs) */
+.rp-sym-left{display:flex;flex-direction:column;gap:1px;}
+.rp-sym-right{text-align:right;}
+
+/* Version badge + countdown row */
+.rp-version-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.rp-version-badge{font-size:9px;color:var(--tv-blue);font-weight:700;letter-spacing:.5px;}
+.rp-countdown{font-size:9px;font-family:'Roboto Mono',monospace;color:var(--tv-text3);display:flex;align-items:center;gap:3px;}
+
+/* LAST PERFORMANCE table */
+.rp-perf-grid{display:flex;flex-direction:column;gap:1px;margin-bottom:8px;}
+.rp-perf-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--tv-border);}
+.rp-perf-lbl{font-size:9px;color:var(--tv-text2);text-transform:uppercase;letter-spacing:.4px;}
+.rp-perf-val{font-size:11px;font-weight:600;}
+
+/* Signal badge — full-width centered flex variant */
+.rp-signal-badge-full{display:flex!important;justify-content:center;align-items:center;width:100%;margin:8px 0;gap:6px;border-radius:6px;padding:10px;border:1px solid;}
+.rp-signal-badge-full.buy{background:var(--tv-up-bg);color:var(--tv-up);border-color:rgba(8,153,129,.35);}
+.rp-signal-badge-full.sell{background:var(--tv-down-bg);color:var(--tv-down);border-color:rgba(242,54,69,.35);}
+.rp-signal-badge-full.neutral{background:var(--tv-neutral-bg);color:var(--tv-neutral);border-color:rgba(255,152,0,.35);}
+.rp-sig-type{font-size:13px;font-weight:800;letter-spacing:2px;}
+.rp-sig-conf{font-size:10px;opacity:.8;}
+
+/* SUPPORT | RESISTANCE header + grid */
+.rp-sr-hdr{display:flex;justify-content:space-between;font-size:9px;text-transform:uppercase;letter-spacing:.5px;padding:3px 0;margin-bottom:3px;}
+.rp-sr-hdr-sup{color:var(--tv-down);font-weight:700;}
+.rp-sr-hdr-res{color:var(--tv-up);font-weight:700;}
+.rp-sr-grid{display:flex;flex-direction:column;gap:1px;margin-bottom:8px;}
+.rp-sr-row{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--tv-border);}
+.rp-sr-sup{color:var(--tv-down);font-size:11px;}
+.rp-sr-res{color:var(--tv-up);font-size:11px;text-align:right;}
+
+/* INDICATORS table */
+.rp-ind-row{display:flex;align-items:center;gap:4px;padding:3px 0;border-bottom:1px solid var(--tv-border);}
+.rp-ind-lbl{font-size:10px;color:var(--tv-text2);flex:1;}
+.rp-ind-pct{font-size:9px;min-width:42px;text-align:right;}
+.rp-ind-val{font-size:11px;font-weight:600;min-width:60px;text-align:right;}
+
+/* Regime row */
+.rp-regime-row{display:flex;align-items:center;gap:6px;border:1px solid var(--tv-border);border-radius:4px;padding:5px 8px;margin:6px 0;}
+.rp-regime-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.rp-regime-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;flex:1;}
+.rp-regime-adx{font-size:10px;color:var(--tv-text2);font-family:'Roboto Mono',monospace;}
+
+/* TP/SL levels grid */
+.rp-levels-grid{display:flex;flex-direction:column;gap:0;margin-top:6px;}
+.rp-level-row{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--tv-border);}
+.rp-level-lbl{font-size:9px;color:var(--tv-text2);text-transform:uppercase;}
+.rp-level-val{font-size:11px;}
+
+/* Loading / footer */
+.rp-signal-loading{font-size:11px;color:var(--tv-text2);text-align:center;padding:20px 0;}
+.rp-signal-footer{font-size:9px;color:var(--tv-text3);text-align:center;margin-top:4px;}
+
+/* EXECUTE TRADE NODE button */
+.execute-trade-btn{display:flex;align-items:center;justify-content:center;width:100%;padding:9px;background:var(--tv-blue);color:#fff;border:none;border-radius:5px;font-size:12px;font-weight:700;letter-spacing:.5px;cursor:pointer;transition:opacity .15s;margin-top:10px;}
+.execute-trade-btn:hover{opacity:.9;}
+.execute-trade-btn.buy{background:var(--tv-up);}
+.execute-trade-btn.sell{background:var(--tv-down);}
+
+/* Watchlist item inside right panel */
+.rp-watchlist-item{display:flex;justify-content:space-between;align-items:center;padding:6px 4px;border-bottom:1px solid rgba(128,128,128,.08);cursor:pointer;transition:background var(--transition);border-radius:3px;}
+.rp-watchlist-item:hover{background:var(--tv-bg3);}
+.rp-watchlist-item.active{background:var(--tv-blue-light);}
+.wl-right{text-align:right;}
+.wl-name{font-size:9px;color:var(--tv-text2);}
+
+/* Section header with top margin variant */
+.section-hdr-mt{margin-top:6px;}
+
 /* Settings */
 .settings-panel>*:not(.panel-header){padding:14px 22px;}
 .settings-sections{display:flex;flex-direction:column;gap:20px;overflow-y:auto;flex:1;}
