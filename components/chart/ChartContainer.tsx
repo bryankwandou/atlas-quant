@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, useCallback, useLayoutEffect } from 'react';
-import { createChart, ColorType, CandlestickSeries, LineSeries, HistogramSeries } from 'lightweight-charts';
+import { createChart, ColorType, CandlestickSeries, LineSeries, HistogramSeries, BarSeries, AreaSeries } from 'lightweight-charts';
 import { useTheme } from '@/hooks/useTheme';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useChartStore } from '@/store/chartStore';
@@ -145,10 +145,22 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     const main = createChart(mainRef.current, baseOpts(mainRef.current) as any);
     chartsRef.current.main = main;
 
-    const candleSeries = (main as any).addSeries(CandlestickSeries, {
-      upColor: tk.up, downColor: tk.down, borderUpColor: tk.up, borderDownColor: tk.down, wickUpColor: tk.up, wickDownColor: tk.down,
-    });
-    candleSeries.setData(formatted.map((c: any) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })));
+    let candleSeries: any;
+    if (chartType === 'line') {
+      candleSeries = (main as any).addSeries(LineSeries, { color: tk.up, lineWidth: 2, priceLineVisible: true, lastValueVisible: true });
+      candleSeries.setData(formatted.map((c: any) => ({ time: c.time, value: c.close })));
+    } else if (chartType === 'area') {
+      candleSeries = (main as any).addSeries(AreaSeries, { topColor: `${tk.up}30`, bottomColor: `${tk.up}00`, lineColor: tk.up, lineWidth: 2 });
+      candleSeries.setData(formatted.map((c: any) => ({ time: c.time, value: c.close })));
+    } else if (chartType === 'bars') {
+      candleSeries = (main as any).addSeries(BarSeries, { upColor: tk.up, downColor: tk.down });
+      candleSeries.setData(formatted.map((c: any) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })));
+    } else {
+      candleSeries = (main as any).addSeries(CandlestickSeries, {
+        upColor: tk.up, downColor: tk.down, borderUpColor: tk.up, borderDownColor: tk.down, wickUpColor: tk.up, wickDownColor: tk.down,
+      });
+      candleSeries.setData(formatted.map((c: any) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })));
+    }
     seriesRef.current.candle = candleSeries;
 
     const addedSeries: Record<string, any> = {};
@@ -444,7 +456,11 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       const cd = param.seriesData?.get(candleSeries);
       if (cd) {
         const idx = formatted.findIndex((c: any) => c.time === param.time);
-        setLegend({ ...cd, ema9: addedSeries['EMA_9']?.vals[idx], ema21: addedSeries['EMA_21']?.vals[idx], vwap: addedSeries['VWAP']?.vals[idx] });
+        // For line/area, cd has .value not .open/.high/.low/.close
+        const candle = (chartType === 'line' || chartType === 'area')
+          ? { open: cd.value, high: cd.value, low: cd.value, close: cd.value }
+          : cd;
+        setLegend({ ...candle, ema9: addedSeries['EMA_9']?.vals[idx], ema21: addedSeries['EMA_21']?.vals[idx], vwap: addedSeries['VWAP']?.vals[idx] });
       }
     });
 
@@ -461,7 +477,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     });
     if (wrapRef.current) obs.observe(wrapRef.current);
     chartsRef.current._obs = obs;
-  }, [candles, theme, activeIndicators, showSignals, subPanel, baseOpts, panelPct, symbol]);
+  }, [candles, theme, activeIndicators, showSignals, subPanel, baseOpts, panelPct, symbol, chartType]);
 
   useEffect(() => {
     const timer = setTimeout(buildCharts, 60);
