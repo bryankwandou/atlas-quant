@@ -14,18 +14,19 @@ const CandlestickChartIcon = ({ size = 14 }: { size?: number }) => (
 );
 
 const SUB_PANELS = [
-  { id: 'rsi',      label: 'RSI'      },
-  { id: 'macd',     label: 'MACD'     },
-  { id: 'williams', label: '%R'       },
-  { id: 'stochrsi', label: 'StochRSI' },
-  { id: 'mfi',      label: 'MFI'      },
-  { id: 'cci',      label: 'CCI'      },
-  { id: 'adx',      label: 'ADX'      },
-  { id: 'obv',      label: 'OBV'      },
-  { id: 'aroon',    label: 'Aroon'    },
-  { id: 'cmf',      label: 'CMF'      },
-  { id: 'atr',      label: 'ATR'      },
-  { id: 'elder',    label: 'Elder'    },
+  { id: 'atlas',    label: 'ATLAS Matrix' },
+  { id: 'rsi',      label: 'RSI(7)'       },
+  { id: 'macd',     label: 'MACD'         },
+  { id: 'williams', label: '%R(14)'       },
+  { id: 'stochrsi', label: 'StochRSI'    },
+  { id: 'mfi',      label: 'MFI(14)'     },
+  { id: 'cci',      label: 'CCI'          },
+  { id: 'adx',      label: 'ADX'          },
+  { id: 'obv',      label: 'OBV'          },
+  { id: 'aroon',    label: 'Aroon'        },
+  { id: 'cmf',      label: 'CMF'          },
+  { id: 'atr',      label: 'ATR'          },
+  { id: 'elder',    label: 'Elder'        },
 ];
 
 const CHART_TYPES = [
@@ -384,7 +385,30 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         s.setData(times.map((t: number) => ({ time: t, value: val })));
       };
 
-      if (subPanel === 'rsi') {
+      if (subPanel === 'atlas') {
+        const closes2 = formatted.map((c: any) => c.close);
+        const ema9v  = ind.ema(9);
+        const ema21v = ind.ema(21);
+        const rsi14v = ind.rsi(14);
+        const matrix = closes2.map((cl: number, i: number) => {
+          const score =
+            (ema9v[i] > ema21v[i] ? 1 : -1) * 25 +
+            (rsi14v[i] > 50 ? (rsi14v[i] - 50) : (rsi14v[i] - 50)) * 0.5 + 50;
+          const v = Math.max(0, Math.min(100, score));
+          return { time: formatted[i].time, value: v - 50, color: v > 50 ? 'rgba(8,153,129,0.6)' : 'rgba(242,54,69,0.6)' };
+        });
+        const ms = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
+        ms.setData(matrix.filter((d: any) => !isNaN(d.value)));
+        const baseline = (subChart as any).addSeries(LineSeries, { color: 'rgba(255,255,255,0.15)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+        baseline.setData(formatted.map((c: any) => ({ time: c.time, value: 0 })));
+        const hmaV = ind.hma(14);
+        const hmaScaled = hmaV.map((v: number, i: number) => {
+          const ref = formatted[i]?.close || 1;
+          return ((v - ref) / ref) * 100;
+        });
+        const hmaS = (subChart as any).addSeries(LineSeries, { color: '#ff6b35', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'HMA' });
+        hmaS.setData(formatted.map((c: any, i: number) => ({ time: c.time, value: hmaScaled[i] })).filter((d: any) => !isNaN(d.value) && isFinite(d.value)));
+      } else if (subPanel === 'rsi') {
         addSubLine(ind.rsi(7), '#7e57c2', 'RSI(7)');
         [[30, 'rgba(8,153,129,0.3)'], [50, 'rgba(255,255,255,0.08)'], [70, 'rgba(242,54,69,0.3)']].forEach(([v, c]) => addLevel(v as number, c as string));
       } else if (subPanel === 'macd') {
@@ -512,13 +536,13 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
                 const v = [legend.open, legend.high, legend.low, legend.close][i];
                 return <span key={lbl} className="ohlcv-item"><span className="ohlcv-label">{lbl}</span><span className={`ohlcv-value mono ${isUp?'up':'down'}`}>{fmt(v,4)}</span></span>;
               })}
-              {legend.ema9  != null && <span className="ohlcv-item"><span className="ohlcv-label">E9</span><span className="ohlcv-value mono" style={{color:'var(--tv-ema9)'}}>{fmt(legend.ema9)}</span></span>}
-              {legend.ema21 != null && <span className="ohlcv-item"><span className="ohlcv-label">E21</span><span className="ohlcv-value mono" style={{color:'var(--tv-ema21)'}}>{fmt(legend.ema21)}</span></span>}
-              {legend.vwap  != null && <span className="ohlcv-item"><span className="ohlcv-label">VWAP</span><span className="ohlcv-value mono" style={{color:'var(--tv-vwap)'}}>{fmt(legend.vwap)}</span></span>}
+              {legend.ema9  != null && <span className="ohlcv-item"><span className="ohlcv-label">E9</span><span className="ohlcv-value mono ohlcv-ema9">{fmt(legend.ema9)}</span></span>}
+              {legend.ema21 != null && <span className="ohlcv-item"><span className="ohlcv-label">E21</span><span className="ohlcv-value mono ohlcv-ema21">{fmt(legend.ema21)}</span></span>}
+              {legend.vwap  != null && <span className="ohlcv-item"><span className="ohlcv-label">VWAP</span><span className="ohlcv-value mono ohlcv-vwap">{fmt(legend.vwap)}</span></span>}
             </>
-          ) : <span className="ohlcv-sym" style={{color:'var(--tv-text2)'}}>{symbol} · {timeframe}</span>}
+          ) : <span className="ohlcv-sym ohlcv-dim">{symbol} · {timeframe}</span>}
         </div>
-        <div style={{flex:1}} />
+        <div className="chart-toolbar-spacer" />
         <div className="chart-right-tools">
           <button className={`chart-toolbar-btn ${showSignals?'active':''}`} onClick={() => useChartStore.getState().toggleSignals()} title="Signals"><Zap size={12}/><span>Signals</span></button>
           <button className={`chart-toolbar-btn ${activeIndicators.includes('SMC_OB')?'active':''}`} onClick={() => useChartStore.getState().toggleIndicator('SMC_OB')} title="SMC"><Layers size={12}/><span>SMC</span></button>
@@ -528,17 +552,17 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
 
       {/* Panels */}
       <div ref={wrapRef} className="chart-panels">
-        {isLoading && <div className="chart-loading" style={{zIndex:20}}><div className="spinner"/><span>Loading {symbol}...</span></div>}
-        <div ref={mainRef} className="chart-panel" style={{position:'absolute',left:0,right:0,top:0,overflow:'hidden'}}/>
+        {isLoading && <div className="chart-loading"><div className="spinner"/><span>Loading {symbol}...</span></div>}
+        <div ref={mainRef} className="chart-panel chart-panel-main"/>
         <div className={`chart-splitter ${dragging===0?'dragging':''}`} style={{top:`${panelPct[0]}%`}} onMouseDown={e=>startDrag(0,e)}><div className="splitter-line"/></div>
-        <div ref={volRef} className="chart-panel" style={{position:'absolute',left:0,right:0,overflow:'hidden'}}><div className="subchart-label2">VOLUME</div></div>
+        <div ref={volRef} className="chart-panel chart-panel-vol"><div className="subchart-label2">VOLUME</div></div>
         <div className={`chart-splitter ${dragging===1?'dragging':''}`} style={{top:`${panelPct[0]+panelPct[1]}%`}} onMouseDown={e=>startDrag(1,e)}><div className="splitter-line"/></div>
-        <div ref={subRef} className="chart-panel" style={{position:'absolute',left:0,right:0,bottom:0,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+        <div ref={subRef} className="chart-panel chart-panel-sub">
           <div className="subchart-tabs-row">
-            {SUB_PANELS.map(p=><button key={p.id} className={`subchart-tab ${subPanel===p.id?'active':''}`} onClick={()=>setSubPanel(p.id)}>{p.label}</button>)}
-            <div style={{flex:1}}/>
+            {SUB_PANELS.map(p=><button type="button" key={p.id} className={`subchart-tab ${subPanel===p.id?'active':''}`} onClick={()=>setSubPanel(p.id)}>{p.label}</button>)}
+            <div className="subchart-tabs-spacer"/>
           </div>
-          <div className="sub-chart-inner" style={{flex:1,minHeight:0,position:'relative'}}/>
+          <div className="sub-chart-inner"/>
         </div>
       </div>
 
@@ -584,9 +608,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             {r}
           </button>
         ))}
-        <div style={{flex:1}}/>
+        <div className="range-bar-spacer"/>
         <span className="range-bar-label">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight:3,opacity:0.5}}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="range-bar-icon">
             <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
           </svg>
           TradingView

@@ -382,11 +382,26 @@ body {
   font-size: 10px; color: var(--tv-text3); padding-right: 4px;
 }
 
+/* ── Chart panel position helpers ────────────────────────────── */
+.chart-panel-main{position:absolute;left:0;right:0;top:0;overflow:hidden;}
+.chart-panel-vol{position:absolute;left:0;right:0;overflow:hidden;}
+.chart-panel-sub{position:absolute;left:0;right:0;bottom:0;overflow:hidden;display:flex;flex-direction:column;}
+.sub-chart-inner{flex:1;min-height:0;position:relative;}
+.chart-toolbar-spacer{flex:1;}
+.subchart-tabs-spacer{flex:1;}
+.range-bar-spacer{flex:1;}
+.range-bar-icon{margin-right:3px;opacity:.5;}
+/* OHLCV legend indicator colors */
+.ohlcv-ema9{color:var(--tv-ema9);}
+.ohlcv-ema21{color:var(--tv-ema21);}
+.ohlcv-vwap{color:var(--tv-vwap);}
+.ohlcv-dim{color:var(--tv-text2);}
+
 /* ── Chart Loading ───────────────────────────────────────────── */
 .chart-loading {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 8px;
-  background: var(--tv-bg); z-index: 10; color: var(--tv-text2); font-size: 11px;
+  background: var(--tv-bg); z-index: 20; color: var(--tv-text2); font-size: 11px;
 }
 .spinner {
   width: 18px; height: 18px; border: 2px solid var(--tv-border);
@@ -848,6 +863,7 @@ select{cursor:pointer;}
 .sb-tool-btn.active{background:var(--tv-blue-light);color:var(--tv-blue);}
 .sb-tool-sep{width:28px;height:1px;background:var(--tv-border);margin:2px auto;opacity:.5;}
 .sb-bottom{width:100%;padding:3px 6px;display:flex;flex-direction:column;align-items:center;gap:1px;}
+.sb-tool-group{display:contents;}
 .sb-badge{position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:var(--tv-down);border:1.5px solid var(--tv-bg2);}
 
 /* ── CHART AREA ───────────────────────────────────────────── */
@@ -991,6 +1007,15 @@ select{cursor:pointer;}
 .sb-sep{width:1px;height:12px;background:var(--tv-border);flex-shrink:0;}
 .sb-ind-tag{background:var(--tv-bg3);padding:1px 5px;border-radius:2px;color:var(--tv-text3);font-size:9px;white-space:nowrap;}
 .sb-regime-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.sb-regime-dot.up{background:var(--tv-up);}
+.sb-regime-dot.down{background:var(--tv-down);}
+.sb-regime-dot.neutral{background:var(--tv-neutral);}
+.sb-regime-label{font-size:10px;white-space:nowrap;}
+.sb-regime-label.up{color:var(--tv-up);}
+.sb-regime-label.down{color:var(--tv-down);}
+.sb-regime-label.neutral{color:var(--tv-neutral);}
+.sb-dot-red{width:6px;height:6px;border-radius:50%;background:var(--tv-down);flex-shrink:0;}
+.sb-warning{color:var(--tv-text3);white-space:nowrap;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.5;}}
 
 /* ── INDICATOR MODAL ──────────────────────────────────────── */

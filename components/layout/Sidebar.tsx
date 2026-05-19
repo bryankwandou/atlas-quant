@@ -94,16 +94,15 @@ export default function Sidebar() {
   return (
     <nav className="left-sidebar">
       {/* ── Navigation ────────────────────────────────────── */}
-      <div className="sidebar-nav">
+      <div className="sb-nav">
         {NAV_ITEMS.map(({ href, icon: Icon, key }) => {
           const isActive = pathname === href || (href !== '/' && pathname.startsWith(href));
           return (
             <Link
               key={href}
               href={href}
-              className={`sidebar-nav-btn ${isActive ? 'active' : ''}`}
+              className={`sb-nav-btn ${isActive ? 'active' : ''}`}
               title={navLabels[key]}
-              style={{ textDecoration: 'none' }}
             >
               <Icon size={16} />
             </Link>
@@ -111,18 +110,18 @@ export default function Sidebar() {
         })}
       </div>
 
-      <div className="sidebar-divider" />
+      <div className="sb-div" />
 
       {/* ── Drawing Tools ─────────────────────────────────── */}
-      <div className="sidebar-tools">
+      <div className="sb-tools">
         {DRAW_GROUPS.map((group, gi) => (
-          <div key={`group-${gi}`} style={{ display: 'contents' }}>
-            {gi > 0 && <div className="sidebar-tool-sep" />}
+          <div key={`group-${gi}`} className="sb-tool-group">
+            {gi > 0 && <div className="sb-tool-sep" />}
             {group.tools.map(({ id, icon: Icon, tip }) => (
               <button
                 key={id}
                 type="button"
-                className={`sidebar-tool-btn ${drawingTool === id ? 'active' : ''}`}
+                className={`sb-tool-btn ${drawingTool === id ? 'active' : ''}`}
                 title={tip}
                 onDoubleClick={() => { if (id === 'fib' || id === 'rr') setFibOpen(true); }}
                 onClick={() => {
@@ -141,19 +140,18 @@ export default function Sidebar() {
       <FibRRModal open={fibOpen} onClose={() => setFibOpen(false)} />
 
       {/* ── Bottom Controls ───────────────────────────────── */}
-      <div className="sidebar-divider" />
-      <div className="sidebar-bottom">
+      <div className="sb-div" />
+      <div className="sb-bottom">
         <Link
           href="/settings"
-          className="sidebar-nav-btn"
+          className="sb-nav-btn"
           title={lang === 'id' ? 'Pengaturan' : 'Settings'}
-          style={{ textDecoration: 'none' }}
         >
           <Settings size={15} />
         </Link>
         <button
           type="button"
-          className="sidebar-nav-btn"
+          className="sb-nav-btn"
           title="AI Assistant"
           onClick={() => {
             document.dispatchEvent(new CustomEvent('atlas:set-right-tab', { detail: 'ai' }));
