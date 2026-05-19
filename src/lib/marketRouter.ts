@@ -94,24 +94,36 @@ const YAHOO_INTERVAL_MAP: Record<string, string> = {
   '12M': '3mo',
 };
 
-/** Pick a Yahoo range string based on how many candles are needed */
+/** Pick a Yahoo range string based on how many candles are needed.
+ *  Yahoo Finance hard limits: 1m → 7d max, 2m/5m/15m/30m/60m → 60d max, 90m → 60d max.
+ */
 function yahooRange(limit: number, interval: string): string {
   if (['1mo', '3mo'].includes(interval)) {
     if (limit <= 12)  return '1y';
     if (limit <= 36)  return '5y';
     return 'max';
   }
-  if (['1wk'].includes(interval)) {
+  if (interval === '1wk') {
     if (limit <= 52)  return '1y';
     if (limit <= 260) return '5y';
     return 'max';
   }
-  const intraday = ['1m', '5m', '15m', '30m', '60m'].includes(interval);
-  if (intraday) {
-    if (limit <= 100)  return '1d';
+  // 1-minute: Yahoo max is 7 calendar days
+  if (interval === '1m') {
+    return limit <= 390 ? '1d' : '5d';
+  }
+  // 2m/5m/15m/30m: Yahoo max is 60 calendar days
+  if (['2m', '5m', '15m', '30m'].includes(interval)) {
+    if (limit <= 78)   return '1d';
     if (limit <= 390)  return '5d';
-    if (limit <= 1500) return '1mo';
-    return '3mo';
+    return '60d';
+  }
+  // 60m/90m: Yahoo max is 730 calendar days
+  if (['60m', '90m'].includes(interval)) {
+    if (limit <= 24)   return '1d';
+    if (limit <= 120)  return '5d';
+    if (limit <= 720)  return '60d';
+    return '730d';
   }
   // Daily
   if (limit <= 30)   return '1mo';

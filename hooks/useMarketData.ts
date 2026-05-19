@@ -12,10 +12,26 @@ const fetcher = (url: string) => fetch(url).then(r => {
 // OHLCV / PRICE HOOKS
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function useMarketData(symbol: string, timeframe: string, limit = 500) {
+/** Returns a limit appropriate for the timeframe — enough history without waste. */
+function getLimit(tf: string): number {
+  const map: Record<string, number> = {
+    '1s': 300, '15s': 300, '30s': 300,
+    '1m': 500, '3m': 500, '5m': 500,
+    '10m': 500, '15m': 500, '30m': 500, '45m': 500,
+    '1h': 500, '2h': 500, '3h': 500, '4h': 500,
+    '6h': 500, '8h': 500, '12h': 500,
+    '1d': 730, '2d': 500, '3d': 365,
+    '1w': 260, '2w': 130,
+    '1M': 120, '3M': 60, '6M': 40, '12M': 30,
+  };
+  return map[tf] ?? 500;
+}
+
+export function useMarketData(symbol: string, timeframe: string, limit?: number) {
+  const resolvedLimit = limit ?? getLimit(timeframe);
   const { data, error, isLoading, mutate } = useSWR(
     symbol
-      ? `/api/market/ohlcv?symbol=${symbol}&timeframe=${timeframe}&limit=${limit}`
+      ? `/api/market/ohlcv?symbol=${symbol}&timeframe=${timeframe}&limit=${resolvedLimit}`
       : null,
     fetcher,
     {

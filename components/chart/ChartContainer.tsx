@@ -337,14 +337,14 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     // Set a default visible range so the chart doesn't show the entire history
     {
       const ZOOM_CANDLES: Record<string, number> = {
-        '1s':  300, '15s': 240, '30s': 180,
-        '1m':  200, '3m':  150, '5m':  130,
-        '10m': 120, '15m': 120, '30m': 100, '45m': 96,
-        '1h':  100, '2h':   90, '3h':   80, '4h': 90,
-        '6h':   60, '8h':   60, '12h':  60,
-        '1d':   90, '2d':   60, '3d':   60,
-        '1w':   52, '2w':   26,
-        '1M':   24, '3M':   12, '6M':    8, '12M': 5,
+        '1s':  180, '15s': 120, '30s': 90,
+        '1m':  120, '3m':  100, '5m':  100,
+        '10m': 96,  '15m': 96,  '30m': 90, '45m': 80,
+        '1h':  90,  '2h':  72,  '3h':  60, '4h':  90,
+        '6h':  60,  '8h':  60,  '12h': 60,
+        '1d':  180, '2d':  90,  '3d':  60,
+        '1w':  104, '2w':  52,
+        '1M':  36,  '3M':  16,  '6M':  10, '12M': 6,
       };
       const defaultCandles = ZOOM_CANDLES[timeframe] ?? 120;
       if (formatted.length > defaultCandles) {
