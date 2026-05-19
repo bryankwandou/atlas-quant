@@ -133,12 +133,24 @@ function WatchItem({
 // ─────────────────────────────────────────────────────────────────────────────
 // SCORE BAR
 // ─────────────────────────────────────────────────────────────────────────────
-function ScoreBar({ label, value, color }: { label: string; value: number; color: string }) {
+const SCORE_COLORS: Record<string, string> = {
+  trend:      '#2962ff',
+  momentum:   '#7e57c2',
+  volatility: '#ff9800',
+  volume:     '#00bcd4',
+  buy:        '#089981',
+  sell:       '#f23645',
+  neutral:    '#ff9800',
+};
+
+function ScoreBar({ label, value, variant = 'trend' }: { label: string; value: number; variant?: string }) {
+  const color = SCORE_COLORS[variant] ?? '#2962ff';
+  const pct = Math.min(100, Math.max(0, value));
   return (
     <div className="ai-score-row score-bar">
       <span className="ai-score-lbl">{label}</span>
-      <div className="ai-score-bar">
-        <div style={{ width: `${Math.min(100, Math.max(0, value))}%`, height: '100%', background: color, borderRadius: 3, transition: 'width 0.4s ease' }} />
+      <div className="ai-score-bar-wrap">
+        <div className="ai-score-bar-fill" style={{ width: `${pct}%`, background: color }} />
       </div>
       <span className="ai-score-val mono">{Math.round(value)}</span>
     </div>
@@ -433,35 +445,35 @@ export default function RightPanel() {
                 <>
                   <div className="section-hdr section-hdr-mt">INDICATORS</div>
                   {[
-                    { lbl: 'RSI (14)',  val: fmt(indValues.rsi, 1),  c: indValues.rsi > 70 ? 'var(--tv-down)' : indValues.rsi < 30 ? 'var(--tv-up)' : 'var(--tv-text2)', pct: `${fmt(indValues.rsi, 0)}%` },
-                    { lbl: 'MACD',     val: fmt(indValues.macd, 4), c: (indValues.macd ?? 0) >= 0 ? 'var(--tv-up)' : 'var(--tv-down)', pct: '' },
-                    { lbl: 'VWAP',     val: fmt(indValues.vwap, 2), c: lClose > indValues.vwap ? 'var(--tv-up)' : 'var(--tv-down)', pct: `${indValues.vwapDelta >= 0 ? '+' : ''}${fmt(indValues.vwapDelta, 1)}%` },
-                    { lbl: 'ADX',      val: fmt(indValues.adx, 1),  c: (indValues.adx ?? 0) > 25 ? 'var(--tv-neutral)' : 'var(--tv-text2)', pct: '' },
-                    { lbl: 'EMA 9',    val: fmt(indValues.ema9, 2), c: lClose > indValues.ema9  ? 'var(--tv-up)' : 'var(--tv-down)', pct: '' },
-                    { lbl: 'EMA 21',   val: fmt(indValues.ema21, 2),c: lClose > indValues.ema21 ? 'var(--tv-up)' : 'var(--tv-down)', pct: '' },
-                    { lbl: 'ATR (14)', val: fmt(indValues.atr, 4),  c: 'var(--tv-text)', pct: '' },
-                    { lbl: 'VOL SPIKE',val: indValues.volSpike ? 'YES' : 'NO', c: indValues.volSpike ? 'var(--tv-up)' : 'var(--tv-text2)', pct: '' },
-                  ].map(({ lbl, val, c, pct }) => (
+                    { lbl: 'RSI (14)',  val: fmt(indValues.rsi, 1),  cls: indValues.rsi > 70 ? 'down' : indValues.rsi < 30 ? 'up' : 'dim', pct: `${fmt(indValues.rsi, 0)}%` },
+                    { lbl: 'MACD',     val: fmt(indValues.macd, 4), cls: (indValues.macd ?? 0) >= 0 ? 'up' : 'down', pct: '' },
+                    { lbl: 'VWAP',     val: fmt(indValues.vwap, 2), cls: lClose > indValues.vwap ? 'up' : 'down', pct: `${indValues.vwapDelta >= 0 ? '+' : ''}${fmt(indValues.vwapDelta, 1)}%` },
+                    { lbl: 'ADX',      val: fmt(indValues.adx, 1),  cls: (indValues.adx ?? 0) > 25 ? 'neutral' : 'dim', pct: '' },
+                    { lbl: 'EMA 9',    val: fmt(indValues.ema9, 2), cls: lClose > indValues.ema9  ? 'up' : 'down', pct: '' },
+                    { lbl: 'EMA 21',   val: fmt(indValues.ema21, 2),cls: lClose > indValues.ema21 ? 'up' : 'down', pct: '' },
+                    { lbl: 'ATR (14)', val: fmt(indValues.atr, 4),  cls: '', pct: '' },
+                    { lbl: 'VOL SPIKE',val: indValues.volSpike ? 'YES' : 'NO', cls: indValues.volSpike ? 'up' : 'dim', pct: '' },
+                  ].map(({ lbl, val, cls, pct }) => (
                     <div key={lbl} className="rp-ind-row">
                       <span className="rp-ind-lbl">{lbl}</span>
-                      {pct && <span className="rp-ind-pct" style={{ color: c }}>{pct}</span>}
-                      <span className="rp-ind-val mono" style={{ color: c }}>{val}</span>
+                      {pct && <span className={`rp-ind-pct ${cls}`}>{pct}</span>}
+                      <span className={`rp-ind-val mono ${cls}`}>{val}</span>
                     </div>
                   ))}
                 </>
               )}
 
               {/* ── Regime ───────────────────────────────────────── */}
-              {regime && (
-                <div className="rp-regime-row">
-                  <div
-                    className="rp-regime-dot"
-                    style={{ background: REGIME_COLORS[regime.regime] ?? '#787b86' }}
-                  />
-                  <span className="rp-regime-lbl">{regime.regime.replace(/_/g, ' ')}</span>
-                  <span className="rp-regime-adx">ADX {regime.adx}</span>
-                </div>
-              )}
+              {regime && (() => {
+                const rdCls = regime.regime.includes('up') ? 'up' : regime.regime.includes('down') ? 'down' : 'neutral';
+                return (
+                  <div className="rp-regime-row">
+                    <div className={`rp-regime-dot ${rdCls}`} />
+                    <span className="rp-regime-lbl">{regime.regime.replace(/_/g, ' ')}</span>
+                    <span className="rp-regime-adx">ADX {regime.adx}</span>
+                  </div>
+                );
+              })()}
 
               {/* ── TP/SL levels ──────────────────────────────────── */}
               {sigType !== 'NEUTRAL' && signal?.tp1 && (
@@ -473,12 +485,15 @@ export default function RightPanel() {
                     { l: 'TP 3',  v: fmt(signal.tp3, 4),        c: 'var(--tv-up)'    },
                     { l: 'SL',    v: fmt(signal.sl, 4),          c: 'var(--tv-down)'  },
                     { l: 'R:R',   v: signal.rrRatio ? `1:${signal.rrRatio.toFixed(1)}` : '—', c: 'var(--tv-blue)' },
-                  ].map(({ l, v, c }) => (
-                    <div key={l} className="rp-level-row">
-                      <span className="rp-level-lbl">{l}</span>
-                      <span className="rp-level-val mono" style={{ color: c }}>{v}</span>
-                    </div>
-                  ))}
+                  ].map(({ l, v, c }) => {
+                    const lcls = c === 'var(--tv-up)' ? 'up' : c === 'var(--tv-down)' ? 'down' : c === 'var(--tv-blue)' ? 'blue' : '';
+                    return (
+                      <div key={l} className="rp-level-row">
+                        <span className="rp-level-lbl">{l}</span>
+                        <span className={`rp-level-val mono ${lcls}`}>{v}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -530,15 +545,15 @@ export default function RightPanel() {
             <div className="section-hdr">AI Scores</div>
 
             {aiScores ? (
-              <div style={{ marginBottom: 12 }}>
-                <ScoreBar label="Trend"      value={aiScores.trend}      color="#2962ff" />
-                <ScoreBar label="Momentum"   value={aiScores.momentum}   color="#7e57c2" />
-                <ScoreBar label="Volatility" value={aiScores.volatility} color="#ff9800" />
-                <ScoreBar label="Volume"     value={aiScores.volume}     color="#00bcd4" />
+              <div className="ai-scores-wrap">
+                <ScoreBar label="Trend"      value={aiScores.trend}      variant="trend"      />
+                <ScoreBar label="Momentum"   value={aiScores.momentum}   variant="momentum"   />
+                <ScoreBar label="Volatility" value={aiScores.volatility} variant="volatility" />
+                <ScoreBar label="Volume"     value={aiScores.volume}     variant="volume"     />
                 <ScoreBar
                   label="Overall"
                   value={aiScores.signal}
-                  color={sigType === 'BUY' ? '#089981' : sigType === 'SELL' ? '#f23645' : '#ff9800'}
+                  variant={sigType === 'BUY' ? 'buy' : sigType === 'SELL' ? 'sell' : 'neutral'}
                 />
               </div>
             ) : (
@@ -547,21 +562,20 @@ export default function RightPanel() {
 
             <button
               type="button"
-              className="ai-btn"
+              className="ai-btn ai-btn-mt"
               onClick={handleAiReadChart}
               disabled={aiLoading}
-              style={{ marginBottom: 10 }}
             >
               {aiLoading ? (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
-                  <div className="spinner" style={{ width: 12, height: 12, borderWidth: 1 }} />
+                <span className="ai-btn-loading">
+                  <div className="spinner spinner-sm" />
                   Reading chart…
                 </span>
               ) : (
-                <>
-                  <Bot size={12} style={{ marginRight: 4 }} />
+                <span className="ai-btn-loading">
+                  <Bot size={12} />
                   Read Chart
-                </>
+                </span>
               )}
             </button>
 
@@ -584,8 +598,7 @@ export default function RightPanel() {
               return (
                 <div key={tf} className="rp-level-row">
                   <span className="rp-regime-adx">{tf}</span>
-                  <span className={`rp-signal-badge-full${type === 'BUY' ? ' buy' : type === 'SELL' ? ' sell' : ' neutral'}`}
-                    style={{ width: 'auto', margin: 0, padding: '1px 5px', fontSize: 9, borderRadius: 3 }}>
+                  <span className={`tf-mini-badge${type === 'BUY' ? ' buy' : type === 'SELL' ? ' sell' : ' neutral'}`}>
                     {type}
                   </span>
                 </div>
@@ -602,9 +615,9 @@ export default function RightPanel() {
             <div className="section-hdr">Risk Parameters</div>
 
             {riskParams.map(({ label, key, suffix, step, min }) => (
-              <div key={key} className="rp-level-row" style={{ paddingTop: 4, paddingBottom: 4 }}>
+              <div key={key} className="rp-level-row">
                 <span className="rp-ind-lbl">{label}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div className="risk-input-wrap">
                   <input
                     className="risk-input"
                     type="number"
@@ -613,7 +626,7 @@ export default function RightPanel() {
                     min={min}
                     onChange={e => updateRisk({ [key]: parseFloat(e.target.value) || 0 })}
                   />
-                  {suffix && <span className="rp-ind-lbl" style={{ flex: 'none' }}>{suffix}</span>}
+                  {suffix && <span className="risk-suffix">{suffix}</span>}
                 </div>
               </div>
             ))}
@@ -621,25 +634,25 @@ export default function RightPanel() {
             {/* Today's stats (mock) */}
             <div className="section-hdr section-hdr-mt">Today&apos;s Stats</div>
             {[
-              { label: 'Trades Today', value: '0' },
-              { label: 'PnL Today',    value: '0.00%' },
-              { label: 'Drawdown',     value: '0.00%' },
-              { label: 'Status',       value: killActive ? 'KILL SWITCH' : 'ACTIVE', color: killActive ? 'var(--tv-down)' : 'var(--tv-up)' },
-            ].map(({ label, value, color }) => (
+              { label: 'Trades Today', value: '0',                                      cls: ''                               },
+              { label: 'PnL Today',    value: '0.00%',                                  cls: ''                               },
+              { label: 'Drawdown',     value: '0.00%',                                  cls: ''                               },
+              { label: 'Status',       value: killActive ? 'KILL SWITCH' : 'ACTIVE',    cls: killActive ? 'down' : 'up'       },
+            ].map(({ label, value, cls }) => (
               <div key={label} className="rp-level-row">
                 <span className="rp-ind-lbl">{label}</span>
-                <span className="rp-level-val mono" style={{ color: color ?? 'var(--tv-text)' }}>{value}</span>
+                <span className={`rp-level-val mono ${cls}`}>{value}</span>
               </div>
             ))}
 
             {/* Kelly fraction */}
             <div className="section-hdr section-hdr-mt">Kelly Sizing</div>
-            <div className="rp-signal-footer" style={{ textAlign: 'left', marginTop: 4 }}>
+            <div className="rp-signal-footer rp-signal-footer-left">
               Kelly = (WR × avgWin − (1−WR) × avgLoss) / avgWin
             </div>
             <div className="rp-level-row">
               <span className="rp-ind-lbl">Kelly %</span>
-              <span className="rp-level-val mono" style={{ color: 'var(--tv-blue)' }}>
+              <span className="rp-level-val mono blue">
                 {(() => {
                   const wr = 0.5;
                   const avgW = riskPerTrade * 2;
@@ -653,15 +666,14 @@ export default function RightPanel() {
             {/* Kill switch */}
             <button
               type="button"
-              className={`kill-switch${killActive ? ' active' : ''}`}
+              className={`kill-switch kill-switch-mt${killActive ? ' active' : ''}`}
               onClick={() => setKillActive(k => !k)}
-              style={{ marginTop: 12 }}
             >
-              <Power size={13} style={{ marginRight: 6 }} />
+              <Power size={13} />
               {killActive ? 'KILL SWITCH ACTIVE — Click to Reset' : 'KILL SWITCH (Stop All)'}
             </button>
 
-            <div className="rp-signal-footer" style={{ marginTop: 6 }}>
+            <div className="rp-signal-footer rp-signal-footer-mt">
               No auto trading. Manual execution only.
             </div>
           </>
