@@ -39,10 +39,10 @@
   --tv-vwap:        #0097a7;
   --tv-bb:          #1976d2;
   /* Layout */
-  --sidebar-w:      40px;
+  --sidebar-w:      56px;
   --topbar-h:       48px;
-  --rightpanel-w:   280px;
-  --statusbar-h:    24px;
+  --rightpanel-w:   300px;
+  --statusbar-h:    26px;
   --transition:     150ms ease;
   /* Aliases */
   --bg-primary:     var(--tv-bg);
@@ -138,12 +138,13 @@ body {
 /* ── Top Bar ────────────────────────────────────────────────── */
 .topbar {
   display: flex; align-items: center; height: var(--topbar-h);
-  background: var(--tv-bg); border-bottom: 1px solid var(--tv-border);
+  background: var(--tv-bg2); border-bottom: 1px solid var(--tv-border);
   padding: 0 8px; gap: 4px; flex-shrink: 0; z-index: 100; position: relative;
+  -webkit-user-select: none; user-select: none;
 }
 .topbar-logo { display: flex; align-items: center; gap: 5px; padding: 0 8px; margin-right: 4px; flex-shrink: 0; }
-.logo-symbol { color: var(--tv-blue); font-size: 14px; font-weight: 700; }
-.logo-text   { font-size: 13px; font-weight: 700; color: var(--tv-text); letter-spacing: -0.3px; }
+.logo-symbol { color: var(--tv-blue); font-size: 18px; font-weight: 700; line-height: 1; }
+.logo-text   { font-size: 13px; font-weight: 700; color: var(--tv-text); letter-spacing: 1.5px; }
 
 .topbar-sep { width: 1px; height: 20px; background: var(--tv-border); flex-shrink: 0; margin: 0 4px; }
 
@@ -270,15 +271,15 @@ body {
 .sidebar-tools::-webkit-scrollbar { width: 0; }
 
 .sidebar-nav-btn, .sidebar-tool-btn {
-  width: 32px; height: 28px; display: flex; align-items: center; justify-content: center;
-  background: transparent; border: none; border-radius: 4px; cursor: pointer;
+  width: 42px; height: 36px; display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; border-radius: 6px; cursor: pointer;
   color: var(--tv-text2); transition: all var(--transition);
 }
 .sidebar-nav-btn:hover, .sidebar-tool-btn:hover { background: var(--tv-bg3); color: var(--tv-text); }
 .sidebar-nav-btn.active, .sidebar-tool-btn.active {
   background: var(--tv-blue-light); color: var(--tv-blue);
 }
-.sidebar-tool-sep { width: 20px; height: 1px; background: var(--tv-border); margin: 2px 6px; }
+.sidebar-tool-sep { width: 28px; height: 1px; background: var(--tv-border); margin: 3px auto; }
 
 /* ── Chart Area ─────────────────────────────────────────────── */
 .chart-area {
@@ -286,9 +287,9 @@ body {
   background: var(--tv-bg); position: relative;
 }
 .chart-toolbar {
-  display: flex; align-items: center; height: 32px; padding: 0 6px;
-  background: var(--tv-bg); border-bottom: 1px solid var(--tv-border);
-  gap: 4px; flex-shrink: 0;
+  display: flex; align-items: center; height: 36px; padding: 0 8px;
+  background: var(--tv-bg2); border-bottom: 1px solid var(--tv-border);
+  gap: 3px; flex-shrink: 0;
 }
 .chart-type-btns { display: flex; gap: 1px; }
 .chart-type-btn {
@@ -338,8 +339,9 @@ body {
 }
 .subchart-tabs-row {
   display: flex; align-items: center; gap: 1px;
-  height: 24px; padding: 0 6px; background: var(--tv-bg); border-bottom: 1px solid var(--tv-border);
-  position: absolute; top: 0; left: 0; right: 0; z-index: 2; flex-shrink: 0;
+  height: 24px; min-height: 24px; padding: 0 6px;
+  background: var(--tv-bg2); border-bottom: 1px solid var(--tv-border);
+  flex-shrink: 0; z-index: 2;
 }
 .subchart-tab {
   padding: 2px 6px; font-size: 10px; font-weight: 500;
@@ -361,6 +363,24 @@ body {
 }
 .ctx-menu-item:hover { background: var(--tv-bg3); }
 .ctx-menu-sep { height: 1px; background: var(--tv-border); margin: 3px 0; }
+
+/* ── Chart Range Bar (bottom, TradingView-style) ────────────── */
+.chart-range-bar {
+  display: flex; align-items: center; gap: 1px;
+  height: 28px; min-height: 28px; padding: 0 8px; flex-shrink: 0;
+  background: var(--tv-bg2); border-top: 1px solid var(--tv-border);
+}
+.range-btn {
+  padding: 2px 8px; font-size: 11px; font-family: 'Roboto Mono', monospace;
+  background: transparent; border: none; border-radius: 3px; cursor: pointer;
+  color: var(--tv-text2); transition: all var(--transition); font-weight: 500;
+}
+.range-btn:hover  { background: var(--tv-bg3); color: var(--tv-text); }
+.range-btn.active { background: var(--tv-blue-light); color: var(--tv-blue); }
+.range-bar-label {
+  display: flex; align-items: center;
+  font-size: 10px; color: var(--tv-text3); padding-right: 4px;
+}
 
 /* ── Chart Loading ───────────────────────────────────────────── */
 .chart-loading {
@@ -769,7 +789,7 @@ select{cursor:pointer;}
   grid-area:topbar;display:flex;align-items:center;gap:2px;
   background:var(--tv-bg2);border-bottom:1px solid var(--tv-border);
   padding:0 8px;height:var(--topbar-h);position:relative;z-index:200;
-  user-select:none;
+  -webkit-user-select:none;user-select:none;
 }
 .topbar-logo{display:flex;align-items:center;gap:5px;padding:0 8px;flex-shrink:0;}
 .logo-symbol{color:var(--tv-blue);font-size:18px;font-weight:700;line-height:1;}
@@ -969,7 +989,7 @@ select{cursor:pointer;}
 .status-bar{
   grid-area:statusbar;display:flex;align-items:center;justify-content:space-between;
   background:var(--tv-bg2);border-top:1px solid var(--tv-border);
-  padding:0 12px;height:var(--status-h);font-size:10px;user-select:none;
+  padding:0 12px;height:var(--status-h);font-size:10px;-webkit-user-select:none;user-select:none;
 }
 .sb-left,.sb-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
 .sb-center{flex:1;display:flex;align-items:center;justify-content:center;gap:4px;overflow:hidden;}

@@ -42,46 +42,81 @@ const BINANCE_INTERVAL_MAP: Record<string, string> = {
   '1m':  '1m',
   '3m':  '3m',
   '5m':  '5m',
+  '10m': '15m',  // no 10m on Binance; closest is 15m
   '15m': '15m',
   '30m': '30m',
+  '45m': '30m',  // no 45m on Binance; closest is 30m
   '1h':  '1h',
   '2h':  '2h',
+  '3h':  '2h',   // no 3h on Binance; closest is 2h
   '4h':  '4h',
+  '6h':  '6h',
+  '8h':  '8h',
+  '12h': '12h',
   '1d':  '1d',
+  '2d':  '3d',
+  '3d':  '3d',
   '1w':  '1w',
+  '2w':  '1w',
+  '1M':  '1M',
+  '3M':  '1M',   // aggregate monthly
+  '6M':  '1M',
+  '12M': '1M',
 };
 
 /** Maps internal timeframe strings to Yahoo Finance intervals */
 const YAHOO_INTERVAL_MAP: Record<string, string> = {
-  '1s':  '1m',  // Yahoo doesn't support sub-minute; fall back to 1m
+  '1s':  '1m',
   '15s': '1m',
   '30s': '1m',
   '1m':  '1m',
-  '3m':  '5m',  // no 3m on Yahoo
+  '3m':  '5m',
   '5m':  '5m',
+  '10m': '15m',
   '15m': '15m',
   '30m': '30m',
+  '45m': '30m',
   '1h':  '60m',
-  '2h':  '1d',  // no 2h on Yahoo
-  '4h':  '1d',  // no 4h on Yahoo
+  '2h':  '60m',
+  '3h':  '60m',
+  '4h':  '60m',
+  '6h':  '1d',
+  '8h':  '1d',
+  '12h': '1d',
   '1d':  '1d',
+  '2d':  '1d',
+  '3d':  '1d',
   '1w':  '1wk',
+  '2w':  '1wk',
+  '1M':  '1mo',
+  '3M':  '3mo',
+  '6M':  '3mo',
+  '12M': '3mo',
 };
 
 /** Pick a Yahoo range string based on how many candles are needed */
 function yahooRange(limit: number, interval: string): string {
-  // Intra-day intervals need shorter ranges
+  if (['1mo', '3mo'].includes(interval)) {
+    if (limit <= 12)  return '1y';
+    if (limit <= 36)  return '5y';
+    return 'max';
+  }
+  if (['1wk'].includes(interval)) {
+    if (limit <= 52)  return '1y';
+    if (limit <= 260) return '5y';
+    return 'max';
+  }
   const intraday = ['1m', '5m', '15m', '30m', '60m'].includes(interval);
   if (intraday) {
     if (limit <= 100)  return '1d';
-    if (limit <= 500)  return '5d';
-    if (limit <= 1000) return '1mo';
+    if (limit <= 390)  return '5d';
+    if (limit <= 1500) return '1mo';
     return '3mo';
   }
-  // Daily / weekly
-  if (limit <= 100)  return '1mo';
-  if (limit <= 500)  return '1y';
-  if (limit <= 1000) return '2y';
+  // Daily
+  if (limit <= 30)   return '1mo';
+  if (limit <= 252)  return '1y';
+  if (limit <= 504)  return '2y';
   return '5y';
 }
 
@@ -368,24 +403,33 @@ function detectAssetClassExtended(symbol: string) {
 
 function revalidateSeconds(tf: string): number {
   const map: Record<string, number> = {
-    '1s':  1,   '15s': 15,  '30s': 30,
-    '1m':  60,  '3m':  180, '5m':  300,
-    '15m': 900, '30m': 1800,'1h':  3600,
-    '2h':  7200,'4h':  14400,'1d': 86400,
-    '1w':  604800,
+    '1s':  1,   '15s': 15,   '30s': 30,
+    '1m':  60,  '3m':  180,  '5m':  300,
+    '10m': 600, '15m': 900,  '30m': 1800,
+    '45m': 2700,'1h':  3600, '2h':  7200,
+    '3h':  10800,'4h': 14400,'6h':  21600,
+    '8h':  28800,'12h':43200,'1d':  86400,
+    '2d':  172800,'3d':259200,'1w': 604800,
+    '2w':  1209600,'1M':2592000,'3M':7776000,
+    '6M':  15552000,'12M':31104000,
   };
   return map[tf] ?? 60;
 }
 
 function intervalMs(yahooInterval: string): number {
   const map: Record<string, number> = {
-    '1m':  60_000,
-    '5m':  300_000,
-    '15m': 900_000,
-    '30m': 1_800_000,
-    '60m': 3_600_000,
-    '1d':  86_400_000,
-    '1wk': 604_800_000,
+    '1m':   60_000,
+    '2m':   120_000,
+    '5m':   300_000,
+    '15m':  900_000,
+    '30m':  1_800_000,
+    '60m':  3_600_000,
+    '90m':  5_400_000,
+    '1d':   86_400_000,
+    '5d':   432_000_000,
+    '1wk':  604_800_000,
+    '1mo':  2_592_000_000,
+    '3mo':  7_776_000_000,
   };
   return map[yahooInterval] ?? 86_400_000;
 }

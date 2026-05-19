@@ -20,9 +20,11 @@ import { useMarketPrice } from '@/hooks/useMarketData';
 const QUICK_TFS = ['1m', '5m', '15m', '1h', '4h', '1d'];
 const TF_GROUPS = [
   { group: 'Seconds', tfs: ['1s', '15s', '30s'] },
-  { group: 'Minutes', tfs: ['1m', '3m', '5m', '15m', '30m'] },
-  { group: 'Hours',   tfs: ['1h', '2h', '4h', '12h'] },
-  { group: 'Days',    tfs: ['1d', '1w'] },
+  { group: 'Minutes', tfs: ['1m', '3m', '5m', '10m', '15m', '30m', '45m'] },
+  { group: 'Hours',   tfs: ['1h', '2h', '3h', '4h', '6h', '8h', '12h'] },
+  { group: 'Days',    tfs: ['1d', '2d', '3d'] },
+  { group: 'Weeks',   tfs: ['1w', '2w'] },
+  { group: 'Months',  tfs: ['1M', '3M', '6M', '12M'] },
 ];
 
 const WATCHLIST_DEFAULTS = [

@@ -54,6 +54,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const dragRef    = useRef<any>(null);
   const [legend, setLegend]     = useState<any>(null);
   const [ctxMenu, setCtxMenu]   = useState<any>(null);
+  const [activeRange, setActiveRange] = useState<string>('3M');
 
   const isDark = theme === 'dark';
   const tk = {
@@ -113,7 +114,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     grid:   { vertLines: { color: tk.grid, style: 1 }, horzLines: { color: tk.grid, style: 1 } },
     crosshair: { mode: 1, vertLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true }, horzLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true } },
     rightPriceScale: { borderColor: tk.border, textColor: tk.text2 },
-    timeScale: { borderColor: tk.border, textColor: tk.text2, timeVisible: true, secondsVisible: ['1s','15s','30s','1m'].includes(timeframe), rightOffset: 10, lockVisibleTimeRangeOnResize: true },
+    timeScale: { borderColor: tk.border, textColor: tk.text2, timeVisible: !['1M','3M','6M','12M'].includes(timeframe), secondsVisible: ['1s','15s','30s'].includes(timeframe), rightOffset: 10, lockVisibleTimeRangeOnResize: true },
     handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     handleScale:  { mouseWheel: true, pinch: true, axisPressedMouseMove: { time: true, price: true } },
     width: el.clientWidth || 800, height: el.clientHeight || 400,
@@ -321,6 +322,28 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       }
     }
     main.timeScale().fitContent();
+    // Set a default visible range so the chart doesn't show the entire history
+    {
+      const ZOOM_CANDLES: Record<string, number> = {
+        '1s':  300, '15s': 240, '30s': 180,
+        '1m':  200, '3m':  150, '5m':  130,
+        '10m': 120, '15m': 120, '30m': 100, '45m': 96,
+        '1h':  100, '2h':   90, '3h':   80, '4h': 90,
+        '6h':   60, '8h':   60, '12h':  60,
+        '1d':   90, '2d':   60, '3d':   60,
+        '1w':   52, '2w':   26,
+        '1M':   24, '3M':   12, '6M':    8, '12M': 5,
+      };
+      const defaultCandles = ZOOM_CANDLES[timeframe] ?? 120;
+      if (formatted.length > defaultCandles) {
+        try {
+          main.timeScale().setVisibleLogicalRange({
+            from: formatted.length - defaultCandles - 1,
+            to:   formatted.length + 5,
+          });
+        } catch {}
+      }
+    }
 
     // ── VOLUME CHART ──────────────────────────────────────────
     const volChart = createChart(volRef.current!, { ...(baseOpts(volRef.current!) as any), timeScale: { ...baseOpts(volRef.current!).timeScale, visible: false } });
@@ -511,6 +534,48 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           )}
         </div>
       )}
+
+      {/* ── Range Selector Bar (bottom, TradingView-style) ── */}
+      <div className="chart-range-bar">
+        {(['1D','5D','1M','3M','6M','YTD','1Y','5Y','All'] as const).map(r => (
+          <button
+            key={r}
+            className={`range-btn ${activeRange === r ? 'active' : ''}`}
+            onClick={() => {
+              setActiveRange(r);
+              const main = chartsRef.current.main;
+              if (!main) return;
+              const now = Math.floor(Date.now() / 1000);
+              const rangeMap: Record<string, number> = {
+                '1D':  86400,
+                '5D':  86400 * 5,
+                '1M':  86400 * 30,
+                '3M':  86400 * 90,
+                '6M':  86400 * 180,
+                'YTD': now - Math.floor(new Date(new Date().getFullYear(), 0, 1).getTime() / 1000),
+                '1Y':  86400 * 365,
+                '5Y':  86400 * 365 * 5,
+                'All': 86400 * 365 * 20,
+              };
+              const seconds = rangeMap[r] ?? 86400 * 90;
+              try {
+                main.timeScale().setVisibleRange({ from: (now - seconds) as any, to: now as any });
+              } catch {
+                main.timeScale().fitContent();
+              }
+            }}
+          >
+            {r}
+          </button>
+        ))}
+        <div style={{flex:1}}/>
+        <span className="range-bar-label">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight:3,opacity:0.5}}>
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+          </svg>
+          TradingView
+        </span>
+      </div>
     </div>
   );
 }
