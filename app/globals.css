@@ -762,6 +762,9 @@ select{cursor:pointer;}
 
 /* ── GRID LAYOUT ─────────────────────────────────────────── */
 .atlas-app{
+  /* Default layout vars (device classes can override) */
+  --right-w: 300px;
+  --status-h: 26px;
   display:grid;
   grid-template-columns:var(--sidebar-w) 1fr var(--right-w);
   grid-template-rows:var(--topbar-h) 1fr var(--status-h);

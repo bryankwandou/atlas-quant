@@ -17,7 +17,8 @@ import { useChartStore } from '@/store/chartStore';
 import { useMarketPrice } from '@/hooks/useMarketData';
 
 
-const QUICK_TFS = ['1m', '5m', '15m', '1h', '4h', '1d'];
+// TradingView-style quick TF bar — shows all main timeframes directly
+const QUICK_TFS = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '12h', '1d', '1w', '1M'];
 const TF_GROUPS = [
   { group: 'Seconds', tfs: ['1s', '15s', '30s'] },
   { group: 'Minutes', tfs: ['1m', '3m', '5m', '10m', '15m', '30m', '45m'] },
