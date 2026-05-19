@@ -56,14 +56,25 @@ export async function GET(req: NextRequest) {
         .order('open_time', { ascending: true })
         .limit(limit);
 
-      if (cached && cached.length >= 50 && isCacheValid(cached, timeframe)) {
-        return NextResponse.json({
-          symbol,
-          timeframe,
-          data: cached,
-          source: 'cache',
-          count: cached.length,
-        });
+      if (cached && cached.length >= 50) {
+        if (isCacheValid(cached, timeframe)) {
+          return NextResponse.json({
+            symbol,
+            timeframe,
+            data: cached,
+            source: 'cache',
+            count: cached.length,
+          });
+        } else {
+          // Cache has wrong-interval data (e.g., monthly stored as 1d) — purge it
+          supabaseAdmin
+            .from('market_ohlcv')
+            .delete()
+            .eq('symbol', symbol.toUpperCase())
+            .eq('timeframe', timeframe)
+            .then(() => {})
+            .catch(() => {});
+        }
       }
     } catch {
       // Cache miss — continue to live fetch
