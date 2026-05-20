@@ -993,6 +993,13 @@ select{cursor:pointer;}
 .ind-row-val{font-family:'Roboto Mono',monospace;font-size:10px;}
 .ind-row-pct{font-size:9px;min-width:48px;text-align:right;}
 .sig-warning{background:rgba(255,152,0,.08);border:1px solid rgba(255,152,0,.2);border-radius:4px;padding:6px 8px;font-size:9px;color:var(--tv-neutral);line-height:1.5;}
+.sig-level-val{font-family:'Roboto Mono',monospace;font-size:11px;}
+.sig-strat-val{font-size:11px;color:var(--tv-text);}
+.sig-sr-section{margin-top:6px;}
+.sig-indicators-section{margin-top:6px;}
+.sig-ind-title{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--tv-text2);margin-bottom:4px;}
+.sr-support{flex:1;text-align:left;color:var(--tv-up);}
+.sr-resist{flex:1;text-align:right;color:var(--tv-down);}
 /* Watchlist */
 .wl-search-wrap{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--tv-bg3);border-radius:4px;margin-bottom:4px;}
 .wl-search-wrap input{flex:1;font-size:11px;}

@@ -1,8 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import {
-  RefreshCw, Zap, Power, TrendingUp, TrendingDown, Minus, Bot,
-} from 'lucide-react';
+import { RefreshCw, Power, Bot } from 'lucide-react';
 import { useChartStore } from '@/store/chartStore';
 import { useUserStore } from '@/store/userStore';
 import { useMarketData, useMarketPrice } from '@/hooks/useMarketData';
@@ -358,28 +356,14 @@ export default function RightPanel() {
       <div className="rp-content rp-body">
 
         {/* ════════════════════════════════════════════════════════════════
-            SIGNAL TAB — TradingView-style Last Performance layout
+            SIGNAL TAB
         ════════════════════════════════════════════════════════════════ */}
         {rightPanelTab === 'signal' && (() => {
-          const lastCandle = candles?.length ? candles[candles.length - 1] : null;
-          const prevCandle = candles?.length > 1 ? candles[candles.length - 2] : null;
-          const lClose  = lastCandle?.close  ?? 0;
-          const lOpen   = lastCandle?.open   ?? 0;
-          const lHigh   = lastCandle?.high   ?? 0;
-          const lLow    = lastCandle?.low    ?? 0;
-          const lVol    = lastCandle?.volume ?? 0;
-          const midPric = (lHigh + lLow) / 2;
-          const change  = prevCandle ? lClose - prevCandle.close : lClose - lOpen;
-          const rangePct = lHigh > 0 ? ((lHigh - lLow) / lHigh) * 100 : 0;
-          const fmtVol  = lVol >= 1e9 ? `${(lVol/1e9).toFixed(1)}B`
-                        : lVol >= 1e6 ? `${(lVol/1e6).toFixed(1)}M`
-                        : lVol >= 1e3 ? `${(lVol/1e3).toFixed(1)}K`
-                        : lVol.toFixed(0);
-          const isUp = change >= 0;
+          const lClose = candles?.length ? candles[candles.length - 1].close : 0;
 
           return (
             <>
-              {/* ── Version badge + countdown ────────────────────── */}
+              {/* Countdown */}
               <div className="rp-version-row">
                 <span className="rp-version-badge">v2 ATLAS-QUANT</span>
                 <span className="rp-countdown">
@@ -387,133 +371,113 @@ export default function RightPanel() {
                 </span>
               </div>
 
-              {/* ── LAST PERFORMANCE ─────────────────────────────── */}
-              <div className="section-hdr">LAST PERFORMANCE</div>
-              <div className="rp-perf-grid">
-                {[
-                  { lbl: 'OPEN',     val: fmt(lOpen,   4) },
-                  { lbl: 'HIGH',     val: fmt(lHigh,   4) },
-                  { lbl: 'MID-PRIC', val: fmt(midPric, 4) },
-                  { lbl: 'LOW',      val: fmt(lLow,    4) },
-                  { lbl: 'CLOSE',    val: fmt(lClose,  4), cls: isUp ? 'up' : 'down' },
-                  { lbl: 'CHANGE',   val: (change >= 0 ? '+' : '') + fmt(change, 2), cls: isUp ? 'up' : 'down' },
-                  { lbl: 'RANGE',    val: `${fmt(rangePct, 2)}%` },
-                  { lbl: 'VOLUME',   val: fmtVol },
-                ].map(({ lbl, val, cls }) => (
-                  <div key={lbl} className="rp-perf-row">
-                    <span className="rp-perf-lbl">{lbl}</span>
-                    <span className={`rp-perf-val mono${cls ? ` ${cls}` : ''}`}>{val}</span>
+              {/* Signal Badge */}
+              <div className={`signal-badge ${sigType.toLowerCase()}`}>
+                <div className="sig-badge-type">{sigType}</div>
+                <div className="sig-badge-conf">{signal?.confidence ?? '—'}% confidence</div>
+              </div>
+
+              {/* Strategy */}
+              {signal?.strategy && (
+                <div className="sig-strategy-row">
+                  <span className="sig-strat-label">Strategy</span>
+                  <span className="sig-strat-val">{signal.strategy.replace(/_/g, ' ')}</span>
+                </div>
+              )}
+
+              {/* Price Levels */}
+              {sigType !== 'NEUTRAL' && signal?.tp1 && (
+                <div className="sig-levels">
+                  {[
+                    { label: 'Entry', val: fmt(signal.entryPrice, 4), cls: ''       },
+                    { label: 'TP1',   val: fmt(signal.tp1, 4),        cls: 'tp-val' },
+                    { label: 'TP2',   val: fmt(signal.tp2, 4),        cls: 'tp-val' },
+                    { label: 'TP3',   val: fmt(signal.tp3, 4),        cls: 'tp-val' },
+                    { label: 'SL',    val: fmt(signal.sl, 4),          cls: 'sl-val' },
+                    { label: 'R:R',   val: signal.rrRatio ? `${signal.rrRatio.toFixed(1)}:1` : '—', cls: 'blue' },
+                    { label: 'ATR',   val: fmt(signal.atrValue, 4),    cls: ''       },
+                  ].map(({ label, val, cls }) => (
+                    <div key={label} className="sig-level-row">
+                      <span className="sig-level-label">{label}</span>
+                      <span className={`sig-level-val mono${cls ? ` ${cls}` : ''}`}>{val}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Regime */}
+              {regime && (() => {
+                const rc = REGIME_COLORS[regime.regime] ?? '#ff9800';
+                return (
+                  <div className="sig-regime-row">
+                    <div className="sig-regime-label">Market Regime</div>
+                    <div
+                      className="sig-regime-badge"
+                      style={{ backgroundColor: rc + '22', color: rc, borderColor: rc + '44' }}
+                    >
+                      <span className="regime-dot" style={{ background: rc }} />
+                      {regime.regime.replace(/_/g, ' ')} · ADX {regime.adx}
+                    </div>
                   </div>
-                ))}
-              </div>
+                );
+              })()}
 
-              {/* ── Signal badge (full-width centered) ───────────── */}
-              <div className={`rp-signal-badge-full${sigType === 'BUY' ? ' buy' : sigType === 'SELL' ? ' sell' : ' neutral'}`}>
-                {sigType === 'BUY'     && <TrendingUp   size={13} />}
-                {sigType === 'SELL'    && <TrendingDown  size={13} />}
-                {sigType === 'NEUTRAL' && <Minus         size={13} />}
-                <span className="rp-sig-type">{sigType}</span>
-                {signal?.confidence != null && (
-                  <span className="rp-sig-conf">{signal.confidence}%</span>
-                )}
-              </div>
-
-              {/* ── SUPPORT | RESISTANCE ─────────────────────────── */}
+              {/* Support / Resistance */}
               {srData && (
-                <>
-                  <div className="rp-sr-hdr">
-                    <span className="rp-sr-hdr-sup">SUPPORT</span>
-                    <span className="rp-sr-hdr-res">RESISTANCE</span>
+                <div className="sig-sr-section">
+                  <div className="sig-section-title">
+                    <span>Support</span>
+                    <span>Resistance</span>
                   </div>
-                  <div className="rp-sr-grid">
-                    {Array.from({ length: Math.max(srData.supports.length, srData.resistances.length, 4) }, (_, i) => (
-                      <div key={i} className="rp-sr-row">
-                        <span className="rp-sr-sup mono">
+                  <div className="sig-sr-table">
+                    {Array.from({ length: 3 }, (_, i) => (
+                      <div key={i} className="sig-sr-row">
+                        <span className="sr-rank">{i + 1}</span>
+                        <span className="sr-support mono up">
                           {srData.supports[i] ? fmt(srData.supports[i].price, 2) : '—'}
                         </span>
-                        <span className="rp-sr-res mono">
+                        <span className="sr-resist mono down">
                           {srData.resistances[i] ? fmt(srData.resistances[i].price, 2) : '—'}
                         </span>
                       </div>
                     ))}
                   </div>
-                </>
-              )}
-
-              {/* ── INDICATORS ───────────────────────────────────── */}
-              {indValues && (
-                <>
-                  <div className="section-hdr section-hdr-mt">INDICATORS</div>
-                  {[
-                    { lbl: 'RSI (14)',  val: fmt(indValues.rsi, 1),  cls: indValues.rsi > 70 ? 'down' : indValues.rsi < 30 ? 'up' : 'dim', pct: `${fmt(indValues.rsi, 0)}%` },
-                    { lbl: 'MACD',     val: fmt(indValues.macd, 4), cls: (indValues.macd ?? 0) >= 0 ? 'up' : 'down', pct: '' },
-                    { lbl: 'VWAP',     val: fmt(indValues.vwap, 2), cls: lClose > indValues.vwap ? 'up' : 'down', pct: `${indValues.vwapDelta >= 0 ? '+' : ''}${fmt(indValues.vwapDelta, 1)}%` },
-                    { lbl: 'ADX',      val: fmt(indValues.adx, 1),  cls: (indValues.adx ?? 0) > 25 ? 'neutral' : 'dim', pct: '' },
-                    { lbl: 'EMA 9',    val: fmt(indValues.ema9, 2), cls: lClose > indValues.ema9  ? 'up' : 'down', pct: '' },
-                    { lbl: 'EMA 21',   val: fmt(indValues.ema21, 2),cls: lClose > indValues.ema21 ? 'up' : 'down', pct: '' },
-                    { lbl: 'ATR (14)', val: fmt(indValues.atr, 4),  cls: '', pct: '' },
-                    { lbl: 'VOL SPIKE',val: indValues.volSpike ? 'YES' : 'NO', cls: indValues.volSpike ? 'up' : 'dim', pct: '' },
-                  ].map(({ lbl, val, cls, pct }) => (
-                    <div key={lbl} className="rp-ind-row">
-                      <span className="rp-ind-lbl">{lbl}</span>
-                      {pct && <span className={`rp-ind-pct ${cls}`}>{pct}</span>}
-                      <span className={`rp-ind-val mono ${cls}`}>{val}</span>
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {/* ── Regime ───────────────────────────────────────── */}
-              {regime && (() => {
-                const rdCls = regime.regime.includes('up') ? 'up' : regime.regime.includes('down') ? 'down' : 'neutral';
-                return (
-                  <div className="rp-regime-row">
-                    <div className={`rp-regime-dot ${rdCls}`} />
-                    <span className="rp-regime-lbl">{regime.regime.replace(/_/g, ' ')}</span>
-                    <span className="rp-regime-adx">ADX {regime.adx}</span>
-                  </div>
-                );
-              })()}
-
-              {/* ── TP/SL levels ──────────────────────────────────── */}
-              {sigType !== 'NEUTRAL' && signal?.tp1 && (
-                <div className="rp-levels-grid">
-                  {[
-                    { l: 'ENTRY', v: fmt(signal.entryPrice, 4), c: 'var(--tv-text)'  },
-                    { l: 'TP 1',  v: fmt(signal.tp1, 4),        c: 'var(--tv-up)'    },
-                    { l: 'TP 2',  v: fmt(signal.tp2, 4),        c: 'var(--tv-up)'    },
-                    { l: 'TP 3',  v: fmt(signal.tp3, 4),        c: 'var(--tv-up)'    },
-                    { l: 'SL',    v: fmt(signal.sl, 4),          c: 'var(--tv-down)'  },
-                    { l: 'R:R',   v: signal.rrRatio ? `1:${signal.rrRatio.toFixed(1)}` : '—', c: 'var(--tv-blue)' },
-                  ].map(({ l, v, c }) => {
-                    const lcls = c === 'var(--tv-up)' ? 'up' : c === 'var(--tv-down)' ? 'down' : c === 'var(--tv-blue)' ? 'blue' : '';
-                    return (
-                      <div key={l} className="rp-level-row">
-                        <span className="rp-level-lbl">{l}</span>
-                        <span className={`rp-level-val mono ${lcls}`}>{v}</span>
-                      </div>
-                    );
-                  })}
                 </div>
               )}
 
-              {!lastCandle && (
-                <div className="rp-signal-loading">Loading data…</div>
+              {/* Indicators */}
+              {indValues && (
+                <div className="sig-indicators-section">
+                  <div className="sig-ind-title">Indicators</div>
+                  <div className="sig-ind-table">
+                    {[
+                      { label: 'EMA 9',    val: indValues.ema9,  ref: lClose, dec: 2 },
+                      { label: 'EMA 21',   val: indValues.ema21, ref: lClose, dec: 2 },
+                      { label: 'VWAP',     val: indValues.vwap,  ref: lClose, dec: 2 },
+                      { label: 'RSI (14)', val: indValues.rsi,   ref: 0,      dec: 1, noChange: true },
+                      { label: 'ATR (14)', val: indValues.atr,   ref: 0,      dec: 4, noChange: true },
+                      { label: 'MACD',     val: indValues.macd,  ref: 0,      dec: 4, noChange: true },
+                    ].map(({ label, val, ref, dec, noChange }) => {
+                      const pct = !noChange && ref && val ? ((val - ref) / ref * 100) : null;
+                      return (
+                        <div key={label} className="sig-ind-row">
+                          <span className="ind-row-label">{label}</span>
+                          <span className="ind-row-val mono">{val != null ? Number(val).toFixed(dec) : '—'}</span>
+                          {pct != null && (
+                            <span className={`ind-row-pct ${pct >= 0 ? 'up' : 'down'}`}>
+                              {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
 
-              {/* ── EXECUTE TRADE NODE ────────────────────────────── */}
-              <button
-                type="button"
-                className={`execute-trade-btn${sigType === 'BUY' ? ' buy' : sigType === 'SELL' ? ' sell' : ''}`}
-                onClick={() => {
-                  const msg = `${sigType} signal on ${symbol} ${timeframe}. Conf: ${signal?.confidence ?? '—'}%. Entry: ${fmt(signal?.entryPrice, 4)}, TP1: ${fmt(signal?.tp1, 4)}, SL: ${fmt(signal?.sl, 4)}`;
-                  alert(msg);
-                }}
-              >
-                EXECUTE TRADE NODE
-              </button>
-              <div className="rp-signal-footer">
-                Neural signal confirmed via market data nodes.
+              {/* Warning */}
+              <div className="sig-warning">
+                ⚠ For informational purposes only. Manual execution only. Not financial advice.
               </div>
             </>
           );
