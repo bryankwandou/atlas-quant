@@ -1,6 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import '../auth.css';
 
 export default function PendingApproval() {
   const router = useRouter();
