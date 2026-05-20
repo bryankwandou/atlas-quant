@@ -1117,6 +1117,7 @@ select{cursor:pointer;}
 .journal-table th{padding:7px 10px;text-align:left;color:var(--tv-text2);font-weight:500;border-bottom:1px solid var(--tv-border);position:sticky;top:0;background:var(--tv-bg2);font-size:9px;text-transform:uppercase;letter-spacing:.5px;}
 .journal-table td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.03);}
 .journal-table tr:hover td{background:var(--tv-bg2);}
+.journal-table tr.row-open td{background:rgba(41,98,255,.04);}
 .dir-badge{padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700;}
 .dir-badge.up{background:var(--tv-up-bg);color:var(--tv-up);}
 .dir-badge.down{background:var(--tv-down-bg);color:var(--tv-down);}
