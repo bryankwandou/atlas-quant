@@ -304,10 +304,10 @@ export default function RightPanel() {
   const rpIsUp   = rpChange >= 0;
 
   const tabs = [
-    { id: 'signal',    label: 'Signal'    },
-    { id: 'watchlist', label: 'Watchlist' },
-    { id: 'ai',        label: 'AI'        },
-    { id: 'risk',      label: 'Risk'      },
+    { id: 'signal',    label: 'Signal',    icon: '⚡' },
+    { id: 'watchlist', label: 'Watchlist', icon: '👁' },
+    { id: 'ai',        label: 'AI',        icon: '🤖' },
+    { id: 'risk',      label: 'Risk',      icon: '🛡' },
   ];
 
   // ── Risk param keys aligned to userStore ────────────────────────────────
@@ -348,7 +348,8 @@ export default function RightPanel() {
             className={`rp-tab${rightPanelTab === tab.id ? ' active' : ''}`}
             onClick={() => setRightPanelTab(tab.id)}
           >
-            {tab.label}
+            <span className="rp-tab-icon">{tab.icon}</span>
+            <span>{tab.label}</span>
           </button>
         ))}
       </div>
