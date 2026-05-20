@@ -1023,8 +1023,11 @@ select{cursor:pointer;}
 .ai-score-bar-wrap{flex:1;height:4px;background:var(--tv-bg3);border-radius:2px;overflow:hidden;}
 .ai-score-bar{height:100%;border-radius:2px;transition:width .5s;}
 .ai-score-val{font-family:'Roboto Mono',monospace;font-size:9px;width:32px;text-align:right;}
+.ai-risk-scores{display:flex;flex-direction:column;gap:6px;}
+.ai-chart-read-btn-wrap{width:100%;}
 /* Risk */
 .rp-risk{display:flex;flex-direction:column;gap:10px;}
+.risk-status-row{display:flex;align-items:center;}
 .risk-status-badge{padding:6px 12px;border-radius:4px;border:1px solid;font-size:11px;font-weight:600;display:inline-flex;}
 .risk-params{display:flex;flex-direction:column;gap:6px;background:var(--tv-bg3);border-radius:6px;padding:10px;}
 .risk-param-row{display:flex;align-items:center;gap:8px;}

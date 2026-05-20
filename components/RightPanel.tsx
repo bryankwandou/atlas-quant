@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Power, Bot } from 'lucide-react';
+import { RefreshCw, Power, Bot, Activity } from 'lucide-react';
 import { useChartStore } from '@/store/chartStore';
 import { useUserStore } from '@/store/userStore';
 import { useMarketData, useMarketPrice } from '@/hooks/useMarketData';
@@ -506,142 +506,127 @@ export default function RightPanel() {
             AI TAB
         ════════════════════════════════════════════════════════════════ */}
         {rightPanelTab === 'ai' && (
-          <>
-            <div className="section-hdr">AI Scores</div>
+          <div className="rp-ai">
+            {/* Header */}
+            <div className="ai-header">
+              <div className="ai-model-badge">🤖 Llama-3.3-70B</div>
+              <span className="ai-status">● Live</span>
+            </div>
 
-            {aiScores ? (
-              <div className="ai-scores-wrap">
-                <ScoreBar label="Trend"      value={aiScores.trend}      variant="trend"      />
-                <ScoreBar label="Momentum"   value={aiScores.momentum}   variant="momentum"   />
-                <ScoreBar label="Volatility" value={aiScores.volatility} variant="volatility" />
-                <ScoreBar label="Volume"     value={aiScores.volume}     variant="volume"     />
-                <ScoreBar
-                  label="Overall"
-                  value={aiScores.signal}
-                  variant={sigType === 'BUY' ? 'buy' : sigType === 'SELL' ? 'sell' : 'neutral'}
-                />
+            {/* AI message / commentary */}
+            <div className="ai-message assistant">
+              <div className="ai-msg-label">ATLAS AI</div>
+              <div className="ai-msg-content">
+                {aiText || (
+                  sigType !== 'NEUTRAL'
+                    ? `${sigType} signal detected on ${symbol} with ${signal?.confidence ?? '—'}% confidence. Strategy: ${signal?.strategy?.replace(/_/g, ' ') ?? '—'}. Monitor nearest ${sigType === 'BUY' ? 'support' : 'resistance'} levels before entry.`
+                    : `${symbol} market is currently in consolidation. No strong signal detected. Wait for a breakout confirmation before entry.`
+                )}
               </div>
-            ) : (
-              <div className="rp-signal-loading">Waiting for candle data…</div>
-            )}
+            </div>
 
-            <button
-              type="button"
-              className="ai-btn ai-btn-mt"
-              onClick={handleAiReadChart}
-              disabled={aiLoading}
-            >
-              {aiLoading ? (
-                <span className="ai-btn-loading">
-                  <div className="spinner spinner-sm" />
-                  Reading chart…
-                </span>
-              ) : (
-                <span className="ai-btn-loading">
-                  <Bot size={12} />
-                  Read Chart
-                </span>
-              )}
-            </button>
+            {/* Read Chart button */}
+            <div className="ai-chart-read-btn-wrap">
+              <button
+                type="button"
+                className="ai-read-btn"
+                onClick={handleAiReadChart}
+                disabled={aiLoading}
+              >
+                <Activity size={13} />
+                <span>{aiLoading ? 'Reading chart…' : 'Read Chart'}</span>
+              </button>
+            </div>
 
-            {aiText ? (
-              <div className="ai-commentary">{aiText}</div>
-            ) : !aiLoading && (
-              <div className="rp-signal-loading">
-                Click &quot;Read Chart&quot; for deep AI analysis of current market structure.
+            {/* AI risk scores */}
+            {aiScores && (
+              <div className="ai-risk-scores">
+                {[
+                  { label: 'Signal Strength', val: aiScores.signal,           color: '#089981' },
+                  { label: 'Risk Level',       val: 100 - aiScores.signal,    color: '#f23645' },
+                  { label: 'ATLAS Score',      val: aiScores.trend,           color: '#2962ff' },
+                ].map(({ label, val, color }) => (
+                  <div key={label} className="ai-score-row">
+                    <span className="ai-score-label">{label}</span>
+                    <div className="ai-score-bar-wrap">
+                      <div className="ai-score-bar" style={{ width: `${Math.round(val)}%`, background: color }} />
+                    </div>
+                    <span className="ai-score-val mono">{Math.round(val)}%</span>
+                  </div>
+                ))}
               </div>
             )}
-
-            {/* Multi-TF confirmation */}
-            <div className="section-hdr section-hdr-mt">Multi-TF Confirmation</div>
-            {(['4h', '1d'] as const).map(tf => {
-              const closes   = candles?.map((c: any) => c.close as number) ?? [];
-              const last     = closes.length - 1;
-              const prev     = closes[last - Math.min(5, last)] ?? closes[last];
-              const momentum = last > 0 ? ((closes[last] - prev) / (prev || 1)) * 100 : 0;
-              const type     = momentum > 0.3 ? 'BUY' : momentum < -0.3 ? 'SELL' : 'NEUTRAL';
-              return (
-                <div key={tf} className="rp-level-row">
-                  <span className="rp-regime-adx">{tf}</span>
-                  <span className={`tf-mini-badge${type === 'BUY' ? ' buy' : type === 'SELL' ? ' sell' : ' neutral'}`}>
-                    {type}
-                  </span>
-                </div>
-              );
-            })}
-          </>
+          </div>
         )}
 
         {/* ════════════════════════════════════════════════════════════════
             RISK TAB
         ════════════════════════════════════════════════════════════════ */}
         {rightPanelTab === 'risk' && (
-          <>
-            <div className="section-hdr">Risk Parameters</div>
-
-            {riskParams.map(({ label, key, suffix, step, min }) => (
-              <div key={key} className="rp-level-row">
-                <span className="rp-ind-lbl">{label}</span>
-                <div className="risk-input-wrap">
-                  <input
-                    className="risk-input"
-                    type="number"
-                    value={riskStoreSnapshot[key]}
-                    step={step}
-                    min={min}
-                    onChange={e => updateRisk({ [key]: parseFloat(e.target.value) || 0 })}
-                  />
-                  {suffix && <span className="risk-suffix">{suffix}</span>}
-                </div>
+          <div className="rp-risk">
+            {/* Trade status badge */}
+            <div className="risk-status-row">
+              <div
+                className="risk-status-badge"
+                style={{
+                  background:   killActive ? 'rgba(242,54,69,.15)'    : 'rgba(8,153,129,.15)',
+                  color:        killActive ? '#f23645'                 : '#089981',
+                  borderColor:  killActive ? 'rgba(242,54,69,.3)'      : 'rgba(8,153,129,.3)',
+                }}
+              >
+                {killActive ? '✕ Kill Switch Active' : '✓ Trade Allowed'}
               </div>
-            ))}
-
-            {/* Today's stats (mock) */}
-            <div className="section-hdr section-hdr-mt">Today&apos;s Stats</div>
-            {[
-              { label: 'Trades Today', value: '0',                                      cls: ''                               },
-              { label: 'PnL Today',    value: '0.00%',                                  cls: ''                               },
-              { label: 'Drawdown',     value: '0.00%',                                  cls: ''                               },
-              { label: 'Status',       value: killActive ? 'KILL SWITCH' : 'ACTIVE',    cls: killActive ? 'down' : 'up'       },
-            ].map(({ label, value, cls }) => (
-              <div key={label} className="rp-level-row">
-                <span className="rp-ind-lbl">{label}</span>
-                <span className={`rp-level-val mono ${cls}`}>{value}</span>
-              </div>
-            ))}
-
-            {/* Kelly fraction */}
-            <div className="section-hdr section-hdr-mt">Kelly Sizing</div>
-            <div className="rp-signal-footer rp-signal-footer-left">
-              Kelly = (WR × avgWin − (1−WR) × avgLoss) / avgWin
             </div>
-            <div className="rp-level-row">
-              <span className="rp-ind-lbl">Kelly %</span>
-              <span className="rp-level-val mono blue">
-                {(() => {
-                  const wr = 0.5;
-                  const avgW = riskPerTrade * 2;
-                  const avgL = riskPerTrade;
-                  const kelly = ((wr * avgW - (1 - wr) * avgL) / avgW) * 100;
-                  return `${kelly.toFixed(1)}%`;
-                })()}
-              </span>
+
+            {/* Risk params */}
+            <div className="risk-params">
+              {riskParams.map(({ label, key, suffix, step, min }) => (
+                <div key={key} className="risk-param-row">
+                  <span className="risk-param-icon">📊</span>
+                  <span className="risk-param-label">{label}</span>
+                  <div className="risk-input-wrap">
+                    <input
+                      className="risk-input"
+                      type="number"
+                      value={riskStoreSnapshot[key]}
+                      step={step}
+                      min={min}
+                      onChange={e => updateRisk({ [key]: parseFloat(e.target.value) || 0 })}
+                    />
+                    {suffix && <span className="risk-suffix">{suffix}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Today's stats */}
+            <div className="risk-today">
+              <div className="risk-today-title">Today</div>
+              <div className="risk-today-stats">
+                {[
+                  { label: 'Trades', val: '0',  cls: ''   },
+                  { label: 'PnL',    val: '—',  cls: ''   },
+                  { label: 'Win',    val: '0/0', cls: ''   },
+                  { label: 'Win%',   val: '0%',  cls: ''   },
+                ].map(({ label, val, cls }) => (
+                  <div key={label} className="risk-today-item">
+                    <div className={`risk-today-val mono${cls ? ` ${cls}` : ''}`}>{val}</div>
+                    <div className="risk-today-label">{label}</div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Kill switch */}
             <button
               type="button"
-              className={`kill-switch kill-switch-mt${killActive ? ' active' : ''}`}
+              className="kill-switch-btn"
               onClick={() => setKillActive(k => !k)}
             >
-              <Power size={13} />
-              {killActive ? 'KILL SWITCH ACTIVE — Click to Reset' : 'KILL SWITCH (Stop All)'}
+              <Power size={14} />
+              <span>{killActive ? 'Deactivate Kill Switch' : 'Kill Switch (Stop All)'}</span>
             </button>
-
-            <div className="rp-signal-footer rp-signal-footer-mt">
-              No auto trading. Manual execution only.
-            </div>
-          </>
+          </div>
         )}
 
       </div>
