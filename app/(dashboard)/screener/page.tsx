@@ -34,10 +34,10 @@ function PriceCell({ symbol }: { symbol: string }) {
     refreshInterval: 15000,
     revalidateOnFocus: false,
   });
-  if (!data?.price) return <span style={{ color: 'var(--text-muted)' }}>—</span>;
+  if (!data?.price) return <span className="screener-price-muted">—</span>;
   const isUp = (data.change24h || 0) >= 0;
   return (
-    <span style={{ fontFamily: 'monospace', color: isUp ? 'var(--buy)' : 'var(--sell)' }}>
+    <span className={`screener-td-mono ${isUp ? 'screener-price-up' : 'screener-price-down'}`}>
       {Number(data.price).toLocaleString('en-US', { maximumFractionDigits: 6 })}
     </span>
   );
@@ -48,10 +48,10 @@ function ChangeCell({ symbol }: { symbol: string }) {
     refreshInterval: 15000,
     revalidateOnFocus: false,
   });
-  if (data?.change24h == null) return <span style={{ color: 'var(--text-muted)' }}>—</span>;
+  if (data?.change24h == null) return <span className="screener-price-muted">—</span>;
   const c = Number(data.change24h);
   return (
-    <span style={{ fontFamily: 'monospace', color: c >= 0 ? 'var(--buy)' : 'var(--sell)' }}>
+    <span className={`screener-td-mono ${c >= 0 ? 'screener-price-up' : 'screener-price-down'}`}>
       {c >= 0 ? '+' : ''}{c.toFixed(2)}%
     </span>
   );
@@ -67,7 +67,6 @@ export default function ScreenerPage() {
   const loadSymbols = useCallback(async (tab: string) => {
     setLoading(true);
     try {
-      // Try to get from symbol catalog API first
       const res = await fetch(`/api/market/symbols?assetClass=${tab}&limit=100`);
       const data = await res.json();
       if (data.symbols && data.symbols.length > 0) {
@@ -76,7 +75,6 @@ export default function ScreenerPage() {
       }
     } catch {}
 
-    // Fallback: direct Binance for crypto/memecoin
     if (tab === 'crypto' || tab === 'memecoin') {
       try {
         const res2 = await fetch('/api/market/symbols');
@@ -102,102 +100,84 @@ export default function ScreenerPage() {
 
   const handleSelect = (symbol: string) => {
     setSymbol(symbol);
-    // Optionally navigate to chart
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* Header */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--tv-border)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--tv-text)' }}>Market Screener</span>
-        <div style={{ flex: 1 }} />
+    <div className="screener-wrap">
+      <div className="screener-header">
+        <span className="screener-title">Market Screener</span>
+        <div className="screener-spacer" />
         <input
           placeholder="Search symbol or name..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{
-            height: 28, padding: '0 10px', fontSize: 11, borderRadius: 4,
-            border: '1px solid var(--tv-border)', background: 'var(--tv-bg2)',
-            color: 'var(--tv-text)', outline: 'none', width: 200,
-          }}
+          className="screener-search"
+          title="Search symbols"
         />
       </div>
 
-      {/* Asset class tabs */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--tv-border)', flexShrink: 0, overflowX: 'auto' }}>
+      <div className="screener-tabs">
         {ASSET_TABS.map(tab => (
           <button
             key={tab.id}
+            type="button"
             onClick={() => setActiveTab(tab.id)}
-            style={{
-              padding: '7px 14px', fontSize: 11, fontWeight: activeTab === tab.id ? 600 : 400,
-              color: activeTab === tab.id ? 'var(--tv-accent)' : 'var(--tv-text2)',
-              borderBottom: activeTab === tab.id ? '2px solid var(--tv-accent)' : '2px solid transparent',
-              background: 'none', border: 'none', borderBottomWidth: 2,
-              borderBottomStyle: 'solid',
-              borderBottomColor: activeTab === tab.id ? 'var(--tv-accent)' : 'transparent',
-              cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s',
-            }}
+            className={`screener-tab-btn${activeTab === tab.id ? ' active' : ''}`}
           >
             {tab.emoji} {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Table */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-          <thead style={{ position: 'sticky', top: 0, background: 'var(--tv-bg2)', zIndex: 1 }}>
+      <div className="screener-table-wrap">
+        <table className="page-table">
+          <thead className="screener-sticky-head">
             <tr>
-              {['#', 'Symbol', 'Name', 'Exchange', 'Price', '24h Change', 'Volume', 'Action'].map((h, i) => (
-                <th key={h} style={{
-                  padding: '7px 8px', textAlign: i > 3 ? 'right' : 'left',
-                  color: 'var(--tv-text2)', fontWeight: 500, fontSize: 10,
-                  borderBottom: '1px solid var(--tv-border)', whiteSpace: 'nowrap',
-                  textTransform: 'uppercase', letterSpacing: '0.05em',
-                }}>{h}</th>
+              {[
+                { h: '#',         right: false },
+                { h: 'Symbol',    right: false },
+                { h: 'Name',      right: false },
+                { h: 'Exchange',  right: false },
+                { h: 'Price',     right: true  },
+                { h: '24h Change',right: true  },
+                { h: 'Volume',    right: true  },
+                { h: 'Action',    right: true  },
+              ].map(({ h, right }) => (
+                <th key={h} className={`screener-th${right ? ' screener-th-right' : ''}`}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} style={{ padding: 24, color: 'var(--tv-text2)', textAlign: 'center' }}>Loading...</td></tr>
+              <tr><td colSpan={8} className="screener-loading">Loading...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={8} style={{ padding: 24, color: 'var(--tv-text2)', textAlign: 'center' }}>No symbols found</td></tr>
+              <tr><td colSpan={8} className="screener-loading">No symbols found</td></tr>
             ) : filtered.map((s, i) => (
-              <tr
-                key={s.symbol}
-                style={{ borderBottom: '1px solid var(--tv-border)', cursor: 'pointer', transition: 'background 0.1s' }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--tv-bg3)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-              >
-                <td style={{ padding: '5px 8px', color: 'var(--tv-text2)', width: 36 }}>{i + 1}</td>
-                <td style={{ padding: '5px 8px', fontWeight: 600, color: 'var(--tv-text)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{s.symbol}</td>
-                <td style={{ padding: '5px 8px', color: 'var(--tv-text2)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name || '—'}</td>
-                <td style={{ padding: '5px 8px', color: 'var(--tv-text2)', fontSize: 10 }}>{s.exchange || '—'}</td>
-                <td style={{ padding: '5px 8px', textAlign: 'right' }}>
+              <tr key={s.symbol} className="screener-row">
+                <td className="screener-td screener-td-num">{i + 1}</td>
+                <td className="screener-td screener-td-sym">{s.symbol}</td>
+                <td className="screener-td screener-td-name">{s.name || '—'}</td>
+                <td className="screener-td screener-td-exc">{s.exchange || '—'}</td>
+                <td className="screener-td screener-td-right">
                   {s.price != null ? (
-                    <span style={{ fontFamily: 'monospace' }}>{Number(s.price).toLocaleString('en-US', { maximumFractionDigits: 6 })}</span>
+                    <span className="screener-td-mono">{Number(s.price).toLocaleString('en-US', { maximumFractionDigits: 6 })}</span>
                   ) : <PriceCell symbol={s.symbol} />}
                 </td>
-                <td style={{ padding: '5px 8px', textAlign: 'right' }}>
+                <td className="screener-td screener-td-right">
                   {s.change24h != null ? (
-                    <span style={{ fontFamily: 'monospace', color: s.change24h >= 0 ? 'var(--tv-up)' : 'var(--tv-down)' }}>
+                    <span className={`screener-td-mono ${s.change24h >= 0 ? 'screener-price-up' : 'screener-price-down'}`}>
                       {s.change24h >= 0 ? '+' : ''}{Number(s.change24h).toFixed(2)}%
                     </span>
                   ) : <ChangeCell symbol={s.symbol} />}
                 </td>
-                <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--tv-text2)', fontFamily: 'monospace' }}>
+                <td className="screener-td screener-td-vol">
                   {s.volume24h != null && s.volume24h > 0 ? `${(s.volume24h / 1e6).toFixed(1)}M` : '—'}
                 </td>
-                <td style={{ padding: '5px 8px', textAlign: 'right' }}>
+                <td className="screener-td screener-td-right">
                   <button
+                    type="button"
                     onClick={() => handleSelect(s.symbol)}
-                    style={{
-                      padding: '2px 10px', fontSize: 10, fontWeight: 600,
-                      background: 'var(--tv-accent-transparent)', color: 'var(--tv-accent)',
-                      border: '1px solid var(--tv-accent)', borderRadius: 3, cursor: 'pointer',
-                    }}
+                    className="screener-chart-btn"
                   >
                     Chart
                   </button>

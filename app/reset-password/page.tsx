@@ -98,7 +98,7 @@ export default function ResetPasswordPage() {
           {/* Logo */}
           <div className="auth-logo">
             <div className="auth-logo-title">
-              <span style={{ color: '#2962ff' }}>ATLAS</span>
+              <span className="atlas-blue">ATLAS</span>
               <span>-QUANT</span>
             </div>
             <div className="auth-logo-sub">NEW PASSWORD</div>
@@ -112,7 +112,7 @@ export default function ResetPasswordPage() {
             </>
           ) : (
             <form onSubmit={handleSubmit} noValidate>
-              <p style={{ fontSize: 12, color: '#787b86', marginBottom: 20, lineHeight: 1.6 }}>
+              <p className="auth-help-text">
                 Choose a strong new password for your account.
               </p>
 
@@ -153,7 +153,7 @@ export default function ResetPasswordPage() {
                   required
                 />
                 {confirm && newPassword !== confirm && (
-                  <div style={{ fontSize: 10, color: '#f23645', marginTop: 4 }}>
+                  <div className="auth-field-error">
                     Passwords do not match
                   </div>
                 )}

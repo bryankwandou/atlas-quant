@@ -196,7 +196,7 @@ export default function LoginPage() {
           {/* Logo */}
           <div className="auth-logo">
             <div className="auth-logo-title">
-              <span style={{ color: '#2962ff' }}>ATLAS</span>
+              <span className="atlas-blue">ATLAS</span>
               <span>-QUANT</span>
             </div>
             <div className="auth-logo-sub">QUANTITATIVE TRADING PLATFORM</div>
@@ -227,25 +227,24 @@ export default function LoginPage() {
               ) : (
                 <>
                   <button
-                    className="auth-btn auth-btn-wallet"
+                    className="auth-btn auth-btn-wallet auth-btn-mb"
                     onClick={handleWalletLogin}
                     disabled={loading}
                     type="button"
-                    style={{ marginBottom: 8 }}
                   >
                     {loading ? 'Signing…' : 'Sign & Authenticate'}
                   </button>
                   <button
                     type="button"
                     onClick={handleDisconnect}
-                    style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #2a2e39', background: 'transparent', color: '#4a5568', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}
+                    className="auth-disconnect-btn"
                   >
                     Disconnect
                   </button>
                 </>
               )}
               {!phantomAvailable && !walletPubkey && (
-                <p className="auth-footer" style={{ marginTop: 12 }}>
+                <p className="auth-footer auth-footer-mt">
                   <a href="https://phantom.app" target="_blank" rel="noopener noreferrer" className="auth-link">
                     Install Phantom
                   </a>{' '}
@@ -286,8 +285,8 @@ export default function LoginPage() {
                   required
                 />
               </div>
-              <div style={{ textAlign: 'right', marginBottom: 14 }}>
-                <a href="/forgot-password" className="auth-link" style={{ fontSize: 11 }}>
+              <div className="auth-forgot-wrap">
+                <a href="/forgot-password" className="auth-link auth-link-sm">
                   Forgot password?
                 </a>
               </div>
@@ -332,8 +331,8 @@ export default function LoginPage() {
                   required
                 />
               </div>
-              <div style={{ textAlign: 'right', marginBottom: 14 }}>
-                <a href="/forgot-password" className="auth-link" style={{ fontSize: 11 }}>
+              <div className="auth-forgot-wrap">
+                <a href="/forgot-password" className="auth-link auth-link-sm">
                   Forgot password?
                 </a>
               </div>
@@ -348,7 +347,7 @@ export default function LoginPage() {
           )}
 
           {/* Feedback */}
-          {info && <div className="auth-success" style={{ marginTop: 14 }}>{info}</div>}
+          {info && <div className="auth-success auth-success-mt">{info}</div>}
           {error && <div className="auth-error">{error}</div>}
         </div>
       </div>

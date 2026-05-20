@@ -123,14 +123,14 @@ export default function TopBar() {
       </div>
 
       {/* ── Symbol Selector ───────────────────────────────── */}
-      <div className="topbar-symbol-wrap" ref={symWrapRef} style={{ position: 'relative' }}>
+      <div className="topbar-symbol-wrap" ref={symWrapRef}>
         <button
           className="topbar-symbol-btn"
           onClick={() => setShowSymSearch(v => !v)}
         >
           <span className="sym-exchange">BINANCE</span>
           <span className="sym-name">{symbol}</span>
-          <ChevronDown size={11} style={{ opacity: 0.6 }} />
+          <ChevronDown size={11} className="topbar-chevron" />
         </button>
 
         {/* Price info */}
@@ -147,7 +147,7 @@ export default function TopBar() {
         {showSymSearch && (
           <div className="symbol-search-panel">
             <div className="sym-search-header">
-              <Search size={13} style={{ opacity: 0.5, flexShrink: 0 }} />
+              <Search size={13} className="topbar-search-icon" />
               <input
                 ref={searchRef}
                 className="sym-search-input"
@@ -186,7 +186,7 @@ export default function TopBar() {
                 </div>
               ))}
               {searchResults.length === 0 && searchVal.length > 0 && (
-                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--tv-text2)', fontSize: 11 }}>
+                <div className="topbar-no-results">
                   {lang === 'id' ? 'Tidak ditemukan' : 'No results'}
                 </div>
               )}
@@ -198,7 +198,7 @@ export default function TopBar() {
       <div className="topbar-sep" />
 
       {/* ── Timeframe ─────────────────────────────────────── */}
-      <div className="topbar-tf-wrap" ref={tfWrapRef} style={{ position: 'relative' }}>
+      <div className="topbar-tf-wrap" ref={tfWrapRef}>
         <div className="tf-quick-btns">
           {QUICK_TFS.map(tf => (
             <button
@@ -276,7 +276,7 @@ export default function TopBar() {
       </div>
 
       {/* ── Spacer ────────────────────────────────────────── */}
-      <div style={{ flex: 1 }} />
+      <div className="topbar-spacer" />
 
       {/* ── Right Controls ────────────────────────────────── */}
       <div className="topbar-right">
@@ -308,9 +308,8 @@ export default function TopBar() {
 
         <a
           href="/settings"
-          className="topbar-right-btn"
+          className="topbar-right-btn topbar-settings-link"
           title={lang === 'id' ? 'Pengaturan' : 'Settings'}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', color: 'inherit' }}
         >
           <Settings size={14} />
         </a>

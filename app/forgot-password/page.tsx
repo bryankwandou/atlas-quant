@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
           {/* Logo */}
           <div className="auth-logo">
             <div className="auth-logo-title">
-              <span style={{ color: '#2962ff' }}>ATLAS</span>
+              <span className="atlas-blue">ATLAS</span>
               <span>-QUANT</span>
             </div>
             <div className="auth-logo-sub">RESET PASSWORD</div>
@@ -61,13 +61,13 @@ export default function ForgotPasswordPage() {
               <div className="auth-success">
                 Check your email for a password reset link. It may take a few minutes to arrive.
               </div>
-              <div className="auth-footer" style={{ marginTop: 20 }}>
+              <div className="auth-footer auth-footer-mt-lg">
                 <a href="/login" className="auth-link">Back to Login</a>
               </div>
             </>
           ) : (
             <form onSubmit={handleSubmit} noValidate>
-              <p style={{ fontSize: 12, color: '#787b86', marginBottom: 20, lineHeight: 1.6 }}>
+              <p className="auth-help-text">
                 Enter your email address or username and we&apos;ll send you a link to reset your password.
               </p>
 

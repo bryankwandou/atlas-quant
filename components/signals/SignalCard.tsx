@@ -26,79 +26,77 @@ export default function SignalCard({ signal }: SignalCardProps) {
   const isNeutral = signal.signal_type === 'NEUTRAL';
   const sigClass  = isBuy ? 'signal-buy' : isSell ? 'signal-sell' : 'signal-neutral';
   const borderClass = isBuy ? 'border-buy' : isSell ? 'border-sell' : 'border-neutral';
+  const fillClass = isBuy ? 'conf-fill-buy' : isSell ? 'conf-fill-sell' : 'conf-fill-neutral';
 
   return (
-    <div className={`card fade-in ${borderClass}`} style={{ marginBottom: 8 }}>
+    <div className={`card fade-in ${borderClass} sc-mb`}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <span style={{ fontWeight: 600, fontSize: 13 }}>
+      <div className="sc-header">
+        <div className="sc-header-left">
+          <span className="sc-symbol">
             {signal.symbol} · {signal.timeframe}
           </span>
-          <span className={`${sigClass}`} style={{ padding: '2px 8px', borderRadius: 3, fontSize: 11, fontWeight: 700 }}>
+          <span className={`${sigClass} sc-badge`}>
             {t(`signal.${signal.signal_type.toLowerCase()}`)}
           </span>
         </div>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+        <span className="sc-conf-pct">
           {signal.confidence}%
         </span>
       </div>
 
       {/* Confidence bar */}
-      <div className="confidence-bar" style={{ marginBottom: 10 }}>
-        <div className="confidence-fill" style={{
-          width: `${signal.confidence}%`,
-          background: isBuy ? 'var(--buy)' : isSell ? 'var(--sell)' : 'var(--neutral)',
-        }} />
+      <div className={`confidence-bar sc-conf-bar-mb`}>
+        <div className={`confidence-fill ${fillClass}`} style={{ width: `${signal.confidence}%` }} />
       </div>
 
       {/* Levels */}
       {!isNeutral && signal.entry_price && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8, fontSize: 12 }}>
+        <div className="sc-levels">
           <div>
-            <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>{t('signal.entry')}</div>
-            <div className="mono" style={{ fontWeight: 500 }}>
+            <div className="sc-sublabel">{t('signal.entry')}</div>
+            <div className="mono sc-val">
               ${signal.entry_price?.toLocaleString(undefined, { maximumFractionDigits: 6 })}
             </div>
           </div>
           <div>
-            <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>R:R</div>
-            <div className="mono" style={{ color: 'var(--accent)' }}>1:{signal.rr_ratio}</div>
+            <div className="sc-sublabel">R:R</div>
+            <div className="mono sc-rr">1:{signal.rr_ratio}</div>
           </div>
           {signal.tp1 && (
             <div>
-              <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>TP1</div>
+              <div className="sc-sublabel">TP1</div>
               <div className="mono text-buy">${signal.tp1?.toLocaleString(undefined, { maximumFractionDigits: 6 })}</div>
             </div>
           )}
           {signal.tp2 && (
             <div>
-              <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>TP2</div>
+              <div className="sc-sublabel">TP2</div>
               <div className="mono text-buy">${signal.tp2?.toLocaleString(undefined, { maximumFractionDigits: 6 })}</div>
             </div>
           )}
           {signal.sl && (
             <div>
-              <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>{t('signal.sl')}</div>
+              <div className="sc-sublabel">{t('signal.sl')}</div>
               <div className="mono text-sell">${signal.sl?.toLocaleString(undefined, { maximumFractionDigits: 6 })}</div>
             </div>
           )}
           {signal.regime && (
             <div>
-              <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>{t('signal.regime')}</div>
-              <div style={{ fontSize: 11 }}>{t(`regime.${signal.regime}`) || signal.regime}</div>
+              <div className="sc-sublabel">{t('signal.regime')}</div>
+              <div className="sc-regime-val">{t(`regime.${signal.regime}`) || signal.regime}</div>
             </div>
           )}
         </div>
       )}
 
       {/* Strategy badge */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: 2 }}>
+      <div className="sc-footer">
+        <span className="sc-strategy-badge">
           {signal.strategy}
         </span>
         {signal.generated_at && (
-          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+          <span className="sc-time">
             {new Date(signal.generated_at).toLocaleTimeString()}
           </span>
         )}
@@ -106,7 +104,7 @@ export default function SignalCard({ signal }: SignalCardProps) {
 
       {/* AI Analysis */}
       {signal.ai_analysis && (
-        <div style={{ marginTop: 8, padding: '6px 8px', background: 'var(--bg-tertiary)', borderRadius: 4, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+        <div className="sc-ai">
           🤖 {signal.ai_analysis}
         </div>
       )}

@@ -94,16 +94,16 @@ export default function RegisterPage() {
     return (
       <div className="auth-root">
         <div className="auth-card">
-          <div className="auth-body" style={{ textAlign: 'center' }}>
+          <div className="auth-body auth-body-center">
             <div className="auth-logo">
               <div className="auth-logo-title">
-                <span style={{ color: '#2962ff' }}>ATLAS</span>
+                <span className="atlas-blue">ATLAS</span>
                 <span>-QUANT</span>
               </div>
               <div className="auth-logo-sub">QUANTITATIVE TRADING PLATFORM</div>
             </div>
-            <div style={{ fontSize: 40, marginBottom: 16 }}>✅</div>
-            <div className="auth-success" style={{ marginBottom: 20, textAlign: 'left' }}>
+            <div className="auth-success-icon">✅</div>
+            <div className="auth-success auth-success-mb">
               Account created successfully! You can now log in with your credentials.
             </div>
             <a href="/login">
@@ -124,7 +124,7 @@ export default function RegisterPage() {
           {/* Logo */}
           <div className="auth-logo">
             <div className="auth-logo-title">
-              <span style={{ color: '#2962ff' }}>ATLAS</span>
+              <span className="atlas-blue">ATLAS</span>
               <span>-QUANT</span>
             </div>
             <div className="auth-logo-sub">CREATE ACCOUNT</div>
@@ -146,7 +146,7 @@ export default function RegisterPage() {
                 required
               />
               {username && !USERNAME_RE.test(username) && (
-                <div style={{ fontSize: 10, color: '#f23645', marginTop: 4 }}>
+                <div className="auth-field-error">
                   3-20 chars, letters/numbers/underscore only
                 </div>
               )}
@@ -205,7 +205,7 @@ export default function RegisterPage() {
                 required
               />
               {confirm && password !== confirm && (
-                <div style={{ fontSize: 10, color: '#f23645', marginTop: 4 }}>
+                <div className="auth-field-error">
                   Passwords do not match
                 </div>
               )}
@@ -215,7 +215,6 @@ export default function RegisterPage() {
               className="auth-btn auth-btn-primary"
               type="submit"
               disabled={loading}
-              style={{ marginTop: 6 }}
             >
               {loading ? 'Creating account…' : 'Create Account'}
             </button>

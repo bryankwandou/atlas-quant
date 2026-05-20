@@ -324,12 +324,12 @@ export default function IndicatorModal() {
           <div className="indmod-title">
             <Layers size={14} />
             <span>Indicators</span>
-            <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--tv-text2, #787b86)', fontWeight: 500 }}>
+            <span className="indmod-count">
               {totalRegistryCount}+ available
             </span>
           </div>
           <div className="indmod-search-wrap">
-            <Search size={12} style={{ opacity: 0.5, flexShrink: 0 }} />
+            <Search size={12} className="indmod-search-icon" />
             <input
               className="indmod-search ind-search"
               placeholder="Search indicators, scripts, oscillators…"
@@ -360,7 +360,7 @@ export default function IndicatorModal() {
                     style={activeCat === cat.id ? { borderLeftColor: cat.color } : {}}
                   >
                     {cat.source === 'library' ? (
-                      <Library size={10} style={{ opacity: 0.6, marginRight: 4 }} />
+                      <Library size={10} className="indmod-lib-icon" />
                     ) : (
                       <span className="indmod-cat-dot" style={{ background: cat.color }} />
                     )}
@@ -370,7 +370,7 @@ export default function IndicatorModal() {
                         {count}
                       </span>
                     )}
-                    <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--tv-text2, #787b86)', opacity: 0.55 }}>
+                    <span className="indmod-cat-count-num">
                       {cat.items.length}
                     </span>
                   </button>
@@ -389,7 +389,6 @@ export default function IndicatorModal() {
                 title={item.desc}
                 onMouseEnter={() => setTooltip(item.desc)}
                 onMouseLeave={() => setTooltip(null)}
-                style={item.disabled ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
               >
                 <div className="indmod-item-left">
                   <div
@@ -406,14 +405,14 @@ export default function IndicatorModal() {
                     <div className="indmod-item-id">
                       {item.id}
                       {(item as any).author && (
-                        <span style={{ marginLeft: 8, opacity: 0.6 }}>· {(item as any).author}</span>
+                        <span className="indmod-item-author">· {(item as any).author}</span>
                       )}
                     </div>
                   </div>
                 </div>
-                <div className="indmod-item-right" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div className="indmod-item-right indmod-item-right-wrap">
                   {item.disabled && (
-                    <span className="indmod-default-badge" style={{ background: 'var(--tv-bg3)', color: 'var(--tv-text2)' }}>
+                    <span className="indmod-default-badge indmod-soon-badge">
                       Soon
                     </span>
                   )}
@@ -422,7 +421,7 @@ export default function IndicatorModal() {
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setParamFor(item.id); }}
                       title="Configure parameters"
-                      style={{ background: 'transparent', border: '1px solid #2a2e39', borderRadius: 4, padding: 4, color: '#787b86', cursor: 'pointer' }}
+                      className="indmod-cfg-btn"
                     >
                       <Settings size={11} />
                     </button>

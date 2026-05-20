@@ -6,7 +6,6 @@ import { INDICATOR_INDEX } from '@/src/core/indicators/registry';
 import { resolveSchema, type ParamField, type ParamSchema } from '@/src/core/indicators/paramSchema';
 
 interface Props {
-  /** Registry id, e.g. "rsi_14" / "bb_20_2" / "ema_50_lux". null = closed. */
   presetId: string | null;
   onClose: () => void;
 }
@@ -41,7 +40,7 @@ export default function IndicatorParamModal({ presetId, onClose }: Props) {
   if (!schema) {
     return (
       <div className="indicator-modal-overlay" onClick={onClose}>
-        <div className="indicator-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+        <div className="indicator-modal indmod-param-modal-sm" onClick={(e) => e.stopPropagation()}>
           <div className="indmod-header">
             <div className="indmod-title">
               <span>{preset.name}</span>
@@ -50,9 +49,9 @@ export default function IndicatorParamModal({ presetId, onClose }: Props) {
               <X size={15} />
             </button>
           </div>
-          <div className="indmod-body" style={{ flexDirection: 'column', padding: 24, color: 'var(--tv-text2, #787b86)' }}>
+          <div className="indmod-body indmod-no-params-body">
             <p>This indicator has no editable parameters.</p>
-            <p style={{ marginTop: 12, fontSize: 11 }}>{preset.description}</p>
+            <p className="indmod-no-params-desc">{preset.description}</p>
           </div>
           <div className="indmod-footer ind-modal-footer">
             <button type="button" className="indmod-apply-btn" onClick={onClose}>Close</button>
@@ -78,11 +77,11 @@ export default function IndicatorParamModal({ presetId, onClose }: Props) {
 
   return (
     <div className="indicator-modal-overlay" onClick={onClose}>
-      <div className="indicator-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+      <div className="indicator-modal indmod-param-modal" onClick={(e) => e.stopPropagation()}>
         <div className="indmod-header">
           <div className="indmod-title">
             <span>{preset.name}</span>
-            <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--tv-text2, #787b86)', fontWeight: 500 }}>
+            <span className="indmod-meta">
               · {schema.category} · {preset.author}
             </span>
           </div>
@@ -91,7 +90,7 @@ export default function IndicatorParamModal({ presetId, onClose }: Props) {
           </button>
         </div>
 
-        <div className="indmod-body" style={{ flexDirection: 'column', padding: '14px 16px', gap: 10 }}>
+        <div className="indmod-body indmod-body-params">
           {schema.fields.map((field) => (
             <ParamRow
               key={field.key}
@@ -102,12 +101,12 @@ export default function IndicatorParamModal({ presetId, onClose }: Props) {
           ))}
         </div>
 
-        <div className="indmod-footer ind-modal-footer" style={{ gap: 8 }}>
+        <div className="indmod-footer ind-modal-footer indmod-footer-gap">
           <button type="button" className="indmod-reset-btn" onClick={reset}>
-            <RotateCcw size={11} style={{ marginRight: 4 }} /> Reset
+            <RotateCcw size={11} className="btn-icon-mr" /> Reset
           </button>
           <button type="button" className="indmod-apply-btn" onClick={save}>
-            <Save size={11} style={{ marginRight: 4 }} /> Apply
+            <Save size={11} className="btn-icon-mr" /> Apply
           </button>
         </div>
       </div>
@@ -126,12 +125,11 @@ function ParamRow({
 }) {
   if (field.type === 'number') {
     return (
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <span style={{ fontSize: 11, color: 'var(--tv-text2, #787b86)' }}>{field.label}</span>
+      <label className="param-row-col">
+        <span className="param-row-label">{field.label}</span>
         <input
           type="number"
-          className="auth-input"
-          style={{ padding: '8px 10px', fontSize: 12 }}
+          className="auth-input param-input-sm"
           value={value as number}
           min={field.min}
           max={field.max}
@@ -143,8 +141,8 @@ function ParamRow({
   }
   if (field.type === 'boolean') {
     return (
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontSize: 11, color: 'var(--tv-text2, #787b86)' }}>{field.label}</span>
+      <label className="param-row-inline">
+        <span className="param-row-label">{field.label}</span>
         <input
           type="checkbox"
           checked={Boolean(value)}
@@ -155,11 +153,10 @@ function ParamRow({
   }
   if (field.type === 'select') {
     return (
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <span style={{ fontSize: 11, color: 'var(--tv-text2, #787b86)' }}>{field.label}</span>
+      <label className="param-row-col">
+        <span className="param-row-label">{field.label}</span>
         <select
-          className="auth-input"
-          style={{ padding: '8px 10px', fontSize: 12 }}
+          className="auth-input param-input-sm"
           value={value as string}
           onChange={(e) => onChange(e.target.value)}
         >
@@ -172,13 +169,13 @@ function ParamRow({
   }
   if (field.type === 'color') {
     return (
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontSize: 11, color: 'var(--tv-text2, #787b86)' }}>{field.label}</span>
+      <label className="param-row-inline">
+        <span className="param-row-label">{field.label}</span>
         <input
           type="color"
           value={value as string}
           onChange={(e) => onChange(e.target.value)}
-          style={{ width: 40, height: 28, border: '1px solid #2a2e39', borderRadius: 4, background: 'transparent' }}
+          className="param-color-input"
         />
       </label>
     );

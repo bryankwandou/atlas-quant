@@ -37,47 +37,47 @@ export default function JournalPage() {
   const totalPnl = closed.reduce((s: number, t: any) => s + (t.pnl || 0), 0);
   const winRate = closed.length > 0 ? (wins / closed.length * 100).toFixed(1) : '0';
 
+  const stats = [
+    { label: t('journal.total_trades'), value: closed.length, cls: '' },
+    { label: t('journal.win_rate'),     value: `${winRate}%`, cls: '' },
+    { label: t('journal.total_pnl'),    value: `$${totalPnl.toFixed(2)}`, cls: totalPnl >= 0 ? 'up' : 'down' },
+  ];
+
   return (
-    <div style={{ padding: 16, maxWidth: 1000, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>{t('nav.journal')}</h1>
+    <div className="page-wrap-lg">
+      <h1 className="page-title">{t('nav.journal')}</h1>
 
       {/* Stats */}
       {closed.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
-          {[
-            { label: t('journal.total_trades'), value: closed.length },
-            { label: t('journal.win_rate'), value: `${winRate}%` },
-            { label: t('journal.total_pnl'), value: `$${totalPnl.toFixed(2)}`, color: totalPnl >= 0 ? 'var(--buy)' : 'var(--sell)' },
-          ].map(stat => (
-            <div key={stat.label} className="card" style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{stat.label}</div>
-              <div style={{ fontSize: 16, fontWeight: 600, marginTop: 4, color: stat.color || 'var(--text-primary)', fontFamily: 'monospace' }}>
-                {stat.value}
-              </div>
+        <div className="stats-grid-3 card-mb-lg">
+          {stats.map(stat => (
+            <div key={stat.label} className="card stat-card">
+              <div className="stat-label-med">{stat.label}</div>
+              <div className={`stat-value-lg mono ${stat.cls}`}>{stat.value}</div>
             </div>
           ))}
         </div>
       )}
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="card" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>New Trade</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+      <form onSubmit={handleSubmit} className="card card-mb-lg">
+        <div className="card-title">New Trade</div>
+        <div className="form-grid-3">
           {[
-            { label: 'Symbol', key: 'symbol', type: 'text' },
-            { label: 'Direction', key: 'direction', type: 'select', options: ['LONG', 'SHORT'] },
+            { label: 'Symbol',      key: 'symbol',     type: 'text' },
+            { label: 'Direction',   key: 'direction',  type: 'select', options: ['LONG', 'SHORT'] },
             { label: 'Entry Price', key: 'entryPrice', type: 'number' },
-            { label: 'Quantity', key: 'quantity', type: 'number' },
-            { label: 'TP Price', key: 'tpPrice', type: 'number' },
-            { label: 'SL Price', key: 'slPrice', type: 'number' },
+            { label: 'Quantity',    key: 'quantity',   type: 'number' },
+            { label: 'TP Price',    key: 'tpPrice',    type: 'number' },
+            { label: 'SL Price',    key: 'slPrice',    type: 'number' },
           ].map(({ label, key, type, options }) => (
             <div key={key}>
-              <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>{label}</label>
+              <label className="form-label">{label}</label>
               {type === 'select' ? (
                 <select
                   value={(form as any)[key]}
                   onChange={e => setForm({ ...form, [key]: e.target.value })}
-                  style={{ width: '100%', padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 3, background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 12 }}
+                  className="form-input"
                 >
                   {(options || []).map(o => <option key={o}>{o}</option>)}
                 </select>
@@ -86,53 +86,53 @@ export default function JournalPage() {
                   type={type}
                   value={(form as any)[key]}
                   onChange={e => setForm({ ...form, [key]: e.target.value })}
-                  style={{ width: '100%', padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 3, background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 12 }}
+                  className="form-input"
                 />
               )}
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 8 }}>
-          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>Notes</label>
+        <div className="form-row-mt">
+          <label className="form-label">Notes</label>
           <textarea
             value={form.notes}
             onChange={e => setForm({ ...form, notes: e.target.value })}
             rows={2}
-            style={{ width: '100%', padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 3, background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 12, resize: 'vertical' }}
+            className="form-textarea"
           />
         </div>
-        <button type="submit" disabled={submitting} style={{ marginTop: 8, padding: '6px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+        <button type="submit" disabled={submitting} className="btn-primary btn-primary-mt">
           {submitting ? 'Saving...' : 'Add Trade'}
         </button>
       </form>
 
       {/* Trade Table */}
-      <div className="card" style={{ overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+      <div className="card card-overflow">
+        <table className="page-table">
           <thead>
-            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+            <tr className="page-table-tr">
               {['Symbol', 'Dir', 'Status', 'Entry', 'Exit', 'PnL', 'Notes', 'Date'].map(h => (
-                <th key={h} style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 500 }}>{h}</th>
+                <th key={h} className="page-table-th">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={8} style={{ padding: 12, color: 'var(--text-muted)' }}>{t('common.loading')}</td></tr>
+              <tr><td colSpan={8} className="page-table-td loading-msg">{t('common.loading')}</td></tr>
             ) : trades.length === 0 ? (
-              <tr><td colSpan={8} style={{ padding: 12, color: 'var(--text-muted)' }}>No trades yet.</td></tr>
+              <tr><td colSpan={8} className="page-table-td loading-msg">No trades yet.</td></tr>
             ) : trades.map((trade: any) => (
-              <tr key={trade.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '6px 8px', fontWeight: 500 }}>{trade.symbol}</td>
-                <td style={{ padding: '6px 8px', color: trade.direction === 'LONG' ? 'var(--buy)' : 'var(--sell)', fontWeight: 600 }}>{trade.direction}</td>
-                <td style={{ padding: '6px 8px' }}><span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 3, background: 'var(--bg-tertiary)' }}>{trade.status}</span></td>
-                <td style={{ padding: '6px 8px', fontFamily: 'monospace' }}>{trade.entry_price}</td>
-                <td style={{ padding: '6px 8px', fontFamily: 'monospace' }}>{trade.exit_price || '—'}</td>
-                <td style={{ padding: '6px 8px', fontFamily: 'monospace', color: (trade.pnl || 0) >= 0 ? 'var(--buy)' : 'var(--sell)' }}>
+              <tr key={trade.id} className="page-table-tr">
+                <td className="page-table-td td-sym">{trade.symbol}</td>
+                <td className={`page-table-td ${trade.direction === 'LONG' ? 'td-dir-buy' : 'td-dir-sell'}`}>{trade.direction}</td>
+                <td className="page-table-td"><span className="td-badge">{trade.status}</span></td>
+                <td className="page-table-td td-mono">{trade.entry_price}</td>
+                <td className="page-table-td td-mono">{trade.exit_price || '—'}</td>
+                <td className={`page-table-td td-mono ${(trade.pnl || 0) >= 0 ? 'up' : 'down'}`}>
                   {trade.pnl ? `$${trade.pnl.toFixed(2)}` : '—'}
                 </td>
-                <td style={{ padding: '6px 8px', color: 'var(--text-muted)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{trade.notes || '—'}</td>
-                <td style={{ padding: '6px 8px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                <td className="page-table-td td-muted td-noflow">{trade.notes || '—'}</td>
+                <td className="page-table-td td-muted td-nowrap">
                   {trade.entry_at ? new Date(trade.entry_at).toLocaleDateString() : '—'}
                 </td>
               </tr>

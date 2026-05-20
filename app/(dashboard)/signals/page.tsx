@@ -19,15 +19,14 @@ export default function SignalsPage() {
   };
 
   return (
-    <div style={{ padding: 16, maxWidth: 900, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>{t('nav.signals')}</h1>
+    <div className="page-wrap">
+      <h1 className="page-title">{t('nav.signals')}</h1>
 
-      {/* Controls */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div className="controls-row">
         <select
           value={symbol}
           onChange={e => setSymbol(e.target.value)}
-          style={{ padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 12 }}
+          className="form-select"
         >
           {DEFAULT_SYMBOLS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
@@ -35,7 +34,7 @@ export default function SignalsPage() {
         <select
           value={timeframe}
           onChange={e => setTimeframe(e.target.value)}
-          style={{ padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 12 }}
+          className="form-select"
         >
           {SUPPORTED_TIMEFRAMES.filter(tf => ['1m','5m','15m','1h','4h','1d'].includes(tf.value)).map(tf => (
             <option key={tf.value} value={tf.value}>{tf.label}</option>
@@ -43,30 +42,25 @@ export default function SignalsPage() {
         </select>
 
         <button
+          type="button"
           onClick={handleGenerate}
           disabled={loading}
-          style={{
-            padding: '5px 14px', background: 'var(--accent)', color: '#fff',
-            border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600,
-          }}
+          className="btn-primary"
         >
           {loading ? 'Generating...' : '⚡ Generate Signal'}
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
-        {/* Signals list */}
+      <div className="signals-grid">
         <div>
           {isLoading ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{t('common.loading')}</div>
+            <div className="loading-msg">{t('common.loading')}</div>
           ) : signals.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No signals yet. Click Generate Signal above.</div>
+            <div className="loading-msg">No signals yet. Click Generate Signal above.</div>
           ) : (
             signals.map((s: any) => <SignalCard key={s.id} signal={s} />)
           )}
         </div>
-
-        {/* Regime */}
         <div>
           <RegimeDisplay symbol={symbol} timeframe={timeframe} />
         </div>
