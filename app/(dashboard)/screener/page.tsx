@@ -34,10 +34,10 @@ function PriceCell({ symbol }: { symbol: string }) {
     refreshInterval: 15000,
     revalidateOnFocus: false,
   });
-  if (!data?.price) return <span className="screener-price-muted">—</span>;
+  if (!data?.price) return <span className="text-muted">—</span>;
   const isUp = (data.change24h || 0) >= 0;
   return (
-    <span className={`screener-td-mono ${isUp ? 'screener-price-up' : 'screener-price-down'}`}>
+    <span className={`mono ${isUp ? 'up' : 'down'}`}>
       {Number(data.price).toLocaleString('en-US', { maximumFractionDigits: 6 })}
     </span>
   );
@@ -48,10 +48,10 @@ function ChangeCell({ symbol }: { symbol: string }) {
     refreshInterval: 15000,
     revalidateOnFocus: false,
   });
-  if (data?.change24h == null) return <span className="screener-price-muted">—</span>;
+  if (data?.change24h == null) return <span className="text-muted">—</span>;
   const c = Number(data.change24h);
   return (
-    <span className={`screener-td-mono ${c >= 0 ? 'screener-price-up' : 'screener-price-down'}`}>
+    <span className={`mono ${c >= 0 ? 'up' : 'down'}`}>
       {c >= 0 ? '+' : ''}{c.toFixed(2)}%
     </span>
   );
@@ -71,6 +71,7 @@ export default function ScreenerPage() {
       const data = await res.json();
       if (data.symbols && data.symbols.length > 0) {
         setRows(data.symbols);
+        setLoading(false);
         return;
       }
     } catch {}
@@ -94,19 +95,18 @@ export default function ScreenerPage() {
   }, [activeTab, loadSymbols]);
 
   const filtered = rows.filter(s =>
-    !search || s.symbol.toLowerCase().includes(search.toLowerCase()) ||
+    !search ||
+    s.symbol.toLowerCase().includes(search.toLowerCase()) ||
     (s.name || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleSelect = (symbol: string) => {
-    setSymbol(symbol);
-  };
-
   return (
-    <div className="screener-wrap">
-      <div className="screener-header">
-        <span className="screener-title">Market Screener</span>
-        <div className="screener-spacer" />
+    <div className="panel-view">
+      <div className="panel-header">
+        <div className="panel-title">
+          <span>🔍</span>
+          <span>Market Screener</span>
+        </div>
         <input
           placeholder="Search symbol or name..."
           value={search}
@@ -130,53 +130,49 @@ export default function ScreenerPage() {
       </div>
 
       <div className="screener-table-wrap">
-        <table className="page-table">
-          <thead className="screener-sticky-head">
+        <table className="screener-table">
+          <thead>
             <tr>
-              {[
-                { h: '#',         right: false },
-                { h: 'Symbol',    right: false },
-                { h: 'Name',      right: false },
-                { h: 'Exchange',  right: false },
-                { h: 'Price',     right: true  },
-                { h: '24h Change',right: true  },
-                { h: 'Volume',    right: true  },
-                { h: 'Action',    right: true  },
-              ].map(({ h, right }) => (
-                <th key={h} className={`screener-th${right ? ' screener-th-right' : ''}`}>{h}</th>
-              ))}
+              <th>#</th>
+              <th>Symbol</th>
+              <th>Name</th>
+              <th>Exchange</th>
+              <th className="screener-th-right">Price</th>
+              <th className="screener-th-right">24h Change</th>
+              <th className="screener-th-right">Volume</th>
+              <th className="screener-th-right">Action</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="screener-loading">Loading...</td></tr>
+              <tr><td colSpan={8} className="text-muted">Loading...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={8} className="screener-loading">No symbols found</td></tr>
+              <tr><td colSpan={8} className="text-muted">No symbols found</td></tr>
             ) : filtered.map((s, i) => (
-              <tr key={s.symbol} className="screener-row">
-                <td className="screener-td screener-td-num">{i + 1}</td>
-                <td className="screener-td screener-td-sym">{s.symbol}</td>
-                <td className="screener-td screener-td-name">{s.name || '—'}</td>
-                <td className="screener-td screener-td-exc">{s.exchange || '—'}</td>
-                <td className="screener-td screener-td-right">
+              <tr key={s.symbol}>
+                <td className="text-muted">{i + 1}</td>
+                <td className="fw">{s.symbol}</td>
+                <td className="text-muted">{s.name || '—'}</td>
+                <td className="text-muted">{s.exchange || '—'}</td>
+                <td className="screener-th-right">
                   {s.price != null ? (
-                    <span className="screener-td-mono">{Number(s.price).toLocaleString('en-US', { maximumFractionDigits: 6 })}</span>
+                    <span className="mono">{Number(s.price).toLocaleString('en-US', { maximumFractionDigits: 6 })}</span>
                   ) : <PriceCell symbol={s.symbol} />}
                 </td>
-                <td className="screener-td screener-td-right">
+                <td className="screener-th-right">
                   {s.change24h != null ? (
-                    <span className={`screener-td-mono ${s.change24h >= 0 ? 'screener-price-up' : 'screener-price-down'}`}>
+                    <span className={`mono ${s.change24h >= 0 ? 'up' : 'down'}`}>
                       {s.change24h >= 0 ? '+' : ''}{Number(s.change24h).toFixed(2)}%
                     </span>
                   ) : <ChangeCell symbol={s.symbol} />}
                 </td>
-                <td className="screener-td screener-td-vol">
+                <td className="text-muted screener-th-right">
                   {s.volume24h != null && s.volume24h > 0 ? `${(s.volume24h / 1e6).toFixed(1)}M` : '—'}
                 </td>
-                <td className="screener-td screener-td-right">
+                <td className="screener-th-right">
                   <button
                     type="button"
-                    onClick={() => handleSelect(s.symbol)}
+                    onClick={() => setSymbol(s.symbol)}
                     className="screener-chart-btn"
                   >
                     Chart

@@ -18,65 +18,86 @@ export default function SettingsPage() {
   const riskValues: Record<string, number> = { riskPerTrade, maxDailyLoss, maxTradesDay, cooldownAfterLoss };
 
   return (
-    <div className="page-wrap-sm">
-      <h1 className="page-title-mb">{t('nav.settings')}</h1>
-
-      {/* Appearance */}
-      <div className="card card-mb">
-        <div className="card-title">Appearance</div>
-        <div className="btn-group">
-          {(['light', 'dark'] as const).map(m => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setTheme(m)}
-              className={`btn-toggle${theme === m ? ' active' : ''}`}
-            >
-              {t(`settings.theme_${m}`)}
-            </button>
-          ))}
+    <div className="panel-view">
+      <div className="panel-header">
+        <div className="panel-title">
+          <span>⚙️</span>
+          <span>{t('nav.settings')}</span>
         </div>
       </div>
 
-      {/* Language */}
-      <div className="card card-mb">
-        <div className="card-title">{t('settings.language')}</div>
-        <div className="btn-group">
-          {(['id', 'en'] as const).map(l => (
-            <button
-              key={l}
-              type="button"
-              onClick={() => setLang(l)}
-              className={`btn-toggle${lang === l ? ' active' : ''}`}
-            >
-              {l === 'id' ? '🇮🇩 Indonesia' : '🇬🇧 English'}
-            </button>
-          ))}
-        </div>
-      </div>
+      <div className="panel-content">
+        <div className="settings-sections">
 
-      {/* Risk */}
-      <div className="card">
-        <div className="card-title">Risk Management</div>
-        <div className="form-grid-2">
-          {RISK_FIELDS.map(({ label, key, min, max, step }) => {
-            const val = riskValues[key];
-            const labelKey = label === 'cooldown' ? 'Cooldown (min)' : t(`settings.${label}`);
-            return (
-              <div key={key}>
-                <label htmlFor={`risk-${key}`} className="form-label">
-                  {labelKey}: <strong>{val}</strong>
-                </label>
-                <input
-                  id={`risk-${key}`}
-                  type="range" min={min} max={max} step={step} value={val}
-                  onChange={e => updateRisk({ [key]: parseFloat(e.target.value) } as any)}
-                  className="form-range"
-                  title={labelKey}
-                />
+          {/* Appearance */}
+          <div className="settings-section">
+            <div className="settings-section-title">Appearance</div>
+            <div className="settings-row">
+              <span className="settings-label">Theme</span>
+              <div className="settings-control">
+                {(['light', 'dark'] as const).map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setTheme(m)}
+                    className={`settings-option-btn${theme === m ? ' active' : ''}`}
+                  >
+                    {t(`settings.theme_${m}`)}
+                  </button>
+                ))}
               </div>
-            );
-          })}
+            </div>
+          </div>
+
+          {/* Language */}
+          <div className="settings-section">
+            <div className="settings-section-title">{t('settings.language')}</div>
+            <div className="settings-row">
+              <span className="settings-label">Language</span>
+              <div className="settings-control">
+                {(['id', 'en'] as const).map(l => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => setLang(l)}
+                    className={`settings-option-btn${lang === l ? ' active' : ''}`}
+                  >
+                    {l === 'id' ? '🇮🇩 Indonesia' : '🇬🇧 English'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Risk Management */}
+          <div className="settings-section">
+            <div className="settings-section-title">Risk Management</div>
+            {RISK_FIELDS.map(({ label, key, min, max, step }) => {
+              const val = riskValues[key];
+              const labelText = label === 'cooldown' ? 'Cooldown (min)' : t(`settings.${label}`);
+              return (
+                <div key={key} className="settings-row">
+                  <span className="settings-label">
+                    {labelText}: <strong>{val}</strong>
+                  </span>
+                  <div className="settings-control">
+                    <input
+                      id={`risk-${key}`}
+                      type="range"
+                      min={min}
+                      max={max}
+                      step={step}
+                      value={val}
+                      onChange={e => updateRisk({ [key]: parseFloat(e.target.value) } as any)}
+                      className="form-range"
+                      title={labelText}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
         </div>
       </div>
     </div>
