@@ -67,9 +67,7 @@
   color: #fff;
 }
 
-.auth-logo-title span {
-  color: #2962ff;
-}
+.atlas-blue { color: #2962ff; }
 
 .auth-logo-sub {
   font-size: 10px;
@@ -249,3 +247,84 @@
   display: block;
   margin-bottom: 4px;
 }
+
+/* ── auth-body variants ── */
+.auth-body-center { text-align: center; }
+
+/* ── auth-success variants ── */
+.auth-success-icon { font-size: 40px; margin: 16px 0; }
+.auth-success-mb { margin-top: 14px; margin-bottom: 16px; }
+.auth-success-mt { margin-top: 14px; }
+
+/* ── auth-btn variants ── */
+.auth-btn-mb { margin-bottom: 8px; }
+
+/* ── auth-footer variants ── */
+.auth-footer-mt { margin-top: 20px; }
+.auth-footer-mt-lg { margin-top: 24px; }
+
+/* ── disconnect button ── */
+.auth-disconnect-btn {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #2a2e39;
+  background: transparent;
+  color: #787b86;
+  font-size: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: 'Roboto Mono', monospace;
+  transition: all 0.15s;
+}
+.auth-disconnect-btn:hover { color: #d1d4dc; border-color: #363c4e; }
+
+/* ── forgot-password link row ── */
+.auth-forgot-wrap { text-align: right; margin-bottom: 14px; margin-top: -6px; }
+
+/* ── small link variant ── */
+.auth-link-sm { font-size: 10px; color: #2962ff; text-decoration: none; }
+.auth-link-sm:hover { text-decoration: underline; }
+
+/* ── inline field validation error ── */
+.auth-field-error { font-size: 10px; color: #f23645; margin-top: 4px; }
+
+/* ── card size variant ── */
+.auth-card-md { max-width: 480px; }
+
+/* ── helper text paragraph ── */
+.auth-help-text { font-size: 11px; color: #787b86; margin-bottom: 18px; line-height: 1.5; }
+
+/* ── pending approval page ── */
+.pending-spinner-wrap { display: flex; justify-content: center; margin: 20px 0; }
+.pending-spinner { width: 48px; height: 48px; position: relative; }
+.pending-spinner-track {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 3px solid rgba(41,98,255,0.15);
+}
+.pending-spinner-arc {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: #2962ff;
+  animation: auth-spin 1s linear infinite;
+}
+.pending-desc {
+  font-size: 12px; color: #787b86;
+  line-height: 1.6; margin-bottom: 16px; text-align: center;
+}
+.pending-desc strong { color: #d1d4dc; }
+.pending-status-box {
+  background: rgba(41,98,255,0.06);
+  border: 1px solid rgba(41,98,255,0.15);
+  border-radius: 8px;
+  padding: 12px 14px; margin-bottom: 20px;
+  font-size: 10px; font-family: 'Roboto Mono', monospace; line-height: 1.8;
+}
+.pending-status-row { margin-bottom: 2px; }
+.pending-status-key { color: #494c55; margin-right: 8px; }
+.pending-status-val-warn { color: #f7a600; }
+.pending-status-val-blue { color: #2962ff; }
+.pending-status-val-white { color: #d1d4dc; word-break: break-all; }
+
+@keyframes auth-spin { to { transform: rotate(360deg); } }
