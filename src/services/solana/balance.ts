@@ -5,7 +5,8 @@ import { logger } from '@/utils/logger';
 
 export const hasMinimumBalance = async (pubkeyString: string): Promise<boolean> => {
     try {
-        if (pubkeyString === getMasterPublicKey().toBase58()) return true;
+        const master = getMasterPublicKey();
+        if (master && pubkeyString === master.toBase58()) return true;
         const pubkey = new PublicKey(pubkeyString);
         const balance = await solanaConnection.getBalance(pubkey);
         return balance >= (CONSTANTS.MIN_BALANCE_SOL * LAMPORTS_PER_SOL);

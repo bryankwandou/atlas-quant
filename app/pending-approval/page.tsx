@@ -1,41 +1,71 @@
 'use client';
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import '../auth.css';
 
 export default function PendingApproval() {
-    const router = useRouter();
+  const router = useRouter();
+  const [pubkey, setPubkey] = useState<string | null>(null);
 
-    return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-[#131722] text-[#d1d4dc] p-8 font-sans">
-            <div className="relative mb-12">
-                <div className="w-32 h-32 border-2 border-blue-500/20 rounded-full"></div>
-                <div className="w-32 h-32 border-t-2 border-blue-500 rounded-full animate-spin absolute top-0 left-0"></div>
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] font-black text-blue-500 tracking-tighter">T1MO</div>
+  useEffect(() => {
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('user_pubkey') : null;
+    setPubkey(stored);
+  }, []);
+
+  return (
+    <div className="auth-root">
+      <div className="auth-card auth-card-md">
+        <div className="auth-body auth-body-center">
+          <div className="auth-logo">
+            <div className="auth-logo-title">
+              <span className="atlas-blue">ATLAS</span>
+              <span>-QUANT</span>
             </div>
+            <div className="auth-logo-sub">PENDING WALLET APPROVAL</div>
+          </div>
 
-            <h1 className="text-2xl font-black text-white mb-2 uppercase tracking-tight">Identity Pending Sync</h1>
-            <p className="max-w-md text-center text-gray-500 text-sm mb-12 font-bold leading-relaxed">
-                Your cryptographic identity is locally verified but awaits <span className="text-blue-500">Master Node Approval</span> on the Solana Devnet.
-                Contact the System Administrator to authorize your neural node.
-            </p>
-
-            <div className="flex flex-col gap-4 w-full max-w-sm">
-                <div className="bg-[#1e222d] border border-[#2a2e39] p-4 rounded text-[10px] font-mono text-gray-400 break-all leading-relaxed shadow-xl">
-                    STATUS: <span className="text-yellow-500">AWAIT_MASTER_TX</span><br />
-                    REQUIRED_MEMO: <span className="text-white">ATLAS_QUANT_APPROVED</span><br />
-                    NETWORK: <span className="text-blue-400 uppercase">Solana Devnet</span>
-                </div>
-
-                <button
-                    onClick={() => router.push('/login')}
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded transition-all active:scale-95 shadow-lg shadow-blue-500/20 uppercase tracking-widest text-xs"
-                >
-                    Return to Login Buffer
-                </button>
+          <div className="pending-spinner-wrap">
+            <div className="pending-spinner">
+              <div className="pending-spinner-track" />
+              <div className="pending-spinner-arc" />
             </div>
+          </div>
 
-            <footer className="mt-20 text-[8px] font-black text-gray-700 tracking-[0.4em] uppercase">
-                v1.0.15 Scientific Production
-            </footer>
+          <p className="pending-desc">
+            Your wallet signature was verified. You are waiting for the platform
+            <strong> Master account</strong> to approve your public key
+            on Solana Devnet before trading data unlocks.
+          </p>
+
+          <div className="pending-status-box">
+            <div className="pending-status-row">
+              <span className="pending-status-key">STATUS</span>{' '}
+              <span className="pending-status-val-warn">AWAITING_MASTER_APPROVAL</span>
+            </div>
+            <div className="pending-status-row">
+              <span className="pending-status-key">NETWORK</span>{' '}
+              <span className="pending-status-val-blue">Solana Devnet</span>
+            </div>
+            <div>
+              <span className="pending-status-key">PUBLIC_KEY</span>{' '}
+              <span className="pending-status-val-white">{pubkey ?? 'not_connected'}</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => router.push('/login')}
+            className="auth-btn auth-btn-primary"
+          >
+            Return to Login
+          </button>
+
+          <div className="auth-footer auth-footer-mt-lg">
+            Prefer email login?{' '}
+            <a href="/login" className="auth-link">Use credentials instead</a>
+          </div>
         </div>
-    );
+      </div>
+    </div>
+  );
 }

@@ -1,0 +1,81 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "chart": "Chart",
+    "signals": "Signals",
+    "journal": "Journal",
+    "backtest": "Backtest",
+    "screener": "Screener",
+    "settings": "Settings"
+  },
+  "signal": {
+    "buy": "BUY",
+    "sell": "SELL",
+    "neutral": "NEUTRAL",
+    "entry": "Entry Price",
+    "tp": "Take Profit",
+    "sl": "Stop Loss",
+    "confidence": "Confidence",
+    "regime": "Market Regime",
+    "strategy": "Strategy",
+    "ai_analysis": "AI Analysis",
+    "manual_only": "Execute manually — no auto trading",
+    "rr_ratio": "Risk:Reward"
+  },
+  "regime": {
+    "strong_trend_up": "Strong Uptrend",
+    "weak_trend_up": "Weak Uptrend",
+    "ranging": "Ranging / Sideways",
+    "weak_trend_down": "Weak Downtrend",
+    "strong_trend_down": "Strong Downtrend",
+    "volatile": "High Volatility",
+    "low_volume": "Low Liquidity",
+    "news_event": "News Event"
+  },
+  "risk": {
+    "daily_loss_limit": "Daily Loss Limit",
+    "cooldown": "Cooldown Active",
+    "loss_streak": "Consecutive Losses",
+    "kill_switch": "Kill Switch Active",
+    "allowed": "Trade Allowed",
+    "blocked": "Trade Blocked"
+  },
+  "timeframes": {
+    "1s": "1 Second", "15s": "15 Seconds", "30s": "30 Seconds",
+    "1m": "1 Minute", "5m": "5 Minutes", "15m": "15 Minutes",
+    "30m": "30 Minutes", "1h": "1 Hour", "4h": "4 Hours", "1d": "1 Day"
+  },
+  "settings": {
+    "theme_light": "Light Mode",
+    "theme_dark": "Dark Mode",
+    "language": "Language",
+    "risk_per_trade": "Risk per Trade (%)",
+    "max_daily_loss": "Max Daily Loss (%)",
+    "max_trades": "Max Trades per Day"
+  },
+  "journal": {
+    "total_trades": "Total Trades",
+    "win_rate": "Win Rate",
+    "total_pnl": "Total PnL",
+    "best_trade": "Best Trade",
+    "worst_trade": "Worst Trade",
+    "profit_factor": "Profit Factor",
+    "expectancy": "Expectancy"
+  },
+  "screener": {
+    "title": "Market Screener",
+    "symbol": "Symbol",
+    "price": "Price",
+    "change": "Change",
+    "volume": "Volume",
+    "signal": "Signal"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "refresh": "Refresh"
+  }
+}

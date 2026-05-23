@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"E:\\\\000VSCODE PROJECT MULAI DARI DESEMBER 2025\\\\ATLAS-QUANT\" log --oneline -30)",
+      "Bash(where.exe pwsh *)"
+    ]
+  }
+}

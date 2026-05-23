@@ -1,154 +1,231 @@
 'use client';
-/**
- * Register Atlas Quant v2 — DUAL MODE (email atau wallet).
- * Tidak ada hardcoded master / wallet preset.
- */
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import bs58 from 'bs58';
 
-// `window.solana` type declared in app/login/page.tsx (single source).
+import { useState, useCallback } from 'react';
+import '../auth.css';
+
+type StrengthLevel = 'weak' | 'medium' | 'strong';
+
+function getPasswordStrength(pw: string): StrengthLevel | null {
+  if (!pw) return null;
+  const hasLetter = /[a-zA-Z]/.test(pw);
+  const hasNumber = /[0-9]/.test(pw);
+  const hasSpecial = /[^a-zA-Z0-9]/.test(pw);
+  const score = [pw.length >= 8, hasLetter, hasNumber, hasSpecial, pw.length >= 12].filter(Boolean).length;
+  if (score <= 2) return 'weak';
+  if (score <= 3) return 'medium';
+  return 'strong';
+}
+
+const strengthLabel: Record<StrengthLevel, string> = {
+  weak: 'WEAK',
+  medium: 'MEDIUM',
+  strong: 'STRONG',
+};
+
+const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function RegisterPage() {
-  const router = useRouter();
-  const [mode, setMode] = useState<'email' | 'wallet'>('email');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [display, setDisplay] = useState('');
-  const [err, setErr] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function handleEmailRegister(e: React.FormEvent) {
-    e.preventDefault();
-    setErr(null); setInfo(null);
-    if (password !== confirm) { setErr('Password & konfirmasi tidak cocok.'); return; }
-    if (password.length < 8) { setErr('Password minimal 8 karakter.'); return; }
-    setLoading(true);
-    try {
-      const r = await fetch('/api/auth/email/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, displayName: display || email.split('@')[0] }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || 'Daftar gagal.');
-      localStorage.setItem('session_token', data.token);
-      localStorage.setItem('atlas-user', JSON.stringify(data.user));
-      router.push('/chart');
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Daftar gagal.');
-    } finally { setLoading(false); }
-  }
+  const strength = getPasswordStrength(password);
 
-  async function handleWalletRegister() {
-    setErr(null); setInfo(null); setLoading(true);
-    try {
-      if (!window.solana) { setErr('Wallet Phantom/Solflare tidak terdeteksi.'); return; }
-      const res = await window.solana.connect();
-      const pubkey = res.publicKey.toString();
-      const cr = await fetch('/api/auth/wallet/challenge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicKey: pubkey }),
-      });
-      const challenge = await cr.json();
-      if (!cr.ok) throw new Error(challenge.error || 'Challenge gagal.');
-      const signed = await window.solana!.signMessage(new TextEncoder().encode(challenge.message), 'utf8');
-      const sigB58 = bs58.encode(signed.signature);
-      const vr = await fetch('/api/auth/wallet/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          publicKey: pubkey,
-          signature: sigB58,
-          nonce: challenge.nonce,
-          expiresAt: challenge.expiresAt,
-          signed: challenge.signed,
-          chain: 'solana',
-        }),
-      });
-      const data = await vr.json();
-      if (!vr.ok) {
-        if (data.status === 'pending') {
-          setInfo('Wallet terdaftar. Menunggu approval admin sebelum bisa masuk.');
+  const validate = (): string | null => {
+    if (!username || !USERNAME_RE.test(username)) {
+      return 'Username must be 3-20 characters: letters, numbers, or underscores only.';
+    }
+    if (!email || !EMAIL_RE.test(email)) {
+      return 'Please enter a valid email address.';
+    }
+    if (!password || password.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+      return 'Password must contain at least one letter and one number.';
+    }
+    if (password !== confirm) {
+      return 'Passwords do not match.';
+    }
+    return null;
+  };
+
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError('');
+
+      const validationError = validate();
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, username, password }),
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          setError(data.error ?? 'Registration failed. Please try again.');
           return;
         }
-        throw new Error(data.error || 'Registrasi wallet gagal.');
+
+        setSuccess(true);
+      } catch {
+        setError('Network error. Please try again.');
+      } finally {
+        setLoading(false);
       }
-      localStorage.setItem('session_token', data.token);
-      localStorage.setItem('atlas-user', JSON.stringify(data.user));
-      router.push('/chart');
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Registrasi gagal.');
-    } finally { setLoading(false); }
+    },
+    [email, username, password, confirm]
+  );
+
+  if (success) {
+    return (
+      <div className="auth-root">
+        <div className="auth-card">
+          <div className="auth-body auth-body-center">
+            <div className="auth-logo">
+              <div className="auth-logo-title">
+                <span className="atlas-blue">ATLAS</span>
+                <span>-QUANT</span>
+              </div>
+              <div className="auth-logo-sub">QUANTITATIVE TRADING PLATFORM</div>
+            </div>
+            <div className="auth-success-icon">✅</div>
+            <div className="auth-success auth-success-mb">
+              Account created successfully! You can now log in with your credentials.
+            </div>
+            <a href="/login">
+              <button className="auth-btn auth-btn-primary" type="button">
+                Go to Login
+              </button>
+            </a>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 aq-grid-bg">
-      <div className="aq-card aq-fade w-full max-w-md p-8">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-[var(--accent)] grid place-items-center text-white font-bold">A</div>
-            <span className="font-bold">Atlas <span className="text-[var(--accent)]">Quant</span></span>
+    <div className="auth-root">
+      <div className="auth-card">
+        <div className="auth-body">
+          {/* Logo */}
+          <div className="auth-logo">
+            <div className="auth-logo-title">
+              <span className="atlas-blue">ATLAS</span>
+              <span>-QUANT</span>
+            </div>
+            <div className="auth-logo-sub">CREATE ACCOUNT</div>
           </div>
-          <Link href="/" className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]">← Kembali</Link>
-        </div>
 
-        <h1 className="text-2xl font-bold">Buat akun baru</h1>
-        <p className="text-sm text-[var(--text-secondary)] mt-1">Gratis. Tidak ada wallet preset / master hack.</p>
+          <form onSubmit={handleSubmit} noValidate>
+            {/* Username */}
+            <div className="auth-field">
+              <label className="auth-label" htmlFor="reg-username">USERNAME</label>
+              <input
+                id="reg-username"
+                className="auth-input"
+                type="text"
+                placeholder="your_username"
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={loading}
+                required
+              />
+              {username && !USERNAME_RE.test(username) && (
+                <div className="auth-field-error">
+                  3-20 chars, letters/numbers/underscore only
+                </div>
+              )}
+            </div>
 
-        <div className="flex gap-1 mt-6 p-1 bg-[var(--bg-elevated)] rounded-lg">
-          <button onClick={() => setMode('email')} className={`flex-1 py-2 rounded-md text-sm font-medium transition ${mode === 'email' ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow' : 'text-[var(--text-secondary)]'}`}>Email + Password</button>
-          <button onClick={() => setMode('wallet')} className={`flex-1 py-2 rounded-md text-sm font-medium transition ${mode === 'wallet' ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow' : 'text-[var(--text-secondary)]'}`}>Wallet Web3</button>
-        </div>
+            {/* Email */}
+            <div className="auth-field">
+              <label className="auth-label" htmlFor="reg-email">EMAIL ADDRESS</label>
+              <input
+                id="reg-email"
+                className="auth-input"
+                type="email"
+                placeholder="you@example.com"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
+                required
+              />
+            </div>
 
-        {mode === 'email' ? (
-          <form onSubmit={handleEmailRegister} className="mt-6 space-y-3">
-            <div>
-              <label className="text-xs font-medium text-[var(--text-secondary)]">Nama Tampilan</label>
-              <input className="aq-input mt-1" value={display} onChange={(e) => setDisplay(e.target.value)} placeholder="Trader Bryan" />
+            {/* Password */}
+            <div className="auth-field">
+              <label className="auth-label" htmlFor="reg-password">PASSWORD</label>
+              <input
+                id="reg-password"
+                className="auth-input"
+                type="password"
+                placeholder="••••••••"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                required
+              />
+              {strength && (
+                <>
+                  <div className={`pw-strength ${strength}`} />
+                  <div className={`pw-strength-label ${strength}`}>{strengthLabel[strength]}</div>
+                </>
+              )}
             </div>
-            <div>
-              <label className="text-xs font-medium text-[var(--text-secondary)]">Email</label>
-              <input className="aq-input mt-1" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" autoComplete="email" />
+
+            {/* Confirm Password */}
+            <div className="auth-field">
+              <label className="auth-label" htmlFor="reg-confirm">CONFIRM PASSWORD</label>
+              <input
+                id="reg-confirm"
+                className="auth-input"
+                type="password"
+                placeholder="••••••••"
+                autoComplete="new-password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                disabled={loading}
+                required
+              />
+              {confirm && password !== confirm && (
+                <div className="auth-field-error">
+                  Passwords do not match
+                </div>
+              )}
             </div>
-            <div>
-              <label className="text-xs font-medium text-[var(--text-secondary)]">Password (min 8)</label>
-              <input className="aq-input mt-1" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} autoComplete="new-password" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[var(--text-secondary)]">Konfirmasi Password</label>
-              <input className="aq-input mt-1" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required minLength={8} autoComplete="new-password" />
-            </div>
-            <button disabled={loading} className="aq-btn w-full mt-2">{loading ? 'Memproses…' : 'Daftar & Masuk'}</button>
-          </form>
-        ) : (
-          <div className="mt-6 space-y-3">
-            <p className="text-sm text-[var(--text-secondary)]">
-              Saat klik tombol berikut, kami akan:
-            </p>
-            <ol className="text-sm text-[var(--text-secondary)] list-decimal pl-5 space-y-1">
-              <li>Hubungkan ke wallet (Phantom / Solflare).</li>
-              <li>Minta wallet menandatangani challenge gas-free.</li>
-              <li>Daftarkan wallet baru ke database.</li>
-            </ol>
-            <button onClick={handleWalletRegister} disabled={loading} className="aq-btn w-full mt-2">
-              {loading ? 'Memproses…' : 'Daftar dengan Wallet'}
+
+            <button
+              className="auth-btn auth-btn-primary"
+              type="submit"
+              disabled={loading}
+            >
+              {loading ? 'Creating account…' : 'Create Account'}
             </button>
-            <p className="text-xs text-[var(--text-muted)] text-center">
-              Setelah approval admin, kamu langsung bisa masuk dari halaman Login → Wallet Web3.
-            </p>
+
+            {error && <div className="auth-error">{error}</div>}
+          </form>
+
+          <div className="auth-footer">
+            Already have an account?{' '}
+            <a href="/login" className="auth-link">Sign In</a>
           </div>
-        )}
-
-        {err && <div className="mt-4 text-sm text-[var(--sell)] bg-[var(--sell-bg)] p-3 rounded-md">{err}</div>}
-        {info && <div className="mt-4 text-sm text-[var(--neutral)] bg-[rgba(245,158,11,0.1)] p-3 rounded-md">{info}</div>}
-
-        <div className="text-center text-sm text-[var(--text-secondary)] mt-6">
-          Sudah punya akun? <Link href="/login" className="aq-link font-medium">Masuk</Link>
         </div>
       </div>
     </div>

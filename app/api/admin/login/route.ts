@@ -1,39 +1,59 @@
+import { NextResponse } from 'next/server';
+import { verifyAdminPassword, readPublicConfig, ADMIN_USERNAME } from '@/src/services/admin/store';
+import { issueAdminSessionCookie } from '@/src/services/admin/session';
+
 /**
  * POST /api/admin/login
- * Hardcoded master admin login.
- * Default credentials per perintah Presiden:
- *   username: nayrbryanGaming
- *   password: @Nataliamaria12345
+ * Body: { username, password }
  *
- * Rotatable via env ADMIN_MASTER_PASSWORD or ADMIN_MASTER_PASSWORD_HASH.
+ * On success → sets the admin session cookie and returns the public
+ * config (signup mode, isBootstrap flag, locked count).
  *
- * Returns short-lived JWT (admin scope) yang DIPISAH dari token user biasa
- * supaya jurnal/setting user tidak bisa diakses pakai admin token (defense in depth).
+ * Rate-limited via process-local sliding window to slow brute force.
  */
-import { NextResponse } from 'next/server';
-import { verifyAdmin, ADMIN_USERNAME } from '@/services/admin/hardcoded-admin';
-import { issueSession } from '@/services/auth/session';
+
+const ATTEMPTS = new Map<string, number[]>();
+const WINDOW_MS = 60_000;
+const MAX_PER_WINDOW = 6;
+
+function rateLimit(key: string): boolean {
+  const now = Date.now();
+  const arr = (ATTEMPTS.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
+  arr.push(now);
+  ATTEMPTS.set(key, arr);
+  return arr.length <= MAX_PER_WINDOW;
+}
 
 export async function POST(req: Request) {
   try {
-    const { username, password } = await req.json();
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0] ?? req.headers.get('x-real-ip') ?? 'unknown';
+    if (!rateLimit(`login:${ip}`)) {
+      return NextResponse.json({ error: 'Too many attempts. Try again in a minute.' }, { status: 429 });
+    }
+
+    const { username, password } = (await req.json()) as { username?: string; password?: string };
     if (!username || !password) {
-      return NextResponse.json({ error: 'Username & password wajib.' }, { status: 400 });
+      return NextResponse.json({ error: 'Username and password are required.' }, { status: 400 });
     }
-    const ok = await verifyAdmin(String(username).trim(), String(password));
+
+    const ok = await verifyAdminPassword(username, password);
     if (!ok) {
-      return NextResponse.json({ error: 'Kredensial admin salah.' }, { status: 401 });
+      return NextResponse.json({ error: 'Invalid admin credentials.' }, { status: 401 });
     }
-    const token = issueSession(
-      { uid: 'admin:hardcoded', method: 'admin', email: undefined, role: 'admin' },
-      4 * 60 * 60 * 1000, // 4 hours
-    );
-    return NextResponse.json({
-      token,
-      session_token: token,
-      user: { id: 'admin:hardcoded', username: ADMIN_USERNAME, displayName: 'Atlas Quant Master', role: 'admin', isAdmin: true },
+
+    const cookie = issueAdminSessionCookie();
+    const config = await readPublicConfig();
+    const res = NextResponse.json({
+      success: true,
+      username: ADMIN_USERNAME,
+      config,
+      warning: config.isBootstrap
+        ? 'You are signed in with bootstrap credentials. Please change your password immediately.'
+        : null,
     });
-  } catch (e) {
-    return NextResponse.json({ error: 'Internal Server Error', detail: String(e) }, { status: 500 });
+    res.cookies.set(cookie.name, cookie.value, cookie.options);
+    return res;
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? 'Admin login error' }, { status: 500 });
   }
 }

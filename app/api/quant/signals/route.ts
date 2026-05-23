@@ -1,88 +1,194 @@
 /**
- * POST /api/quant/signals — generate sinyal kuantitatif lengkap dengan
- * AI commentary, alt-data, dan persist ke Supabase.
+ * ATLAS-QUANT · Quant Signals API (v2 — Macro-Enhanced)
  *
- * Body: { symbol, timeframe, language?, dryRun? }
+ * GET  /api/quant/signals?symbol=BTCUSDT&timeframe=15m
+ *      Returns latest saved signals or generates a fresh one if none exist.
+ *
+ * POST /api/quant/signals
+ *      Body: { symbol, timeframe, save?, strategies? }
+ *      Generates a macro-enhanced signal and optionally persists it.
  */
-import { NextResponse } from 'next/server';
-import { fetchOhlcv } from '@/services/market/provider';
-import { generateSignal } from '@/core/quant/signal-engine';
-import { altFactorSnapshot } from '@/services/altdata';
-import { aiSignalCommentary } from '@/services/ai/multi-provider';
-import { supabaseAdmin } from '@/services/db/supabase';
+import { NextRequest, NextResponse } from 'next/server';
+import { generateMacroEnhancedSignal } from '@/src/core/quant/macro-signal';
+import { getAllMacroData } from '@/src/services/macroData';
+import { routeOHLCV } from '@/src/lib/marketRouter';
+import { supabaseAdmin } from '@/src/services/supabase';
 
-export async function POST(req: Request) {
+// ─────────────────────────────────────────────────────────────────────────────
+// GET — fetch latest signals from DB, or generate fresh
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const symbol    = (searchParams.get('symbol') ?? 'BTCUSDT').toUpperCase();
+  const timeframe = searchParams.get('timeframe') ?? '15m';
+  const limit     = parseInt(searchParams.get('limit') ?? '20', 10);
+  const fresh     = searchParams.get('fresh') === 'true';
+
   try {
-    const { symbol = 'BTCUSDT', timeframe = '15m', language = 'id', dryRun = false } = await req.json().catch(() => ({}));
-
-    const candles = await fetchOhlcv({ symbol, timeframe, limit: 500 });
-
-    // Alt-data factor → broadcast as constant series
-    const alt = await altFactorSnapshot(symbol);
-    const fill = (v: number | null) => candles.map(() => v ?? 0);
-    const altData = {
-      sentiment: fill(alt.cryptoNewsSentiment),
-      news: fill(alt.cryptoNewsSentiment),
-      weather: fill(alt.weatherAnomaly),
-      calendar: fill(alt.macroSurprise),
-    };
-
-    const sig = generateSignal({ symbol, timeframe, candles, altData });
-
-    // AI commentary
-    let ai: Awaited<ReturnType<typeof aiSignalCommentary>> | null = null;
-    if (process.env.FEATURE_AI_ENABLED !== 'false') {
-      try {
-        ai = await aiSignalCommentary({
-          symbol, timeframe,
-          signal: sig.type, confidence: sig.confidence, regime: sig.regime,
-          factors: sig.factors.map((f) => ({ key: f.key, value: f.value, contribution: f.contribution })),
-          entry: sig.entryPrice, tp1: sig.tp1, sl: sig.sl, notes: sig.notes,
-          language: language === 'en' ? 'en' : 'id',
-        });
-      } catch (e) {
-        ai = null;
-      }
+    // If fresh=true or no DB available, generate directly
+    if (fresh) {
+      return await generateAndReturn(symbol, timeframe, false);
     }
 
-    // Persist (best effort)
-    if (!dryRun) {
-      const sb = supabaseAdmin();
-      if (sb) {
-        await sb.from('quant_signals').insert({
-          symbol, timeframe,
-          signal_type: sig.type,
-          strategy: 'COMPOSITE_RENAISSANCE_V1',
-          strategy_family: 'rentech-blend',
-          confidence: sig.confidence,
-          score: sig.score,
-          entry_price: sig.entryPrice,
-          tp1: sig.tp1, tp2: sig.tp2, tp3: sig.tp3,
-          sl: sig.sl,
-          atr_value: sig.atr,
-          rr_ratio: sig.rrRatio,
-          regime: sig.regime,
-          factors: sig.factors,
-          alt_data: alt,
-          ai_provider: ai?.provider,
-          ai_model: ai?.model,
-          ai_analysis: ai?.commentary,
-          ai_score: ai?.aiScore,
-          expires_at: new Date(Date.now() + ttlForTimeframe(timeframe)).toISOString(),
-        }).then(undefined, () => null);
-      }
+    // Try DB first
+    let query = supabaseAdmin
+      .from('quant_signals')
+      .select('*')
+      .eq('is_active', true)
+      .order('generated_at', { ascending: false })
+      .limit(limit);
+
+    if (symbol)    query = query.eq('symbol', symbol);
+    if (timeframe) query = query.eq('timeframe', timeframe);
+
+    const { data: dbSignals, error } = await query;
+
+    if (!error && dbSignals && dbSignals.length > 0) {
+      return NextResponse.json({ signals: dbSignals, source: 'db' });
     }
 
-    return NextResponse.json({ signal: sig, ai, altSnapshot: alt });
-  } catch (e) {
-    return NextResponse.json({ error: 'Internal Server Error', detail: String(e) }, { status: 500 });
+    // No DB signals — generate fresh
+    return await generateAndReturn(symbol, timeframe, false);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Signal fetch failed';
+    // Last resort: try generating
+    try {
+      return await generateAndReturn(symbol, timeframe, false);
+    } catch {
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
   }
 }
 
-function ttlForTimeframe(tf: string): number {
+// ─────────────────────────────────────────────────────────────────────────────
+// POST — generate macro-enhanced signal, optionally save
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const {
+      symbol    = 'BTCUSDT',
+      timeframe = '15m',
+      save      = false,
+      userPubkey,
+    } = body as {
+      symbol?: string;
+      timeframe?: string;
+      save?: boolean;
+      userPubkey?: string;
+    };
+
+    return await generateAndReturn(symbol.toUpperCase(), timeframe, save, userPubkey);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Signal generation failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared generation helper
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function generateAndReturn(
+  symbol: string,
+  timeframe: string,
+  shouldSave: boolean,
+  userPubkey?: string,
+): Promise<Response> {
+  // Fetch candles and macro data in parallel
+  const [candles, macroData] = await Promise.all([
+    routeOHLCV(symbol, timeframe, 200),
+    getAllMacroData(),
+  ]);
+
+  if (!candles || candles.length < 50) {
+    return NextResponse.json(
+      { error: `Insufficient candle data for ${symbol} ${timeframe} (got ${candles?.length ?? 0})` },
+      { status: 400 },
+    );
+  }
+
+  const closes  = candles.map(c => c.close);
+  const highs   = candles.map(c => c.high);
+  const lows    = candles.map(c => c.low);
+  const volumes = candles.map(c => c.volume);
+
+  const signal = await generateMacroEnhancedSignal(
+    closes, highs, lows, volumes, symbol, macroData,
+  );
+
+  // Persist to DB if requested
+  let savedId: string | null = null;
+  if (shouldSave) {
+    try {
+      const { data: saved } = await supabaseAdmin
+        .from('quant_signals')
+        .insert({
+          symbol,
+          timeframe,
+          signal_type:  signal.finalSignal,
+          strategy:     'MacroEnhanced_v2',
+          confidence:   signal.confidence,
+          accuracy:     signal.accuracy,
+          entry_price:  signal.entryPrice,
+          tp1:          signal.tp1,
+          tp2:          signal.tp2,
+          tp3:          signal.tp3,
+          sl:           signal.sl,
+          rr_ratio:     signal.rrRatio,
+          regime:       signal.regime,
+          adx:          signal.adx,
+          rsi:          signal.rsi,
+          trend:        signal.trend,
+          macro_score:  signal.macroScore,
+          macro_bias:   signal.macroSignal,
+          risk_flags:   signal.riskFlags,
+          indicators: {
+            technical_score: signal.technicalScore,
+            macro_factors:   signal.macroFactors,
+          },
+          is_active:    true,
+          generated_at: new Date().toISOString(),
+          expires_at:   new Date(Date.now() + getSignalTTL(timeframe)).toISOString(),
+          user_id:      userPubkey ?? null,
+        })
+        .select('id')
+        .single();
+      savedId = saved?.id ?? null;
+    } catch {
+      // Persist is optional; continue without it
+    }
+  }
+
+  return NextResponse.json({
+    signal,
+    symbol,
+    timeframe,
+    savedId,
+    source: 'generated',
+    macro: {
+      score:     macroData.macroScore,
+      bias:      macroData.marketBias,
+      riskLevel: macroData.riskLevel,
+      fearGreed: macroData.fearGreed,
+      geopolitical: {
+        score: macroData.geopolitical.score,
+        trend: macroData.geopolitical.trend,
+      },
+    },
+  });
+}
+
+function getSignalTTL(tf: string): number {
   const map: Record<string, number> = {
-    '1m': 5 * 60_000, '5m': 15 * 60_000, '15m': 60 * 60_000,
-    '30m': 90 * 60_000, '1h': 4 * 60 * 60_000, '4h': 24 * 60 * 60_000, '1d': 7 * 24 * 60 * 60_000,
+    '1m':  5  * 60 * 1000,
+    '5m':  15 * 60 * 1000,
+    '15m': 60 * 60 * 1000,
+    '1h':  4  * 60 * 60 * 1000,
+    '4h':  24 * 60 * 60 * 1000,
+    '1d':  7  * 24 * 60 * 60 * 1000,
   };
   return map[tf] ?? 3_600_000;
 }

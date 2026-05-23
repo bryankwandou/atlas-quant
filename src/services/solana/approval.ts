@@ -9,6 +9,13 @@ import { logger } from '@/utils/logger';
 export const isUserApproved = async (userPubkeyString: string): Promise<boolean> => {
     try {
         const masterPubkey = getMasterPublicKey();
+        if (!masterPubkey) {
+            // No master account configured → on-chain approval not available.
+            // Caller should only reach this branch in 'approval' signup mode,
+            // which means we deny by default until admin opens signup or
+            // configures MASTER_PUBLIC_KEY.
+            return false;
+        }
         if (userPubkeyString === masterPubkey.toBase58()) {
             return true; // Master is always approved by design
         }

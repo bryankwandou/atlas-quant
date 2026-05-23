@@ -1,0 +1,81 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "chart": "Grafik",
+    "signals": "Sinyal",
+    "journal": "Jurnal",
+    "backtest": "Backtest",
+    "screener": "Screener",
+    "settings": "Pengaturan"
+  },
+  "signal": {
+    "buy": "BELI",
+    "sell": "JUAL",
+    "neutral": "NETRAL",
+    "entry": "Harga Masuk",
+    "tp": "Target Profit",
+    "sl": "Stop Loss",
+    "confidence": "Keyakinan",
+    "regime": "Kondisi Pasar",
+    "strategy": "Strategi",
+    "ai_analysis": "Analisa AI",
+    "manual_only": "Execute manual — tidak ada auto trade",
+    "rr_ratio": "Risk:Reward"
+  },
+  "regime": {
+    "strong_trend_up": "Tren Naik Kuat",
+    "weak_trend_up": "Tren Naik Lemah",
+    "ranging": "Sideways / Konsolidasi",
+    "weak_trend_down": "Tren Turun Lemah",
+    "strong_trend_down": "Tren Turun Kuat",
+    "volatile": "Sangat Volatil",
+    "low_volume": "Volume Rendah",
+    "news_event": "Event Berita"
+  },
+  "risk": {
+    "daily_loss_limit": "Batas Rugi Harian",
+    "cooldown": "Cooldown Aktif",
+    "loss_streak": "Kalah Berturut-turut",
+    "kill_switch": "Kill Switch Aktif",
+    "allowed": "Trade Diizinkan",
+    "blocked": "Trade Diblokir"
+  },
+  "timeframes": {
+    "1s": "1 Detik", "15s": "15 Detik", "30s": "30 Detik",
+    "1m": "1 Menit", "5m": "5 Menit", "15m": "15 Menit",
+    "30m": "30 Menit", "1h": "1 Jam", "4h": "4 Jam", "1d": "1 Hari"
+  },
+  "settings": {
+    "theme_light": "Mode Terang",
+    "theme_dark": "Mode Gelap",
+    "language": "Bahasa",
+    "risk_per_trade": "Risiko per Trade (%)",
+    "max_daily_loss": "Maks Rugi Harian (%)",
+    "max_trades": "Maks Trade per Hari"
+  },
+  "journal": {
+    "total_trades": "Total Trade",
+    "win_rate": "Win Rate",
+    "total_pnl": "Total PnL",
+    "best_trade": "Trade Terbaik",
+    "worst_trade": "Trade Terburuk",
+    "profit_factor": "Profit Factor",
+    "expectancy": "Ekspektasi"
+  },
+  "screener": {
+    "title": "Screener Pasar",
+    "symbol": "Simbol",
+    "price": "Harga",
+    "change": "Perubahan",
+    "volume": "Volume",
+    "signal": "Sinyal"
+  },
+  "common": {
+    "loading": "Memuat...",
+    "error": "Terjadi kesalahan",
+    "save": "Simpan",
+    "cancel": "Batal",
+    "close": "Tutup",
+    "refresh": "Perbarui"
+  }
+}

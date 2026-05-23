@@ -1,14 +1,23 @@
 {
   "crons": [
-    { "path": "/api/cron/market-refresh", "schedule": "*/2 * * * *" },
-    { "path": "/api/cron/market-scan", "schedule": "*/15 * * * *" }
+    { "path": "/api/cron/heartbeat",       "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/market-refresh",  "schedule": "*/1 * * * *"  },
+    { "path": "/api/cron/auto-seed",       "schedule": "0 */2 * * *"  }
   ],
   "functions": {
-    "app/api/market/ohlcv/route.ts": { "maxDuration": 30 },
-    "app/api/quant/signals/route.ts": { "maxDuration": 60 },
-    "app/api/quant/compute/route.ts": { "maxDuration": 30 },
-    "app/api/altdata/route.ts": { "maxDuration": 30 },
+    "app/api/market/ohlcv/route.ts":        { "maxDuration": 30 },
+    "app/api/quant/signals/route.ts":       { "maxDuration": 45 },
+    "app/api/quant/regime/route.ts":        { "maxDuration": 45 },
+    "app/api/quant/backtest/route.ts":      { "maxDuration": 60 },
+    "app/api/macro/data/route.ts":          { "maxDuration": 30 },
+    "app/api/macro/signal/route.ts":        { "maxDuration": 45 },
+    "app/api/ai/analyze/route.ts":          { "maxDuration": 60 },
     "app/api/cron/market-refresh/route.ts": { "maxDuration": 60 },
-    "app/api/cron/market-scan/route.ts": { "maxDuration": 60 }
+    "app/api/cron/auto-seed/route.ts":      { "maxDuration": 120 },
+    "app/api/admin/migrate/route.ts":       { "maxDuration": 120 },
+    "app/api/admin/seed-ohlcv/route.ts":    { "maxDuration": 300 },
+    "app/api/admin/backtest/route.ts":      { "maxDuration": 300 },
+    "app/api/admin/train-ml/route.ts":      { "maxDuration": 300 },
+    "app/api/admin/factors/route.ts":       { "maxDuration": 60 }
   }
 }

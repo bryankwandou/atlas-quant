@@ -1,60 +1,79 @@
-/**
- * Compat endpoint untuk dashboard legacy.
- * Sekarang mengembalikan format yang sama tetapi memakai engine baru:
- *   - fetchOhlcv (binance/yahoo/dexscreener) — bukan synthetic
- *   - localBrainInfer (no API)
- *   - tidak perlu auth token (publik read-only)
- */
 import { NextResponse } from 'next/server';
-import { fetchOhlcv, type Timeframe } from '@/services/market/provider';
-import { localBrainInfer } from '@/core/ai/local-brain';
+import { verifySessionToken } from '@/utils/auth-middleware';
+import { signalCache } from '@/core/cache/runtime';
 
 export async function GET(request: Request, { params }: { params: Promise<{ symbol: string }> }) {
+  const userKey = verifySessionToken(request);
+  if (!userKey) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const { symbol: rawSymbol } = await params;
   const symbol = rawSymbol.toUpperCase();
   const { searchParams } = new URL(request.url);
-  const intervalRaw = (searchParams.get('interval') || '1h').toLowerCase();
-  const tfMap: Record<string, Timeframe> = {
-    '1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m',
-    '1h': '1h', '2h': '2h', '4h': '4h', '1d': '1d', 'daily': '1d',
-  };
-  const tf = tfMap[intervalRaw] || '1h';
+  const interval = searchParams.get('interval') || '1h';
 
-  try {
-    const candles = await fetchOhlcv({ symbol, timeframe: tf, limit: 200 });
-    if (!candles.length) {
-      return NextResponse.json({ error: 'Tidak ada data candle.' }, { status: 502 });
+  const cacheKey = `signal:${symbol}:${interval}`;
+  const candleKey = `candles:${symbol}:${interval}`;
+
+  let signal = signalCache.get(cacheKey);
+  let candles = signalCache.get(candleKey);
+
+  if (!signal || !candles || candles.length === 0) {
+    try {
+      const { routeOHLCV } = await import('@/src/lib/marketRouter');
+      const { analyzeMarket } = await import('@/core/quant');
+      const { getUnixTimestamp } = await import('@/utils/time');
+
+      const rawCandles = await routeOHLCV(symbol, interval, 200);
+
+      if (rawCandles && rawCandles.length > 0) {
+        candles = rawCandles.map((c: any) => ({
+          time: c.time ?? Math.floor((c.open_time ?? 0) / 1000),
+          open: Number(c.open),
+          high: Number(c.high),
+          low: Number(c.low),
+          close: Number(c.close),
+          volume: Number(c.volume ?? 0),
+        }));
+
+        const quantOutput = analyzeMarket({ symbol, candles });
+        signal = {
+          symbol,
+          price: candles[candles.length - 1].close,
+          quant: quantOutput,
+          timestamp: getUnixTimestamp(),
+          source: 'live',
+        };
+        signalCache.set(cacheKey, signal, 5 * 60 * 1000);
+        signalCache.set(candleKey, candles, 5 * 60 * 1000);
+      }
+    } catch (e) {
+      console.error('[asset:upstream]', e);
     }
-    const brain = localBrainInfer({
-      symbol, timeframe: tf,
-      closes: candles.map((c) => c.close),
-      highs: candles.map((c) => c.high),
-      lows: candles.map((c) => c.low),
-      volumes: candles.map((c) => c.volume),
-      language: 'id',
-    });
-    return NextResponse.json({
-      signal: {
-        symbol,
-        price: candles[candles.length - 1].close,
-        quant: {
-          regime: brain.regime,
-          bias: brain.bias,
-          confidence: brain.regimeConfidence / 100,
-          risk_flags: brain.risks,
-        },
-        ai: {
-          ai_regime_label: brain.regime.toUpperCase(),
-          confidence_adjustment: 0,
-          risk_commentary: brain.commentary,
-        },
-        timestamp: Math.floor(Date.now() / 1000),
-      },
-      candles: candles.map((c) => ({ ...c, time: Math.floor(c.time / 1000) })),
-      brain,
-      version: '2.0.0',
-    });
-  } catch (e) {
-    return NextResponse.json({ error: 'Failed to fetch asset', detail: String(e) }, { status: 500 });
   }
+
+  // No dummy fallback — return a 503 so the UI can show a real error state.
+  if (!signal || !candles || candles.length === 0) {
+    return NextResponse.json(
+      {
+        error: 'Upstream data providers unavailable for this symbol/interval.',
+        symbol,
+        interval,
+        providers_tried: ['Binance', 'Yahoo Finance', 'CoinGecko'],
+      },
+      { status: 503 },
+    );
+  }
+
+  const { computePerformanceGrid } = await import('@/core/quant/performance');
+  const performance = computePerformanceGrid(candles);
+
+  return NextResponse.json({
+    signal,
+    candles,
+    performance,
+    version: '2.1.0',
+    engine: 'ATLAS_RENAISSANCE_V1',
+  });
 }
