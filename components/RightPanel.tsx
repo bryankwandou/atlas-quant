@@ -35,6 +35,7 @@ interface SRData {
 
 interface IndValues {
   rsi:      number;
+  rsi7:     number;
   macd:     number;
   adx:      number;
   atr:      number;
@@ -85,6 +86,17 @@ const REGIME_COLORS: Record<string, string> = {
   volatile:          '#e91e63',
   low_volume:        '#9e9e9e',
   news_event:        '#9c27b0',
+};
+
+const REGIME_ID_LABELS: Record<string, string> = {
+  strong_trend_up:   'Tren Naik Kuat',
+  weak_trend_up:     'Tren Naik Lemah',
+  ranging:           'Konsolidasi',
+  weak_trend_down:   'Tren Turun Lemah',
+  strong_trend_down: 'Tren Turun Kuat',
+  volatile:          'Volatil',
+  low_volume:        'Volume Rendah',
+  news_event:        'Event Berita',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -206,6 +218,7 @@ export default function RightPanel() {
 
     // Indicator values
     const rsiArr   = ind.rsi(14);
+    const rsi7Arr  = ind.rsi(7);
     const atrArr   = ind.atr(14);
     const macdObj  = ind.macd(12, 26, 9);
     const adxObj   = ind.adx(14);
@@ -222,6 +235,7 @@ export default function RightPanel() {
 
     setIndValues({
       rsi:      rsiArr[last],
+      rsi7:     rsi7Arr[last],
       macd:     macdObj.macd[last],
       adx:      (adxObj.adx as any)[last],
       atr:      atrArr[last],
@@ -382,89 +396,129 @@ export default function RightPanel() {
               <span className="rp-countdown"><RefreshCw size={8} />{countdown}s</span>
             </div>
 
-            {/* LAST PERFORMANCE — single-column OHLCV (T1MO_SCIENTIFIC exact) */}
-            <div className="t1mo-lp-section">
-              <div className="t1mo-lp-title">LAST PERFORMANCE</div>
+            {/* T1MO LAST / PREV two-column OHLCV — folder (4) exact */}
+            <div className="t1mo-table">
+              <div className="t1mo-row t1mo-header">
+                <span className="t1mo-label"></span>
+                <span className="t1mo-col-l">Last</span>
+                <span className="t1mo-col-r">Prev</span>
+              </div>
               {([
-                { label: 'OPEN',     val: fmt(lastC?.open, 2),  cls: '' },
-                { label: 'HIGH',     val: fmt(lastC?.high, 2),  cls: '' },
-                { label: 'MID-PRIC', val: fmt(midPrc, 2),        cls: '' },
-                { label: 'LOW',      val: fmt(lastC?.low, 2),   cls: '' },
-                { label: 'CLOSE',    val: fmt(lastC?.close, 2), cls: '', bold: true },
-                {
-                  label: 'CHANGE',
-                  val:   lastC && prevC ? fmt(lastC.close - prevC.close, 2) : '—',
-                  cls:   rpIsUp ? 'up' : 'down',
-                },
-                {
-                  label: 'RANGE',
-                  val:   lastC ? `${((lastC.high - lastC.low) / lastC.close * 100).toFixed(2)}%` : '—',
-                  cls: '',
-                },
-                {
-                  label: 'VOLUME',
-                  val:   lastC?.volume != null
-                    ? (lastC.volume > 1e9
-                        ? `${(lastC.volume / 1e9).toFixed(1)} B`
-                        : lastC.volume > 1e6
-                          ? `${(lastC.volume / 1e6).toFixed(1)} M`
-                          : lastC.volume.toFixed(0))
-                    : '—',
-                  cls: '',
-                },
-              ] as Array<{ label: string; val: string; cls: string; bold?: boolean }>).map(({ label, val, cls, bold }) => (
-                <div key={label} className="t1mo-lp-row">
-                  <span className="t1mo-lp-label">{label}</span>
-                  <span className={`t1mo-lp-val mono${cls ? ` ${cls}` : ''}${bold ? ' t1mo-lp-bold' : ''}`}>{val}</span>
+                { label: 'Open',    l: lastC?.open,  p: prevC?.open  },
+                { label: 'High',    l: lastC?.high,  p: prevC?.high  },
+                { label: 'Mid Prc', l: midPrc,        p: prevMid      },
+                { label: 'Low',     l: lastC?.low,   p: prevC?.low   },
+                { label: 'Close',   l: lastC?.close, p: prevC?.close, bold: true },
+              ] as Array<{ label: string; l?: number | null; p?: number | null; bold?: boolean }>).map(({ label, l, p, bold }) => (
+                <div key={label} className="t1mo-row">
+                  <span className="t1mo-label">{label}</span>
+                  <span className={`t1mo-col-l mono${bold ? ' t1mo-close-val' : ''}`}>{fmt(l, 2)}</span>
+                  <span className="t1mo-col-r mono">{fmt(p, 2)}</span>
                 </div>
               ))}
+              {/* Change */}
+              <div className="t1mo-row t1mo-change-row">
+                <span className="t1mo-label">Change</span>
+                <span className={`t1mo-col-l mono ${rpIsUp ? 'up' : 'down'}`}>
+                  {lastC && prevC ? `${rpIsUp ? '+' : ''}${(lastC.close - prevC.close).toFixed(2)}` : '—'}
+                </span>
+                <span className={`t1mo-col-r mono ${rpIsUp ? 'up' : 'down'}`}>
+                  {rpChange !== 0 ? `${rpIsUp ? '+' : ''}${rpChange.toFixed(2)}%` : '0.00%'}
+                </span>
+              </div>
+              {/* CP row */}
+              <div className="t1mo-row">
+                <span className="t1mo-label">CP</span>
+                <span className={`t1mo-col-l mono t1mo-cp-score ${
+                  (signal?.confidence ?? 50) > 70 ? 'cp-hi' : (signal?.confidence ?? 50) > 40 ? 'cp-mid' : 'cp-lo'
+                }`}>
+                  {signal?.confidence != null ? signal.confidence.toFixed(2) : '—'}
+                </span>
+                <span className="t1mo-col-r t1mo-cp-link">[V]</span>
+              </div>
+              {/* Range */}
+              <div className="t1mo-row">
+                <span className="t1mo-label">Range</span>
+                <span className="t1mo-col-l mono">
+                  {lastC ? fmt(lastC.high - lastC.low, 2) : '—'}
+                </span>
+                <span className={`t1mo-col-r mono ${rangePct != null ? (rangePct >= 0 ? 'up' : 'down') : ''}`}>
+                  {rangePct != null ? `${rangePct >= 0 ? '+' : ''}${rangePct.toFixed(2)}%` : '—'}
+                </span>
+              </div>
+              {/* Volume */}
+              <div className="t1mo-row">
+                <span className="t1mo-label">Volume</span>
+                <span className="t1mo-col-l mono">
+                  {lastC?.volume != null
+                    ? lastC.volume > 1e9 ? `${(lastC.volume/1e9).toFixed(2)}`
+                    : lastC.volume > 1e6 ? `${(lastC.volume/1e6).toFixed(2)}`
+                    : lastC.volume.toFixed(2)
+                    : '—'}
+                </span>
+                <span className="t1mo-col-r mono">
+                  {prevC?.volume != null
+                    ? prevC.volume > 1e9 ? `${(prevC.volume/1e9).toFixed(1)} B`
+                    : prevC.volume > 1e6 ? `${(prevC.volume/1e6).toFixed(1)} M`
+                    : `${prevC.volume.toFixed(0)}`
+                    : '—'}
+                </span>
+              </div>
+              {/* VChg / Actual sub-labels */}
+              <div className="t1mo-row t1mo-subrow">
+                <span></span>
+                <span className="t1mo-col-l t1mo-sublabel">VChg</span>
+                <span className="t1mo-col-r t1mo-sublabel">Actual</span>
+              </div>
             </div>
 
-            {/* Support / Resistance — 4 ranks (T1MO exact) */}
+            {/* Support / Resistance — 3 rows, Indonesian label */}
             {srData && (
               <div className="t1mo-sr-section">
                 <div className="t1mo-sr-header">
                   <span className="t1mo-sr-sup-hdr">SUPPORT</span>
                   <span></span>
-                  <span className="t1mo-sr-res-hdr">RESISTANCE</span>
+                  <span className="t1mo-sr-res-hdr">RESISTENSI</span>
                 </div>
-                {Array.from({ length: 4 }, (_, i) => (
+                {Array.from({ length: 3 }, (_, i) => (
                   <div key={i} className="t1mo-sr-row">
-                    <span className="t1mo-sup mono up">{srData.supports[i]    ? fmt(srData.supports[i].price, 2)    : '—'}</span>
+                    <span className="t1mo-sup mono up">
+                      {srData.supports[i] ? fmt(srData.supports[i].price, 2) : '—'}
+                    </span>
                     <span className="t1mo-rank">{i + 1}</span>
-                    <span className="t1mo-res mono down">{srData.resistances[i] ? fmt(srData.resistances[i].price, 2) : '—'}</span>
+                    <span className="t1mo-res mono down">
+                      {srData.resistances[i] ? fmt(srData.resistances[i].price, 2) : '—'}
+                    </span>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Indicators — T1MO_SCIENTIFIC format */}
+            {/* Indicators — folder (4) exact: HMF · Top Box · Btm Box · Magenta · Lautan · EMA 21 · VWAP · RSI(7) · ATR(14) · ATLAS */}
             {indValues && (
               <div className="t1mo-ind-section">
-                <div className="t1mo-ind-title">INDICATORS</div>
+                <div className="t1mo-ind-title">INDIKATOR</div>
                 {(() => {
-                  const price   = lastC?.close || rpPrice || 1;
-                  const topBox  = srData?.resistances?.[0]?.price ?? price * 1.065;
-                  const btmBox  = srData?.supports?.[0]?.price   ?? price * 1.03;
-                  const mag     = indValues.ema21;
-                  const ema50v  = indValues.ema50 ?? price;
-                  const topPct  = (topBox  - price) / price * 100;
-                  const btmPct  = (btmBox  - price) / price * 100;
-                  const magPct  = (mag     - price) / price * 100;
-                  const e50Pct  = (ema50v  - price) / price * 100;
-                  const pf = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+                  const price  = lastC?.close || rpPrice || 1;
+                  const topBox = srData?.resistances?.[0]?.price ?? price * 1.064;
+                  const btmBox = srData?.supports?.[0]?.price   ?? price * 1.029;
+                  const pct    = (v: number) => (v - price) / price * 100;
+                  const pf     = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
                   return ([
-                    { label: 'HMF',      val: fmt(indValues.macd, 2),  pct: '',        color: '#ff9800', col: '' },
-                    { label: 'T1MO BOX', val: fmt(topBox, 2),           pct: pf(topPct), color: '#ff6f00', col: topPct >= 0 ? 'up' : 'down' },
-                    { label: 'BTM BOX',  val: fmt(btmBox, 2),            pct: pf(btmPct), color: '#9e9e9e', col: btmPct >= 0 ? 'up' : 'down' },
-                    { label: 'MAGENTA',  val: fmt(mag, 2),               pct: pf(magPct), color: '#e91e63', col: magPct >= 0 ? 'up' : 'down' },
-                    { label: 'EMA50',    val: fmt(ema50v, 2),            pct: pf(e50Pct), color: '#2962ff', col: e50Pct >= 0 ? 'up' : 'down' },
-                    { label: 'PS',       val: fmt(indValues.rsi, 2),  pct: '',        color: 'var(--tv-text2)', col: '' },
-                    { label: 'P%',       val: `${(signal?.confidence ?? 50).toFixed(0)}%`, pct: '', color: 'var(--tv-text2)', col: '' },
-                  ] as Array<{ label: string; val: string; pct: string; color: string; col: string }>).map(({ label, val, pct, color, col }) => (
+                    { label: 'HMF',     val: fmt(indValues.macd, 2),   pct: '',                  color: '#ff9800', col: '' },
+                    { label: 'Top Box', val: fmt(topBox, 2),            pct: pf(pct(topBox)),      color: '#ff6f00', col: pct(topBox) >= 0 ? 'down' : 'up' },
+                    { label: 'Btm Box', val: fmt(btmBox, 2),             pct: pf(pct(btmBox)),      color: '#9e9e9e', col: pct(btmBox) >= 0 ? 'down' : 'up' },
+                    { label: 'Magenta', val: fmt(indValues.ema21, 2),    pct: pf(pct(indValues.ema21)),  color: '#e91e63', col: pct(indValues.ema21) >= 0 ? 'down' : 'up' },
+                    { label: 'Lautan',  val: fmt(indValues.ema50, 2),    pct: pf(pct(indValues.ema50)),  color: '#42a5f5', col: pct(indValues.ema50) >= 0 ? 'down' : 'up' },
+                    { label: 'EMA 21',  val: fmt(indValues.ema21, 2),    pct: pf(pct(indValues.ema21)),  color: '#2962ff', col: pct(indValues.ema21) >= 0 ? 'down' : 'up' },
+                    { label: 'VWAP',    val: fmt(indValues.vwap, 2),     pct: pf(pct(indValues.vwap)),   color: '#00bcd4', col: pct(indValues.vwap) >= 0 ? 'down' : 'up' },
+                    { label: 'RSI(7)',  val: fmt(indValues.rsi7, 1),    pct: '',                  color: '#7e57c2', col: '' },
+                    { label: 'ATR(14)', val: fmt(indValues.atr, 4),     pct: '',                  color: '#90a4ae', col: '' },
+                    { label: 'ATLAS',   val: `${signal?.confidence ?? 50}`, pct: '',              color: '#089981', col: '' },
+                  ] as Array<{ label: string; val: string; pct: string; color: string; col: string }>).map(({ label, val, pct: p, color, col }) => (
                     <div key={label} className="t1mo-ind-row">
-                      <span className="t1mo-ind-label" style={{'--ind-c':color} as React.CSSProperties}>{label}</span>
-                      <span className={`t1mo-ind-pct mono ${col}`}>{pct}</span>
+                      <span className="t1mo-ind-label" style={{'--ind-c': color} as React.CSSProperties}>{label}</span>
+                      <span className={`t1mo-ind-pct mono ${col}`}>{p}</span>
                       <span className="t1mo-ind-val mono">{val}</span>
                     </div>
                   ));
@@ -472,13 +526,22 @@ export default function RightPanel() {
               </div>
             )}
 
-            {/* EXECUTE TRADE NODE — T1MO exact CTA */}
-            <button type="button" className="t1mo-execute-btn">
-              EXECUTE TRADE NODE
-            </button>
-            <p className="t1mo-neural-text">
-              Neural signal confirmed via Yahoo Finance data nodes.
-            </p>
+            {/* KONDISI PASAR — regime section (folder 4) */}
+            {regime && (
+              <div className="kondisi-pasar-section">
+                <div className="kondisi-pasar-hdr">KONDISI PASAR</div>
+                <div
+                  className="kondisi-pasar-badge"
+                  data-regime={regime.regime}
+                >
+                  <span className="regime-dot"></span>
+                  {REGIME_ID_LABELS[regime.regime] ?? regime.regime}
+                </div>
+                <div className="kondisi-pasar-warn">
+                  <span>⚠</span> Eksekusi manual — tidak ada auto trade
+                </div>
+              </div>
+            )}
           </>
         )}
 
