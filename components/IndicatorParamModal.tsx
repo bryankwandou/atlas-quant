@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X, RotateCcw, Save } from 'lucide-react';
 import { useChartStore } from '@/store/chartStore';
-import { INDICATOR_INDEX } from '@/src/core/indicators/registry';
-import { resolveSchema, type ParamField, type ParamSchema } from '@/src/core/indicators/paramSchema';
+import { INDICATOR_INDEX } from '@/core/indicators/registry';
+import { resolveSchema, type ParamField, type ParamSchema } from '@/core/indicators/paramSchema';
 
 interface Props {
   presetId: string | null;

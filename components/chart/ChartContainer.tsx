@@ -5,7 +5,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useChartStore } from '@/store/chartStore';
 import { BarChart2, TrendingUp, Activity, Zap, Layers, Maximize2 } from 'lucide-react';
-import { computeIndicators } from '@/src/core/indicators/client';
+import { computeIndicators } from '@/core/indicators/client';
 
 const CandlestickChartIcon = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
