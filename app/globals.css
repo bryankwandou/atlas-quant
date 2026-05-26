@@ -1723,3 +1723,26 @@ select{cursor:pointer;}
 /* ── indicator-modal-overlay alias ──────────────────────── */
 .indicator-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;display:flex;align-items:center;justify-content:center;animation:fadeIn 150ms ease;}
 @keyframes slideUp{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
+
+/* ── T1MO LAST PERFORMANCE single-column table ───────────── */
+.t1mo-lp-section{background:var(--tv-bg);border:1px solid var(--tv-border);border-radius:4px;padding:6px 10px;display:flex;flex-direction:column;gap:0;}
+.t1mo-lp-title{font-size:9px;color:var(--tv-text3);text-transform:uppercase;letter-spacing:.8px;font-weight:600;padding-bottom:5px;border-bottom:1px solid var(--tv-border);margin-bottom:4px;}
+.t1mo-lp-row{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.03);}
+.t1mo-lp-row:last-child{border-bottom:none;}
+.t1mo-lp-label{font-size:10px;color:var(--tv-text2);text-transform:uppercase;letter-spacing:.3px;}
+.t1mo-lp-val{font-size:11px;font-weight:500;}
+.t1mo-lp-bold{font-weight:700;}
+
+/* ── T1MO S/R header colored labels ─────────────────────── */
+.t1mo-sr-sup-hdr{color:var(--tv-up);font-weight:600;}
+.t1mo-sr-res-hdr{color:var(--tv-down);font-weight:600;}
+
+/* ── T1MO indicator label dynamic color ─────────────────── */
+.t1mo-ind-label{color:var(--ind-c,var(--tv-text2));font-weight:600;font-size:10px;}
+
+/* ── EXECUTE TRADE NODE button ───────────────────────────── */
+.t1mo-execute-btn{width:100%;padding:10px 0;background:var(--tv-blue);color:#fff;font-size:11px;font-weight:700;letter-spacing:.8px;border-radius:4px;margin-top:8px;text-transform:uppercase;transition:opacity .12s;}
+.t1mo-execute-btn:hover{opacity:.88;}
+
+/* ── Neural signal footnote ──────────────────────────────── */
+.t1mo-neural-text{font-size:9px;color:var(--tv-text3);text-align:center;padding:4px 0 2px;letter-spacing:.2px;}
