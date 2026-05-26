@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import { X, Search, Layers, Check, Library, Settings } from 'lucide-react';
 import { useChartStore } from '@/store/chartStore';
-import { INDICATOR_REGISTRY, type IndicatorPreset } from '@/src/core/indicators/registry';
+import { INDICATOR_REGISTRY, type IndicatorPreset } from '@/core/indicators/registry';
 import IndicatorParamModal from './IndicatorParamModal';
 
 // ─────────────────────────────────────────────────────────────────────────────

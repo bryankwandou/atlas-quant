@@ -4,7 +4,7 @@ import { RefreshCw, Power, Bot, Activity } from 'lucide-react';
 import { useChartStore } from '@/store/chartStore';
 import { useUserStore } from '@/store/userStore';
 import { useMarketData, useMarketPrice } from '@/hooks/useMarketData';
-import { computeIndicators } from '@/src/core/indicators/client';
+import { computeIndicators } from '@/core/indicators/client';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -303,11 +303,21 @@ export default function RightPanel() {
   const rpChange = priceData?.change24h ?? 0;
   const rpIsUp   = rpChange >= 0;
 
+  // T1MO OHLCV rows — last candle vs prev candle
+  const lastC = candles?.length ? candles[candles.length - 1] : null;
+  const prevC = candles?.length > 1 ? candles[candles.length - 2] : null;
+  const midPrc = lastC ? (lastC.high + lastC.low) / 2 : null;
+  const prevMid = prevC ? (prevC.high + prevC.low) / 2 : null;
+  const cpPct = lastC && prevC ? ((lastC.close - prevC.close) / prevC.close * 100) : null;
+  const rangePct = lastC && prevC && prevC.high !== prevC.low
+    ? ((lastC.high - lastC.low) / (prevC.high - prevC.low) * 100 - 100)
+    : null;
+
   const tabs = [
-    { id: 'signal',    label: 'Signal',    icon: '⚡' },
-    { id: 'watchlist', label: 'Watchlist', icon: '👁' },
-    { id: 'ai',        label: 'AI',        icon: '🤖' },
-    { id: 'risk',      label: 'Risk',      icon: '🛡' },
+    { id: 'signal',    label: 'Sinyal',   icon: '⚡' },
+    { id: 'watchlist', label: 'Pantauan', icon: '👁' },
+    { id: 'ai',        label: 'AI',       icon: '🤖' },
+    { id: 'risk',      label: 'Risiko',   icon: '🛡' },
   ];
 
   // ── Risk param keys aligned to userStore ────────────────────────────────
@@ -322,21 +332,23 @@ export default function RightPanel() {
   return (
     <div className="right-panel">
 
-      {/* ── Symbol Header (matches reference rp-sym-hdr) ──────────────── */}
-      <div className="rp-sym-hdr">
-        <div className="rp-sym-left">
-          <div className="rp-sym-name">{symbol}</div>
-          <div className="rp-sym-full">{symbol.replace('USDT', ' / USDT').replace('=X', '').replace('=F', ' Futures')}</div>
-          <div className="rp-sym-exch">BINANCE · {symbol.endsWith('USDT') ? 'CRYPTO' : 'MARKET'}</div>
-        </div>
-        <div className="rp-sym-right">
-          <div className={`rp-price mono${rpIsUp ? ' up' : ' down'}`}>
-            {rpPrice > 0 ? rpPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '—'}
+      {/* ── T1MO Symbol Header ──────────────────────────────────────────── */}
+      <div className="t1mo-sym-hdr">
+        <div className="t1mo-sym-left">
+          <span className={`t1mo-spec-badge ${sigType === 'BUY' ? 'buy' : sigType === 'SELL' ? 'sell' : 'neutral'}`}>
+            {sigType === 'BUY' ? 'BUY Spekulatif' : sigType === 'SELL' ? 'SELL Spekulatif' : 'NEUTRAL'}
+          </span>
+          <div className="t1mo-price-row">
+            <span className={`t1mo-price mono ${rpIsUp ? 'up' : 'down'}`}>
+              {rpPrice > 0 ? rpPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+            </span>
+            <span className={`t1mo-chg ${rpIsUp ? 'up' : 'down'}`}>
+              {rpIsUp ? '+' : ''}{rpChange.toFixed(2)}%
+            </span>
           </div>
-          <div className={`rp-change${rpIsUp ? ' up' : ' down'}`}>
-            {rpIsUp ? '+' : ''}{rpChange.toFixed(2)}%
-          </div>
+          <div className="t1mo-event-label">{symbol.replace('USDT','')} · BINANCE · {timeframe.toUpperCase()}</div>
         </div>
+        <button type="button" className="t1mo-collapse-btn" title="Collapse">◀</button>
       </div>
 
       {/* ── Tabs ──────────────────────────────────────────────────────────── */}
@@ -357,132 +369,113 @@ export default function RightPanel() {
       <div className="rp-content rp-body">
 
         {/* ════════════════════════════════════════════════════════════════
-            SIGNAL TAB
+            SIGNAL TAB — T1MO style (folder 4 reference)
         ════════════════════════════════════════════════════════════════ */}
-        {rightPanelTab === 'signal' && (() => {
-          const lClose = candles?.length ? candles[candles.length - 1].close : 0;
+        {rightPanelTab === 'signal' && (
+          <>
+            {/* Refresh row */}
+            <div className="rp-version-row">
+              <span className="rp-version-badge">T1MO · ATLAS-QUANT</span>
+              <span className="rp-countdown"><RefreshCw size={8} />{countdown}s</span>
+            </div>
 
-          return (
-            <>
-              {/* Countdown */}
-              <div className="rp-version-row">
-                <span className="rp-version-badge">v2 ATLAS-QUANT</span>
-                <span className="rp-countdown">
-                  <RefreshCw size={8} />{countdown}s
+            {/* T1MO OHLCV Data Table */}
+            <div className="t1mo-table">
+              <div className="t1mo-row t1mo-header">
+                <span className="t1mo-label"></span>
+                <span className="t1mo-col-l">LAST</span>
+                <span className="t1mo-col-r">PREV</span>
+              </div>
+              {[
+                { label: 'Open',    l: lastC?.open,  p: prevC?.open  },
+                { label: 'High',    l: lastC?.high,  p: prevC?.high  },
+                { label: 'Mid Prc', l: midPrc,       p: prevMid      },
+                { label: 'Low',     l: lastC?.low,   p: prevC?.low   },
+                { label: 'Close',   l: lastC?.close, p: prevC?.close },
+              ].map(({ label, l, p }) => (
+                <div key={label} className="t1mo-row">
+                  <span className="t1mo-label">{label}</span>
+                  <span className="t1mo-col-l mono">{fmt(l, 2)}</span>
+                  <span className="t1mo-col-r mono">{fmt(p, 2)}</span>
+                </div>
+              ))}
+              <div className="t1mo-row t1mo-change-row">
+                <span className="t1mo-label">Change</span>
+                <span className={`t1mo-col-l mono ${rpIsUp ? 'up' : 'down'}`}>
+                  {lastC && prevC ? `${rpIsUp ? '+' : ''}${(lastC.close - prevC.close).toFixed(2)}` : '—'}
+                </span>
+                <span className={`t1mo-col-r ${rpIsUp ? 'up' : 'down'}`}>
+                  {rpChange !== 0 ? `${rpIsUp ? '+' : ''}${rpChange.toFixed(2)}%` : '—'}
                 </span>
               </div>
-
-              {/* Signal Badge */}
-              <div className={`signal-badge ${sigType.toLowerCase()}`}>
-                <div className="sig-badge-type">{sigType}</div>
-                <div className="sig-badge-conf">{signal?.confidence ?? '—'}% confidence</div>
+              <div className="t1mo-row t1mo-subrow">
+                <span className="t1mo-label">CP</span>
+                <span className="t1mo-col-l mono">{cpPct != null ? Math.abs(cpPct).toFixed(2) : '—'}</span>
+                <span className={`t1mo-col-r ${cpPct != null ? (cpPct >= 0 ? 'up' : 'down') : ''}`}>
+                  {cpPct != null ? `${cpPct >= 0 ? '+' : ''}${cpPct.toFixed(1)}%` : '—'}
+                </span>
               </div>
-
-              {/* Strategy */}
-              {signal?.strategy && (
-                <div className="sig-strategy-row">
-                  <span className="sig-strat-label">Strategy</span>
-                  <span className="sig-strat-val">{signal.strategy.replace(/_/g, ' ')}</span>
-                </div>
-              )}
-
-              {/* Price Levels */}
-              {sigType !== 'NEUTRAL' && signal?.tp1 && (
-                <div className="sig-levels">
-                  {[
-                    { label: 'Entry', val: fmt(signal.entryPrice, 4), cls: ''       },
-                    { label: 'TP1',   val: fmt(signal.tp1, 4),        cls: 'tp-val' },
-                    { label: 'TP2',   val: fmt(signal.tp2, 4),        cls: 'tp-val' },
-                    { label: 'TP3',   val: fmt(signal.tp3, 4),        cls: 'tp-val' },
-                    { label: 'SL',    val: fmt(signal.sl, 4),          cls: 'sl-val' },
-                    { label: 'R:R',   val: signal.rrRatio ? `${signal.rrRatio.toFixed(1)}:1` : '—', cls: 'blue' },
-                    { label: 'ATR',   val: fmt(signal.atrValue, 4),    cls: ''       },
-                  ].map(({ label, val, cls }) => (
-                    <div key={label} className="sig-level-row">
-                      <span className="sig-level-label">{label}</span>
-                      <span className={`sig-level-val mono${cls ? ` ${cls}` : ''}`}>{val}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Regime */}
-              {regime && (() => {
-                const rc = REGIME_COLORS[regime.regime] ?? '#ff9800';
-                return (
-                  <div className="sig-regime-row">
-                    <div className="sig-regime-label">Market Regime</div>
-                    <div
-                      className="sig-regime-badge"
-                      style={{ backgroundColor: rc + '22', color: rc, borderColor: rc + '44' }}
-                    >
-                      <span className="regime-dot" style={{ background: rc }} />
-                      {regime.regime.replace(/_/g, ' ')} · ADX {regime.adx}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Support / Resistance */}
-              {srData && (
-                <div className="sig-sr-section">
-                  <div className="sig-section-title">
-                    <span>Support</span>
-                    <span>Resistance</span>
-                  </div>
-                  <div className="sig-sr-table">
-                    {Array.from({ length: 3 }, (_, i) => (
-                      <div key={i} className="sig-sr-row">
-                        <span className="sr-rank">{i + 1}</span>
-                        <span className="sr-support mono up">
-                          {srData.supports[i] ? fmt(srData.supports[i].price, 2) : '—'}
-                        </span>
-                        <span className="sr-resist mono down">
-                          {srData.resistances[i] ? fmt(srData.resistances[i].price, 2) : '—'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Indicators */}
-              {indValues && (
-                <div className="sig-indicators-section">
-                  <div className="sig-ind-title">Indicators</div>
-                  <div className="sig-ind-table">
-                    {[
-                      { label: 'EMA 9',    val: indValues.ema9,  ref: lClose, dec: 2 },
-                      { label: 'EMA 21',   val: indValues.ema21, ref: lClose, dec: 2 },
-                      { label: 'VWAP',     val: indValues.vwap,  ref: lClose, dec: 2 },
-                      { label: 'RSI (14)', val: indValues.rsi,   ref: 0,      dec: 1, noChange: true },
-                      { label: 'ATR (14)', val: indValues.atr,   ref: 0,      dec: 4, noChange: true },
-                      { label: 'MACD',     val: indValues.macd,  ref: 0,      dec: 4, noChange: true },
-                    ].map(({ label, val, ref, dec, noChange }) => {
-                      const pct = !noChange && ref && val ? ((val - ref) / ref * 100) : null;
-                      return (
-                        <div key={label} className="sig-ind-row">
-                          <span className="ind-row-label">{label}</span>
-                          <span className="ind-row-val mono">{val != null ? Number(val).toFixed(dec) : '—'}</span>
-                          {pct != null && (
-                            <span className={`ind-row-pct ${pct >= 0 ? 'up' : 'down'}`}>
-                              {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Warning */}
-              <div className="sig-warning">
-                ⚠ For informational purposes only. Manual execution only. Not financial advice.
+              <div className="t1mo-row">
+                <span className="t1mo-label">Range</span>
+                <span className="t1mo-col-l mono">{lastC ? fmt(lastC.high - lastC.low, 2) : '—'}</span>
+                <span className={`t1mo-col-r ${rangePct != null ? (rangePct >= 0 ? 'up' : 'down') : ''}`}>
+                  {rangePct != null ? `${rangePct >= 0 ? '+' : ''}${rangePct.toFixed(2)}%` : '—'}
+                </span>
               </div>
-            </>
-          );
-        })()}
+              <div className="t1mo-row">
+                <span className="t1mo-label">Volume</span>
+                <span className="t1mo-col-l mono">
+                  {lastC?.volume ? (lastC.volume > 1e6 ? `${(lastC.volume / 1e6).toFixed(1)}M` : lastC.volume.toFixed(0)) : '—'}
+                </span>
+                <span className="t1mo-col-r text-muted" style={{fontSize:'9px'}}>Actual</span>
+              </div>
+            </div>
+
+            {/* T1MO Support / Resistance */}
+            {srData && (
+              <div className="t1mo-sr-section">
+                <div className="t1mo-sr-header">
+                  <span>SUPPORT</span>
+                  <span></span>
+                  <span>RESISTENSI</span>
+                </div>
+                {Array.from({ length: 3 }, (_, i) => (
+                  <div key={i} className="t1mo-sr-row">
+                    <span className="t1mo-sup mono up">{srData.supports[i] ? fmt(srData.supports[i].price, 2) : '—'}</span>
+                    <span className="t1mo-rank">{i + 1}</span>
+                    <span className="t1mo-res mono down">{srData.resistances[i] ? fmt(srData.resistances[i].price, 2) : '—'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* T1MO Indicators */}
+            {indValues && (
+              <div className="t1mo-ind-section">
+                <div className="t1mo-ind-title">INDIKATOR</div>
+                {[
+                  { label: 'EMA 9',  val: indValues.ema9,  ref: lastC?.close },
+                  { label: 'EMA 21', val: indValues.ema21, ref: lastC?.close },
+                  { label: 'VWAP',   val: indValues.vwap,  ref: lastC?.close },
+                  { label: 'RSI 14', val: indValues.rsi,   ref: null },
+                  { label: 'ATR 14', val: indValues.atr,   ref: null },
+                  { label: 'ADX',    val: indValues.adx,   ref: null },
+                ].map(({ label, val, ref }) => {
+                  const pct = ref && val ? ((val - ref) / ref * 100) : null;
+                  return (
+                    <div key={label} className="t1mo-ind-row">
+                      <span className="t1mo-ind-label">{label}</span>
+                      <span className="t1mo-ind-val mono">{val != null ? Number(val).toFixed(2) : '—'}</span>
+                      <span className={`t1mo-ind-pct ${pct != null ? (pct >= 0 ? 'up' : 'down') : ''}`}>
+                        {pct != null ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : ''}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
 
         {/* ════════════════════════════════════════════════════════════════
             WATCHLIST TAB
