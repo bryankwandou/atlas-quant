@@ -8,7 +8,8 @@
 
 /* ── Reset ───────────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-html,body{height:100%;overflow:hidden;}
+html{height:100%;}
+/* body keeps normal scroll — .atlas-app handles dashboard's overflow:hidden on its own grid */
 
 /* ── ATLAS-QUANT DARURAT HUKUM — Dark theme (default) ────── */
 /* Variables on :root so [data-theme="light"] on <html> can override correctly */

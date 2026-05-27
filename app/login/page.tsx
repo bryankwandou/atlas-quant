@@ -43,7 +43,7 @@ export default function LoginPage() {
     const token = localStorage.getItem('session_token');
     const user = localStorage.getItem('atlas_user');
     if (token && user) {
-      router.replace('/');
+      router.replace('/chart');
       return;
     }
     const checkPhantom = () => {
@@ -90,7 +90,7 @@ export default function LoginPage() {
         if (data.refresh_token) {
           localStorage.setItem('refresh_token', data.refresh_token);
         }
-        router.replace('/');
+        router.replace('/chart');
       } catch {
         setError('Network error. Please try again.');
       } finally {
@@ -156,7 +156,7 @@ export default function LoginPage() {
       localStorage.setItem('session_token', verifyData.token ?? '');
       localStorage.setItem('user_pubkey', pubkey);
       localStorage.setItem('atlas_user', JSON.stringify({ publicKey: pubkey, role: 'user' }));
-      router.replace('/');
+      router.replace('/chart');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Wallet authentication failed.';
       setError(msg);
