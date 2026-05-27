@@ -505,16 +505,16 @@ export default function RightPanel() {
                   const pct    = (v: number) => (v - price) / price * 100;
                   const pf     = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
                   return ([
-                    { label: 'HMF',     val: fmt(indValues.macd, 2),   pct: '',                  color: '#ff9800', col: '' },
+                    { label: 'HMF',     val: fmt(indValues.macd, 2),   pct: '',                  color: '#f59e0b', col: '' },
                     { label: 'Top Box', val: fmt(topBox, 2),            pct: pf(pct(topBox)),      color: '#ff6f00', col: pct(topBox) >= 0 ? 'down' : 'up' },
                     { label: 'Btm Box', val: fmt(btmBox, 2),             pct: pf(pct(btmBox)),      color: '#9e9e9e', col: pct(btmBox) >= 0 ? 'down' : 'up' },
                     { label: 'Magenta', val: fmt(indValues.ema21, 2),    pct: pf(pct(indValues.ema21)),  color: '#e91e63', col: pct(indValues.ema21) >= 0 ? 'down' : 'up' },
                     { label: 'Lautan',  val: fmt(indValues.ema50, 2),    pct: pf(pct(indValues.ema50)),  color: '#42a5f5', col: pct(indValues.ema50) >= 0 ? 'down' : 'up' },
-                    { label: 'EMA 21',  val: fmt(indValues.ema21, 2),    pct: pf(pct(indValues.ema21)),  color: '#2962ff', col: pct(indValues.ema21) >= 0 ? 'down' : 'up' },
+                    { label: 'EMA 21',  val: fmt(indValues.ema21, 2),    pct: pf(pct(indValues.ema21)),  color: '#7b61ff', col: pct(indValues.ema21) >= 0 ? 'down' : 'up' },
                     { label: 'VWAP',    val: fmt(indValues.vwap, 2),     pct: pf(pct(indValues.vwap)),   color: '#00bcd4', col: pct(indValues.vwap) >= 0 ? 'down' : 'up' },
                     { label: 'RSI(7)',  val: fmt(indValues.rsi7, 1),    pct: '',                  color: '#7e57c2', col: '' },
                     { label: 'ATR(14)', val: fmt(indValues.atr, 4),     pct: '',                  color: '#90a4ae', col: '' },
-                    { label: 'ATLAS',   val: `${signal?.confidence ?? 50}`, pct: '',              color: '#089981', col: '' },
+                    { label: 'ATLAS',   val: `${signal?.confidence ?? 50}`, pct: '',              color: '#22c55e', col: '' },
                   ] as Array<{ label: string; val: string; pct: string; color: string; col: string }>).map(({ label, val, pct: p, color, col }) => (
                     <div key={label} className="t1mo-ind-row">
                       <span className="t1mo-ind-label" style={{'--ind-c': color} as React.CSSProperties}>{label}</span>
