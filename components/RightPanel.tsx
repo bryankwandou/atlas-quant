@@ -349,21 +349,23 @@ export default function RightPanel() {
   return (
     <div className="right-panel">
 
-      {/* ── T1MO Symbol Header ──────────────────────────────────────────── */}
-      <div className="t1mo-sym-hdr">
+      {/* ── T1MO Symbol Header — folder (4) exact ──────────────────────── */}
+      <div className="rp-sym-hdr t1mo-sym-hdr">
         <div className="t1mo-sym-left">
           <span className={`t1mo-spec-badge ${sigType === 'BUY' ? 'buy' : sigType === 'SELL' ? 'sell' : 'neutral'}`}>
-            {sigType === 'BUY' ? 'BUY Spekulatif' : sigType === 'SELL' ? 'SELL Spekulatif' : 'NEUTRAL'}
+            {sigType === 'BUY' ? 'Beli Spekulatif' : sigType === 'SELL' ? 'Jual Spekulatif' : 'NEUTRAL'}
           </span>
           <div className="t1mo-price-row">
             <span className={`t1mo-price mono ${rpIsUp ? 'up' : 'down'}`}>
               {rpPrice > 0 ? rpPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
             </span>
             <span className={`t1mo-chg ${rpIsUp ? 'up' : 'down'}`}>
-              {rpIsUp ? '+' : ''}{rpChange.toFixed(2)}%
+              {rpPrice > 0 ? `${rpIsUp ? '+' : ''}${(rpPrice * rpChange / 100).toFixed(2)} ${rpIsUp ? '+' : ''}${rpChange.toFixed(2)}%` : '—'}
             </span>
           </div>
-          <div className="t1mo-event-label">{symbol.replace('USDT','')} · BINANCE · {timeframe.toUpperCase()}</div>
+          <div className="t1mo-event-label">
+            {`D-${String(Math.floor((Date.now() - new Date('2022-02-24').getTime()) / 86400000) % 365).padStart(3,'0')} · E: 24-Feb-22`}
+          </div>
         </div>
         <button type="button" className="t1mo-collapse-btn" title="Collapse">◀</button>
       </div>
