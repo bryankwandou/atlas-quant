@@ -13,7 +13,7 @@ interface ThemeStore {
 export const useTheme = create<ThemeStore>()(
   persist(
     (set) => ({
-      theme: (process.env.NEXT_PUBLIC_DEFAULT_THEME as Theme) || 'light',
+      theme: (process.env.NEXT_PUBLIC_DEFAULT_THEME as Theme) || 'dark',
       setTheme: (theme) => {
         set({ theme });
         if (typeof document !== 'undefined') {
@@ -28,6 +28,6 @@ export const useTheme = create<ThemeStore>()(
         return { theme: next };
       }),
     }),
-    { name: 'atlas-theme' }
+    { name: 'atlas-theme-v3' }  // bumped: forces dark default for all users
   )
 );

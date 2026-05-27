@@ -10,12 +10,9 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;}
 
-body{
-  font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
-  font-size:12px;line-height:1.4;
-  background:var(--aq-bg,#0d1218);
-  color:var(--aq-text,#cdd4e1);
-  /* ── ATLAS-QUANT DARURAT HUKUM color tokens ── */
+/* ── ATLAS-QUANT DARURAT HUKUM — Dark theme (default) ────── */
+/* Variables on :root so [data-theme="light"] on <html> can override correctly */
+:root{
   --aq-bg:#0d1218;--aq-bg2:#161c25;--aq-bg3:#222a36;
   --aq-surface:#161c25;--aq-border:#222a36;--aq-border2:#323b4b;
   --aq-text:#cdd4e1;--aq-text2:#7a8294;--aq-text3:#4b5364;
@@ -29,10 +26,7 @@ body{
   --aq-vwap:#00bcd4;--aq-bb:#42a5f5;
   --aq-magenta:#e91e63;--aq-lautan:#42a5f5;--aq-topbox:#ff6f00;--aq-btmbox:#9e9e9e;
   --sidebar-w:52px;--rightrail-w:0px;--topbar-h:48px;--right-w:300px;--status-h:26px;
-}
-
-/* ── --tv-* aliases → --aq-* (backward compat for existing components) ── */
-:root{
+  /* --tv-* aliases for backward compat */
   --tv-bg:var(--aq-bg);--tv-bg2:var(--aq-bg2);--tv-bg3:var(--aq-bg3);
   --tv-surface:var(--aq-surface);--tv-border:var(--aq-border);--tv-border2:var(--aq-border2);
   --tv-text:var(--aq-text);--tv-text2:var(--aq-text2);--tv-text3:var(--aq-text3);
@@ -40,14 +34,12 @@ body{
   --tv-up:var(--aq-up);--tv-down:var(--aq-down);
   --tv-up-bg:var(--aq-up-bg);--tv-down-bg:var(--aq-down-bg);
   --tv-neutral:var(--aq-neutral);--tv-neutral-bg:var(--aq-neutral-bg);
-  --tv-grid:var(--aq-grid);
-  --tv-shadow:var(--aq-shadow);--tv-shadow2:var(--aq-shadow2);
+  --tv-grid:var(--aq-grid);--tv-shadow:var(--aq-shadow);--tv-shadow2:var(--aq-shadow2);
   --tv-ema9:var(--aq-ema9);--tv-ema21:var(--aq-ema21);
-  --tv-ema50:var(--aq-ema50);--tv-ema200:var(--aq-ema200);
-  --tv-vwap:var(--aq-vwap);
+  --tv-ema50:var(--aq-ema50);--tv-ema200:var(--aq-ema200);--tv-vwap:var(--aq-vwap);
 }
 
-/* ── Light theme override ────────────────────────────────── */
+/* ── Light theme override (on :root via html[data-theme="light"]) ── */
 [data-theme="light"]{
   --aq-bg:#ffffff;--aq-bg2:#efece5;--aq-bg3:#e2ddd2;
   --aq-surface:#f7f4ed;--aq-border:#dcd6c8;--aq-border2:#c1bbab;
@@ -58,6 +50,13 @@ body{
   --aq-shadow:0 4px 24px rgba(0,0,0,.1);--aq-shadow2:0 2px 8px rgba(0,0,0,.07);
   --aq-ema9:#d4a017;--aq-ema21:#1a56db;--aq-ema50:#c2185b;--aq-ema200:#7b1fa2;--aq-vwap:#0097a7;
   --aq-magenta:#ad1457;--aq-lautan:#0288d1;--aq-topbox:#e65100;--aq-btmbox:#616161;
+}
+
+body{
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  font-size:12px;line-height:1.4;
+  background:var(--aq-bg);
+  color:var(--aq-text);
 }
 
 /* ── Utilities ───────────────────────────────────────────── */
