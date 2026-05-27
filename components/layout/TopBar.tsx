@@ -1,164 +1,193 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import {
-  ChevronDown, Search, X, Layers, Bell, Camera, RefreshCw,
-  Sun, Moon, Globe, Settings, Grid, Star, BarChart2,
-} from 'lucide-react';
-// GitCompare doesn't exist in lucide-react — use inline SVG
-const GitCompareIcon = ({ size = 13 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/>
-    <path d="M6 21V9a9 9 0 009 9"/>
-  </svg>
-);
+import { ChevronDown, Search, X, Layers, Bell, Camera, Sun, Moon, Globe, Settings } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useChartStore } from '@/store/chartStore';
 import { useMarketPrice } from '@/hooks/useMarketData';
 
+// ── Inline SVG icons matching ATLAS-QUANT DARURAT HUKUM icon set ──────────────
+const IconAtlas = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M4 19L12 5L20 19H16L12 12L8 19H4Z" fill="currentColor"/>
+    <circle cx="12" cy="19" r="1.4" fill="currentColor"/>
+  </svg>
+);
+const IconCompare = ({ size = 13 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5 12 L12 5 L19 12"/>
+    <path d="M5 19 L12 12 L19 19"/>
+    <line x1="12" y1="5" x2="12" y2="19"/>
+  </svg>
+);
+const IconReplay = ({ size = 13 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none" opacity={0.8}/>
+  </svg>
+);
+const IconTemplate = ({ size = 13 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/>
+    <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/>
+    <line x1="2" y1="9" x2="8" y2="9"/>
+    <line x1="16" y1="9" x2="22" y2="9"/>
+  </svg>
+);
+const IconPineScript = ({ size = 13 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="16 18 22 12 16 6"/>
+    <polyline points="8 6 2 12 8 18"/>
+  </svg>
+);
+const IconPublish = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/>
+    <polyline points="16 6 12 2 8 6"/>
+    <line x1="12" y1="2" x2="12" y2="15"/>
+  </svg>
+);
+const IconSplit2 = ({ size = 15 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="2" width="9" height="20" rx="1"/>
+    <rect x="13" y="2" width="9" height="20" rx="1"/>
+  </svg>
+);
+const IconFullscreen = ({ size = 15 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>
+  </svg>
+);
+const IconKeyboard = ({ size = 15 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="5" width="20" height="14" rx="2"/>
+    <line x1="6" y1="9" x2="6.01" y2="9"/>
+    <line x1="10" y1="9" x2="10.01" y2="9"/>
+    <line x1="14" y1="9" x2="14.01" y2="9"/>
+    <line x1="18" y1="9" x2="18.01" y2="9"/>
+    <line x1="8" y1="13" x2="8.01" y2="13"/>
+    <line x1="12" y1="13" x2="16" y2="13"/>
+    <line x1="6" y1="13" x2="6.01" y2="13"/>
+  </svg>
+);
 
-// TradingView-style quick TF bar — shows all main timeframes directly
-const QUICK_TFS = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '12h', '1d', '1w', '1M'];
+// ── Config matching ATLAS-QUANT DARURAT HUKUM dashboard-config.js ─────────────
+const QUICK_TFS = ['1m', '5m', '15m', '1h', '4h', '1d'];
 const TF_GROUPS = [
-  { group: 'Seconds', tfs: ['1s', '15s', '30s'] },
-  { group: 'Minutes', tfs: ['1m', '3m', '5m', '10m', '15m', '30m', '45m'] },
-  { group: 'Hours',   tfs: ['1h', '2h', '3h', '4h', '6h', '8h', '12h'] },
-  { group: 'Days',    tfs: ['1d', '2d', '3d'] },
-  { group: 'Weeks',   tfs: ['1w', '2w'] },
-  { group: 'Months',  tfs: ['1M', '3M', '6M', '12M'] },
+  { g: 'seconds', tfs: ['1s', '15s', '30s'] },
+  { g: 'minutes', tfs: ['1m', '3m', '5m', '15m', '30m'] },
+  { g: 'hours',   tfs: ['1h', '2h', '4h', '12h'] },
+  { g: 'days',    tfs: ['1d', '1w'] },
 ];
 
 const WATCHLIST_DEFAULTS = [
-  { symbol: 'BTCUSDT', name: 'Bitcoin', exchange: 'BINANCE' },
-  { symbol: 'ETHUSDT', name: 'Ethereum', exchange: 'BINANCE' },
-  { symbol: 'SOLUSDT', name: 'Solana', exchange: 'BINANCE' },
-  { symbol: 'BNBUSDT', name: 'BNB', exchange: 'BINANCE' },
-  { symbol: 'XRPUSDT', name: 'Ripple', exchange: 'BINANCE' },
-  { symbol: 'ADAUSDT', name: 'Cardano', exchange: 'BINANCE' },
+  { symbol: 'BTCUSDT',  name: 'Bitcoin',  exchange: 'BINANCE' },
+  { symbol: 'ETHUSDT',  name: 'Ethereum', exchange: 'BINANCE' },
+  { symbol: 'SOLUSDT',  name: 'Solana',   exchange: 'BINANCE' },
+  { symbol: 'BNBUSDT',  name: 'BNB',      exchange: 'BINANCE' },
+  { symbol: 'XRPUSDT',  name: 'Ripple',   exchange: 'BINANCE' },
+  { symbol: 'ADAUSDT',  name: 'Cardano',  exchange: 'BINANCE' },
   { symbol: 'DOGEUSDT', name: 'Dogecoin', exchange: 'BINANCE' },
-  { symbol: 'MATICUSDT', name: 'Polygon', exchange: 'BINANCE' },
 ];
 
 export default function TopBar() {
   const { theme, toggle: toggleTheme } = useTheme();
-  const { lang, toggle: toggleLang, t } = useLanguage();
+  const { lang, toggle: toggleLang } = useLanguage();
   const {
     symbol, timeframe, setSymbol, setTimeframe,
-    showSignals, toggleSignals, activeIndicators, openIndicatorModal,
+    activeIndicators, openIndicatorModal,
   } = useChartStore();
   const { priceData } = useMarketPrice(symbol);
-  // openIndicatorModal via chartStore
 
-  const [showSymSearch, setShowSymSearch] = useState(false);
-  const [showTFDropdown, setShowTFDropdown] = useState(false);
-  const [searchVal, setSearchVal] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const searchRef = useRef<HTMLInputElement>(null);
-  const symWrapRef = useRef<HTMLDivElement>(null);
-  const tfWrapRef = useRef<HTMLDivElement>(null);
+  const [showSym, setShowSym]         = useState(false);
+  const [showTF, setShowTF]           = useState(false);
+  const [search, setSearch]           = useState('');
+  const [searchResults, setResults]   = useState<any[]>(WATCHLIST_DEFAULTS);
+  const searchRef  = useRef<HTMLInputElement>(null);
+  const symRef     = useRef<HTMLDivElement>(null);
+  const tfRef      = useRef<HTMLDivElement>(null);
 
-  const price  = priceData?.price ?? 0;
+  const price  = priceData?.price    ?? 0;
   const change = priceData?.change24h ?? 0;
   const isUp   = change >= 0;
 
-  // Search symbols
+  // Auto-focus search input when panel opens
   useEffect(() => {
-    if (!showSymSearch) return;
-    if (searchVal.length < 1) {
-      setSearchResults(WATCHLIST_DEFAULTS);
-      return;
-    }
-    const timeout = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/market/search?q=${encodeURIComponent(searchVal)}`);
-        const data = await res.json();
-        setSearchResults(data.results || []);
-      } catch {
-        const filtered = WATCHLIST_DEFAULTS.filter(s =>
-          s.symbol.toLowerCase().includes(searchVal.toLowerCase())
-        );
-        setSearchResults(filtered);
-      }
-    }, 250);
-    return () => clearTimeout(timeout);
-  }, [searchVal, showSymSearch]);
-
-  // Focus search on open
-  useEffect(() => {
-    if (showSymSearch && searchRef.current) {
-      setSearchResults(WATCHLIST_DEFAULTS);
+    if (showSym && searchRef.current) {
+      setResults(WATCHLIST_DEFAULTS);
       searchRef.current.focus();
     }
-  }, [showSymSearch]);
+  }, [showSym]);
+
+  // Debounced symbol search
+  useEffect(() => {
+    if (!showSym) return;
+    if (search.length < 1) { setResults(WATCHLIST_DEFAULTS); return; }
+    const id = setTimeout(async () => {
+      try {
+        const res  = await fetch(`/api/market/search?q=${encodeURIComponent(search)}`);
+        const data = await res.json();
+        setResults(data.results || []);
+      } catch {
+        setResults(WATCHLIST_DEFAULTS.filter(s =>
+          s.symbol.toLowerCase().includes(search.toLowerCase())
+        ));
+      }
+    }, 250);
+    return () => clearTimeout(id);
+  }, [search, showSym]);
 
   // Close dropdowns on outside click
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (symWrapRef.current && !symWrapRef.current.contains(e.target as Node)) {
-        setShowSymSearch(false);
-        setSearchVal('');
+    const h = (e: MouseEvent) => {
+      if (symRef.current && !symRef.current.contains(e.target as Node)) {
+        setShowSym(false); setSearch('');
       }
-      if (tfWrapRef.current && !tfWrapRef.current.contains(e.target as Node)) {
-        setShowTFDropdown(false);
+      if (tfRef.current && !tfRef.current.contains(e.target as Node)) {
+        setShowTF(false);
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
   }, []);
 
-  const selectSymbol = (sym: string) => {
-    setSymbol(sym);
-    setShowSymSearch(false);
-    setSearchVal('');
-  };
-
+  const selectSym = (s: string) => { setSymbol(s); setShowSym(false); setSearch(''); };
   const fmt = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+
+  const tl = (id: string, en: string) => lang === 'id' ? id : en;
 
   return (
     <header className="topbar">
-      {/* ── Logo ──────────────────────────────────────────── */}
-      <div className="topbar-logo">
-        <span className="logo-symbol">▲</span>
-        <span className="logo-text">ATLAS</span>
-      </div>
 
-      {/* ── Symbol Selector ───────────────────────────────── */}
-      <div className="topbar-symbol-wrap" ref={symWrapRef}>
+      {/* ── Logo ── */}
+      <div className="topbar-logo">
+        <span className="logo-symbol"><IconAtlas size={18} /></span>
+        <span className="logo-text">ATLAS·QUANT</span>
+      </div>
+      <div className="tv-sep" />
+
+      {/* ── Symbol Picker ── */}
+      <div style={{ position: 'relative' }} ref={symRef}>
         <button
-          className="topbar-symbol-btn"
-          onClick={() => setShowSymSearch(v => !v)}
+          className="topbar-sym-btn topbar-sym-btn-prominent"
+          onClick={() => setShowSym(v => !v)}
         >
-          <span className="sym-exchange">BINANCE</span>
-          <span className="sym-name">{symbol}</span>
-          <ChevronDown size={11} className="topbar-chevron" />
+          <Search size={11} style={{ opacity: 0.7, marginRight: 2 }} />
+          <span className="sym-exch">BINANCE</span>
+          <span className="sym-tick">{symbol}</span>
+          <ChevronDown size={11} style={{ opacity: 0.5, marginLeft: 2 }} />
         </button>
 
-        {/* Price info */}
-        <div className="topbar-price-info">
-          <span className="tp-price mono">{price > 0 ? fmt(price) : '—'}</span>
-          {change !== 0 && (
-            <span className={`tp-change ${isUp ? 'up' : 'down'}`}>
-              {isUp ? '+' : ''}{change.toFixed(2)}%
-            </span>
-          )}
-        </div>
-
-        {/* Symbol Search Panel */}
-        {showSymSearch && (
-          <div className="symbol-search-panel">
-            <div className="sym-search-header">
-              <Search size={13} className="topbar-search-icon" />
+        {showSym && (
+          <div className="sym-search-panel">
+            <div className="sym-search-hdr">
+              <Search size={13} style={{ opacity: 0.5 }} />
               <input
                 ref={searchRef}
-                className="sym-search-input"
-                placeholder={lang === 'id' ? 'Cari simbol...' : 'Search symbol...'}
-                value={searchVal}
-                onChange={e => setSearchVal(e.target.value)}
+                placeholder={tl('Cari simbol...', 'Search symbol...')}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
               />
-              <button
-                className="sym-search-close"
-                onClick={() => { setShowSymSearch(false); setSearchVal(''); }}
-              >
+              <button onClick={() => { setShowSym(false); setSearch(''); }}>
                 <X size={13} />
               </button>
             </div>
@@ -166,28 +195,30 @@ export default function TopBar() {
               {searchResults.map(s => (
                 <div
                   key={s.symbol}
-                  className={`sym-list-item ${s.symbol === symbol ? 'active' : ''}`}
-                  onClick={() => selectSymbol(s.symbol)}
+                  className={`sym-item ${s.symbol === symbol ? 'active' : ''}`}
+                  onClick={() => selectSym(s.symbol)}
                 >
-                  <div className="sym-item-left">
-                    <span className="sym-item-sym">{s.symbol}</span>
-                    <span className="sym-item-name">{s.name || s.baseAsset || ''}</span>
+                  <div className="sym-item-l">
+                    <span className="si-sym">{s.symbol}</span>
+                    <span className="si-name">{s.name || s.baseAsset || ''}</span>
                   </div>
-                  <div className="sym-item-right">
-                    {s.price && (
-                      <div className="sym-item-price">{Number(s.price).toLocaleString()}</div>
+                  <div className="sym-item-r">
+                    {s.price != null && (
+                      <span className="si-price mono">
+                        {Number(s.price).toLocaleString('en-US', { maximumFractionDigits: 4 })}
+                      </span>
                     )}
                     {s.change24h != null && (
-                      <div className={`sym-item-change ${s.change24h >= 0 ? 'up' : 'down'}`}>
+                      <span className={`si-chg ${s.change24h >= 0 ? 'up' : 'down'}`}>
                         {s.change24h >= 0 ? '+' : ''}{Number(s.change24h).toFixed(2)}%
-                      </div>
+                      </span>
                     )}
                   </div>
                 </div>
               ))}
-              {searchResults.length === 0 && searchVal.length > 0 && (
-                <div className="topbar-no-results">
-                  {lang === 'id' ? 'Tidak ditemukan' : 'No results'}
+              {searchResults.length === 0 && (
+                <div style={{ padding: '12px 14px', color: 'var(--aq-text2)', fontSize: 11 }}>
+                  {tl('Tidak ditemukan', 'No results')}
                 </div>
               )}
             </div>
@@ -195,11 +226,22 @@ export default function TopBar() {
         )}
       </div>
 
-      <div className="topbar-sep" />
+      {/* ── Live Price ── */}
+      <div className="topbar-price-wrap">
+        <span className={`tp-price ${isUp ? 'up' : 'down'}`}>
+          {price > 0 ? fmt(price) : '—'}
+        </span>
+        {change !== 0 && (
+          <span className={`tp-chg ${isUp ? 'up' : 'down'}`}>
+            {isUp ? '+' : ''}{change.toFixed(2)}%
+          </span>
+        )}
+      </div>
+      <div className="tv-sep" />
 
-      {/* ── Timeframe ─────────────────────────────────────── */}
-      <div className="topbar-tf-wrap" ref={tfWrapRef}>
-        <div className="tf-quick-btns">
+      {/* ── Timeframe Picker ── */}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} ref={tfRef}>
+        <div className="tf-wrap">
           {QUICK_TFS.map(tf => (
             <button
               key={tf}
@@ -210,24 +252,24 @@ export default function TopBar() {
             </button>
           ))}
           <button
-            className={`tf-btn tf-more ${showTFDropdown ? 'active' : ''}`}
-            onClick={() => setShowTFDropdown(v => !v)}
+            className={`tf-btn tf-more ${showTF ? 'active' : ''}`}
+            onClick={() => setShowTF(v => !v)}
           >
             ···
           </button>
         </div>
 
-        {showTFDropdown && (
+        {showTF && (
           <div className="tf-dropdown">
-            {TF_GROUPS.map(g => (
-              <div key={g.group}>
-                <div className="tf-group-label">{g.group}</div>
-                <div className="tf-group-items">
-                  {g.tfs.map(tf => (
+            {TF_GROUPS.map(({ g, tfs }) => (
+              <div key={g}>
+                <div className="tf-grp-label">{g}</div>
+                <div className="tf-grp-items">
+                  {tfs.map(tf => (
                     <button
                       key={tf}
-                      className={`tf-dropdown-btn ${timeframe === tf ? 'active' : ''}`}
-                      onClick={() => { setTimeframe(tf); setShowTFDropdown(false); }}
+                      className={`tf-drop-btn ${timeframe === tf ? 'active' : ''}`}
+                      onClick={() => { setTimeframe(tf); setShowTF(false); }}
                     >
                       {tf}
                     </button>
@@ -238,82 +280,88 @@ export default function TopBar() {
           </div>
         )}
       </div>
+      <div className="tv-sep" />
 
-      <div className="topbar-sep" />
+      {/* ── Action Buttons ── */}
+      <button
+        className="tb-action tb-action-primary"
+        title={tl('Indikator', 'Indicators')}
+        onClick={() => openIndicatorModal()}
+      >
+        <span style={{ marginRight: 2, fontSize: 13, fontWeight: 700 }}>+</span>
+        <Layers size={13} />
+        <span>{tl('Indikator', 'Indicators')}</span>
+      </button>
 
-      {/* ── Action Buttons ────────────────────────────────── */}
-      <div className="topbar-actions">
-        <button
-          className={`topbar-action-btn ${activeIndicators.length > 0 ? '' : ''}`}
-          onClick={() => openIndicatorModal()}
-          title={lang === 'id' ? 'Indikator' : 'Indicators'}
-        >
-          <Layers size={13} />
-          <span>{lang === 'id' ? 'Indikator' : 'Indicators'}</span>
-        </button>
+      <button className="tb-action" title={tl('Bandingkan', 'Compare')}>
+        <IconCompare size={13} />
+        <span>{tl('Bandingkan', 'Compare')}</span>
+      </button>
 
-        <button className="topbar-action-btn" title={lang === 'id' ? 'Bandingkan' : 'Compare'}>
-          <GitCompareIcon size={13} />
-          <span>{lang === 'id' ? 'Bandingkan' : 'Compare'}</span>
-        </button>
+      <button className="tb-action" title={tl('Peringatan', 'Alerts')}>
+        <Bell size={13} />
+        <span>{tl('Peringatan', 'Alerts')}</span>
+      </button>
 
-        <button
-          className={`topbar-action-btn ${showSignals ? 'active' : ''}`}
-          title={lang === 'id' ? 'Sinyal' : 'Signals'}
-          onClick={toggleSignals}
-        >
-          <Bell size={13} />
-          <span>{lang === 'id' ? 'Sinyal' : 'Signals'}</span>
-        </button>
+      <button className="tb-action" title="Replay">
+        <IconReplay size={13} />
+        <span>Replay</span>
+      </button>
 
-        <button className="topbar-action-btn icon-only" title="Snapshot">
-          <Camera size={13} />
-        </button>
+      <button className="tb-action" title="Template">
+        <IconTemplate size={13} />
+        <span>Template</span>
+      </button>
 
-        <button className="topbar-action-btn icon-only" title={lang === 'id' ? 'Putar Ulang' : 'Replay'}>
-          <RefreshCw size={13} />
-        </button>
-      </div>
+      <button className="tb-action" title="Pine Script">
+        <IconPineScript size={13} />
+        <span>Pine Script</span>
+      </button>
 
-      {/* ── Spacer ────────────────────────────────────────── */}
-      <div className="topbar-spacer" />
+      <div className="tv-sep" />
 
-      {/* ── Right Controls ────────────────────────────────── */}
+      <button className="tb-action icon-only" title="Screenshot">
+        <Camera size={14} />
+      </button>
+      <button className="tb-action icon-only" title="Publish">
+        <IconPublish size={14} />
+      </button>
+
+      {/* ── Spacer ── */}
+      <div style={{ flex: 1 }} />
+
+      {/* ── Right Controls ── */}
       <div className="topbar-right">
-        <button className="topbar-right-btn" title={lang === 'id' ? 'Tata Letak' : 'Layout'}>
-          <Grid size={14} />
+        <button className="tb-right-btn" title="Multi-chart layout">
+          <IconSplit2 size={15} />
         </button>
-        <button className="topbar-right-btn" title={lang === 'id' ? 'Pantauan' : 'Watchlist'}>
-          <Star size={14} />
+        <button className="tb-right-btn" title="Full screen">
+          <IconFullscreen size={15} />
+        </button>
+        <button className="tb-right-btn" title="Keyboard Shortcuts">
+          <IconKeyboard size={15} />
         </button>
 
-        <div className="topbar-sep" />
+        <div className="tv-sep" />
 
-        <button
-          className="topbar-lang-btn"
-          onClick={toggleLang}
-          title={lang === 'id' ? 'Language' : 'Bahasa'}
-        >
+        <button className="tb-lang-btn" onClick={toggleLang}>
           <Globe size={12} />
-          <span>{lang.toUpperCase()}</span>
+          <span>{lang === 'id' ? 'ID' : 'EN'}</span>
+        </button>
+
+        <button className="tb-theme-btn" onClick={toggleTheme} title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}>
+          {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
         </button>
 
         <button
-          className="topbar-theme-btn"
-          onClick={toggleTheme}
-          title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+          className="tb-right-btn"
+          title={tl('Pengaturan', 'Settings')}
+          onClick={() => window.location.href = '/settings'}
         >
-          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+          <Settings size={15} />
         </button>
-
-        <a
-          href="/settings"
-          className="topbar-right-btn topbar-settings-link"
-          title={lang === 'id' ? 'Pengaturan' : 'Settings'}
-        >
-          <Settings size={14} />
-        </a>
       </div>
+
     </header>
   );
 }
