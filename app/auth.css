@@ -328,3 +328,77 @@
 .pending-status-val-white { color: #d1d4dc; word-break: break-all; }
 
 @keyframes auth-spin { to { transform: rotate(360deg); } }
+
+/* ── Logo icon variant ── */
+.auth-logo-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+/* ── Google button ── */
+.auth-btn-google {
+  background: #fff;
+  color: #3c4043;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #dadce0;
+  font-weight: 600;
+  font-size: 13px;
+  margin-top: 0;
+}
+
+.auth-btn-google:hover:not(:disabled) {
+  background: #f8f9fa;
+  border-color: #c6c9ce;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+
+.auth-btn-google-lg {
+  padding: 16px;
+  font-size: 14px;
+  gap: 12px;
+}
+
+/* ── Outline button ── */
+.auth-btn-outline {
+  background: transparent;
+  color: #787b86;
+  border: 1px solid #2a2e39;
+  font-size: 13px;
+  margin-top: 0;
+}
+
+.auth-btn-outline:hover:not(:disabled) {
+  background: #1a1f2e;
+  color: #d1d4dc;
+  border-color: #363c4e;
+}
+
+/* ── Divider with label ── */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0;
+  color: #2a2e39;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #2a2e39;
+}
+
+.auth-divider span {
+  color: #4a5568;
+  font-size: 10px;
+  letter-spacing: 1px;
+}

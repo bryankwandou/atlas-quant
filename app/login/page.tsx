@@ -2,348 +2,244 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import {
+  loginWithEmail,
+  loginWithGoogle,
+  persistSession,
+  onAuthStateChanged,
+  auth,
+} from '@/lib/firebase-auth';
 import '../auth.css';
-
-type AuthTab = 'wallet' | 'email' | 'username';
-
-interface PhantomProvider {
-  isPhantom: boolean;
-  publicKey: { toString(): string; toBase58(): string } | null;
-  connect(opts?: { onlyIfTrusted?: boolean }): Promise<{ publicKey: { toString(): string; toBase58(): string } }>;
-  signMessage(msg: Uint8Array, encoding: string): Promise<{ signature: Uint8Array }>;
-  disconnect(): Promise<void>;
-  isConnected?: boolean;
-}
-
-declare global {
-  interface Window {
-    solana?: PhantomProvider;
-  }
-}
-
-function getPhantom(): PhantomProvider | null {
-  if (typeof window === 'undefined') return null;
-  return window.solana?.isPhantom ? window.solana : null;
-}
 
 export default function LoginPage() {
   const router = useRouter();
-
-  const [tab, setTab] = useState<AuthTab>('wallet');
-  const [identifier, setIdentifier] = useState('');
+  const [tab, setTab] = useState<'email' | 'google'>('email');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
-  const [walletPubkey, setWalletPubkey] = useState<string | null>(null);
-  const [phantomAvailable, setPhantomAvailable] = useState(false);
+  const [checking, setChecking] = useState(true);
 
-  // Check for existing session on mount; detect Phantom
+  // Redirect if already logged in
   useEffect(() => {
-    const token = localStorage.getItem('session_token');
-    const user = localStorage.getItem('atlas_user');
-    if (token && user) {
-      router.replace('/chart');
-      return;
-    }
-    const checkPhantom = () => {
-      const p = getPhantom();
-      setPhantomAvailable(!!p);
-      if (p?.isConnected && p.publicKey) {
-        setWalletPubkey(p.publicKey.toBase58());
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        router.replace('/chart');
+      } else {
+        setChecking(false);
       }
-    };
-    checkPhantom();
-    window.addEventListener('load', checkPhantom);
-    return () => window.removeEventListener('load', checkPhantom);
+    });
+    return () => unsub();
   }, [router]);
 
   const clearMessages = () => { setError(''); setInfo(''); };
 
-  // ── Credential login (email or username) ──────────────────────────────
-  const handleCredentialLogin = useCallback(
+  // ── Email + Password login ────────────────────────────────────────────
+  const handleEmailLogin = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
       clearMessages();
-
-      if (!identifier.trim() || !password) {
-        setError('Please enter your ' + (tab === 'email' ? 'email' : 'username') + ' and password.');
+      if (!email.trim() || !password) {
+        setError('Please enter your email and password.');
         return;
       }
-
       setLoading(true);
       try {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: identifier.trim(), password }),
-        });
-        const data = await res.json();
-
-        if (!res.ok || !data.success) {
-          setError(data.error ?? 'Login failed. Please check your credentials.');
-          return;
-        }
-
-        localStorage.setItem('session_token', data.access_token ?? data.token ?? '');
-        localStorage.setItem('atlas_user', JSON.stringify(data.user ?? {}));
-        if (data.refresh_token) {
-          localStorage.setItem('refresh_token', data.refresh_token);
-        }
+        const { user, role } = await loginWithEmail(email.trim(), password);
+        persistSession(user, role);
         router.replace('/chart');
-      } catch {
-        setError('Network error. Please try again.');
+      } catch (err: unknown) {
+        const code = (err as { code?: string }).code ?? '';
+        if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+          setError('Invalid email or password. Please try again.');
+        } else if (code === 'auth/too-many-requests') {
+          setError('Too many failed attempts. Please wait a moment and try again.');
+        } else if (code === 'auth/user-disabled') {
+          setError('This account has been disabled. Contact support.');
+        } else {
+          setError('Login failed. Please try again.');
+        }
       } finally {
         setLoading(false);
       }
     },
-    [identifier, password, tab, router]
+    [email, password, router]
   );
 
-  // ── Phantom wallet login ──────────────────────────────────────────────
-  const handleWalletLogin = useCallback(async () => {
+  // ── Google login ──────────────────────────────────────────────────────
+  const handleGoogleLogin = useCallback(async () => {
     clearMessages();
-    const phantom = getPhantom();
-    if (!phantom) {
-      setError('Phantom wallet not detected. Please install the Phantom browser extension.');
-      return;
-    }
-
     setLoading(true);
+    setInfo('Opening Google Sign-In…');
     try {
-      // 1. Connect
-      const resp = await phantom.connect();
-      const pubkey = resp.publicKey.toBase58();
-      setWalletPubkey(pubkey);
-      setInfo('Wallet connected. Requesting challenge…');
-
-      // 2. Get challenge
-      const challengeRes = await fetch('/api/auth/challenge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicKey: pubkey }),
-      });
-      const challenge = await challengeRes.json();
-      if (!challengeRes.ok) throw new Error(challenge.error ?? 'Challenge request failed');
-
-      setInfo('Please sign the message in Phantom…');
-
-      // 3. Sign
-      const msgBytes = new TextEncoder().encode(challenge.message);
-      const { signature: sigBytes } = await phantom.signMessage(msgBytes, 'utf8');
-
-      const bs58 = await import('bs58');
-      const signatureBase58 = bs58.default.encode(sigBytes);
-
-      setInfo('Verifying signature…');
-
-      // 4. Verify
-      const verifyRes = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicKey: pubkey, signature: signatureBase58, challenge }),
-      });
-      const verifyData = await verifyRes.json();
-
-      if (!verifyRes.ok) {
-        if (verifyData.status === 'pending') {
-          router.replace('/pending-approval');
-          return;
-        }
-        throw new Error(verifyData.error ?? 'Signature verification failed');
-      }
-
-      localStorage.setItem('session_token', verifyData.token ?? '');
-      localStorage.setItem('user_pubkey', pubkey);
-      localStorage.setItem('atlas_user', JSON.stringify({ publicKey: pubkey, role: 'user' }));
+      const { user, role } = await loginWithGoogle();
+      persistSession(user, role);
       router.replace('/chart');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Wallet authentication failed.';
-      setError(msg);
+      const code = (err as { code?: string }).code ?? '';
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        setError('Sign-in cancelled.');
+      } else if (code === 'auth/popup-blocked') {
+        setError('Popup blocked by browser. Please allow popups for this site.');
+      } else {
+        setError('Google sign-in failed. Please try again.');
+      }
       setInfo('');
     } finally {
       setLoading(false);
     }
   }, [router]);
 
-  const handleDisconnect = async () => {
-    if (window.solana) await window.solana.disconnect();
-    setWalletPubkey(null);
-  };
-
-  const pubkeyShort = walletPubkey
-    ? `${walletPubkey.slice(0, 6)}…${walletPubkey.slice(-4)}`
-    : '';
+  if (checking) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d1218' }}>
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+          <path d="M4 19L12 5L20 19H16L12 12L8 19H4Z" fill="#7b61ff" opacity="0.8"/>
+        </svg>
+      </div>
+    );
+  }
 
   return (
     <div className="auth-root">
       <div className="auth-card">
         {/* Tabs */}
         <div className="auth-tabs">
-          {(['wallet', 'email', 'username'] as AuthTab[]).map((t) => (
-            <button
-              key={t}
-              className={`auth-tab${tab === t ? ' active' : ''}`}
-              onClick={() => { setTab(t); clearMessages(); setIdentifier(''); setPassword(''); }}
-              type="button"
-            >
-              {t === 'wallet' ? '🔐 Wallet' : t === 'email' ? '📧 Email' : '👤 Username'}
-            </button>
-          ))}
+          <button
+            className={`auth-tab${tab === 'email' ? ' active' : ''}`}
+            onClick={() => { setTab('email'); clearMessages(); }}
+            type="button"
+          >
+            📧 Email
+          </button>
+          <button
+            className={`auth-tab${tab === 'google' ? ' active' : ''}`}
+            onClick={() => { setTab('google'); clearMessages(); }}
+            type="button"
+          >
+            🔵 Google
+          </button>
         </div>
 
         <div className="auth-body">
           {/* Logo */}
           <div className="auth-logo">
+            <div className="auth-logo-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                <path d="M4 19L12 5L20 19H16L12 12L8 19H4Z" fill="#7b61ff"/>
+                <circle cx="12" cy="19" r="1.5" fill="#7b61ff"/>
+              </svg>
+            </div>
             <div className="auth-logo-title">
               <span className="atlas-blue">ATLAS</span>
-              <span>-QUANT</span>
+              <span>·QUANT</span>
             </div>
             <div className="auth-logo-sub">QUANTITATIVE TRADING PLATFORM</div>
           </div>
 
-          {/* ── Wallet Tab ── */}
-          {tab === 'wallet' && (
-            <div>
-              {walletPubkey && (
-                <div className="wallet-info">
-                  <strong>Connected Wallet</strong>
-                  {pubkeyShort}
-                </div>
-              )}
-              {!walletPubkey ? (
-                <button
-                  className="auth-btn auth-btn-wallet"
-                  onClick={handleWalletLogin}
-                  disabled={loading}
-                  type="button"
-                >
-                  {loading
-                    ? 'Connecting…'
-                    : phantomAvailable
-                    ? 'Connect Phantom Wallet'
-                    : 'Phantom Not Detected'}
-                </button>
-              ) : (
-                <>
-                  <button
-                    className="auth-btn auth-btn-wallet auth-btn-mb"
-                    onClick={handleWalletLogin}
-                    disabled={loading}
-                    type="button"
-                  >
-                    {loading ? 'Signing…' : 'Sign & Authenticate'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDisconnect}
-                    className="auth-disconnect-btn"
-                  >
-                    Disconnect
-                  </button>
-                </>
-              )}
-              {!phantomAvailable && !walletPubkey && (
-                <p className="auth-footer auth-footer-mt">
-                  <a href="https://phantom.app" target="_blank" rel="noopener noreferrer" className="auth-link">
-                    Install Phantom
-                  </a>{' '}
-                  to use wallet login.
-                </p>
-              )}
-            </div>
-          )}
-
           {/* ── Email Tab ── */}
           {tab === 'email' && (
-            <form onSubmit={handleCredentialLogin} noValidate>
-              <div className="auth-field">
-                <label className="auth-label" htmlFor="email-input">EMAIL ADDRESS</label>
-                <input
-                  id="email-input"
-                  className="auth-input"
-                  type="email"
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  disabled={loading}
-                  required
-                />
-              </div>
-              <div className="auth-field">
-                <label className="auth-label" htmlFor="email-password">PASSWORD</label>
-                <input
-                  id="email-password"
-                  className="auth-input"
-                  type="password"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading}
-                  required
-                />
-              </div>
-              <div className="auth-forgot-wrap">
-                <a href="/forgot-password" className="auth-link auth-link-sm">
-                  Forgot password?
-                </a>
-              </div>
-              <button className="auth-btn auth-btn-primary" type="submit" disabled={loading}>
-                {loading ? 'Signing in…' : 'Sign In'}
+            <>
+              <form onSubmit={handleEmailLogin} noValidate>
+                <div className="auth-field">
+                  <label className="auth-label" htmlFor="email-input">EMAIL ADDRESS</label>
+                  <input
+                    id="email-input"
+                    className="auth-input"
+                    type="email"
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+                <div className="auth-field">
+                  <label className="auth-label" htmlFor="email-password">PASSWORD</label>
+                  <input
+                    id="email-password"
+                    className="auth-input"
+                    type="password"
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+                <div className="auth-forgot-wrap">
+                  <a href="/forgot-password" className="auth-link auth-link-sm">
+                    Forgot password?
+                  </a>
+                </div>
+                <button className="auth-btn auth-btn-primary" type="submit" disabled={loading}>
+                  {loading ? 'Signing in…' : 'Sign In'}
+                </button>
+              </form>
+
+              <div className="auth-divider"><span>OR</span></div>
+
+              <button
+                className="auth-btn auth-btn-google"
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={loading}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                Continue with Google
               </button>
+
               <div className="auth-footer">
                 Don&apos;t have an account?{' '}
                 <a href="/register" className="auth-link">Register</a>
               </div>
-            </form>
+            </>
           )}
 
-          {/* ── Username Tab ── */}
-          {tab === 'username' && (
-            <form onSubmit={handleCredentialLogin} noValidate>
-              <div className="auth-field">
-                <label className="auth-label" htmlFor="username-input">USERNAME</label>
-                <input
-                  id="username-input"
-                  className="auth-input"
-                  type="text"
-                  placeholder="your_username"
-                  autoComplete="username"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  disabled={loading}
-                  required
-                />
-              </div>
-              <div className="auth-field">
-                <label className="auth-label" htmlFor="username-password">PASSWORD</label>
-                <input
-                  id="username-password"
-                  className="auth-input"
-                  type="password"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading}
-                  required
-                />
-              </div>
-              <div className="auth-forgot-wrap">
-                <a href="/forgot-password" className="auth-link auth-link-sm">
-                  Forgot password?
-                </a>
-              </div>
-              <button className="auth-btn auth-btn-primary" type="submit" disabled={loading}>
-                {loading ? 'Signing in…' : 'Sign In'}
+          {/* ── Google Tab ── */}
+          {tab === 'google' && (
+            <>
+              <p className="auth-help-text" style={{ textAlign: 'center' }}>
+                Sign in instantly using your Google account. No password required.
+              </p>
+              <button
+                className="auth-btn auth-btn-google auth-btn-google-lg"
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={loading}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                {loading ? 'Opening Google…' : 'Sign in with Google'}
               </button>
+
+              <div className="auth-divider"><span>OR</span></div>
+
+              <button
+                className="auth-btn auth-btn-outline"
+                type="button"
+                onClick={() => { setTab('email'); clearMessages(); }}
+              >
+                Use Email &amp; Password
+              </button>
+
               <div className="auth-footer">
                 Don&apos;t have an account?{' '}
                 <a href="/register" className="auth-link">Register</a>
               </div>
-            </form>
+            </>
           )}
 
           {/* Feedback */}

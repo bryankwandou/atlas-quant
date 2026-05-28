@@ -22,6 +22,7 @@
     "bs58": "^6.0.0",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.20",
+    "firebase": "^12.13.0",
     "framer-motion": "^12.38.0",
     "lightweight-charts": "^5.1.0",
     "lucide-react": "^1.16.0",
