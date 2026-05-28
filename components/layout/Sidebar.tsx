@@ -68,7 +68,7 @@ const DRAW_GROUPS = [
 ];
 
 const NAV_ITEMS = [
-  { href: '/',          icon: LayoutDashboard, key: 'dashboard' },
+  { href: '/chart',     icon: LayoutDashboard, key: 'dashboard' },
   { href: '/chart',     icon: BarChart2,       key: 'chart'     },
   { href: '/signals',   icon: Zap,             key: 'signals'   },
   { href: '/journal',   icon: BookOpen,        key: 'journal'   },

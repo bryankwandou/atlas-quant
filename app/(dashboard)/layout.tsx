@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { onAuthStateChanged, auth, getUserRole, persistSession, getSession } from '@/lib/atlas-auth';
+import { getSession } from '@/lib/atlas-auth';
 import TopBar from '@/components/layout/TopBar';
 import Sidebar from '@/components/layout/Sidebar';
 import StatusBar from '@/components/layout/StatusBar';
@@ -15,17 +15,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // Auth guard: check localStorage session (atlas-auth, no Firebase)
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.replace('/login');
-        return;
-      }
-      // Refresh role from backend best-effort
-      try { await getUserRole(user.id); } catch { /* non-fatal */ }
-      setReady(true);
-    });
-    return () => unsub();
+    // Instant localStorage check — no async API call, no redirect race
+    const session = getSession();
+    if (!session) {
+      router.replace('/login');
+      return;
+    }
+    setReady(true);
   }, [router]);
 
   if (!ready) {

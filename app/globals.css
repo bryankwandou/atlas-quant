@@ -462,6 +462,9 @@ select{cursor:pointer;}
 .auth-input{background:var(--aq-bg3);border:1px solid var(--aq-border);border-radius:4px;padding:5px 8px;font-size:11px;color:var(--aq-text);}
 .auth-input:focus{border-color:var(--aq-blue);}
 
+/* ── Chart page wrapper — must fill the full main-area ──── */
+.chart-page-wrap{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;flex:1;overflow:hidden;}
+
 /* ── ChartContainer / Chart toolbar extras ───────────────── */
 .chart-legend{display:flex;align-items:center;gap:8px;padding:4px 8px;font-size:10px;flex-wrap:wrap;}
 .legend-item{display:flex;align-items:center;gap:3px;}
