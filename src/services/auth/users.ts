@@ -188,7 +188,21 @@ export async function verifyPassword(email: string, password: string): Promise<A
   if (!user || !user.passwordHash) return null;
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) return null;
-  // Update last login best-effort
+  const sb = supabaseAdmin();
+  if (sb) {
+    await sb.from('app_users').update({ last_login_at: new Date().toISOString() }).eq('id', user.id);
+  }
+  const { passwordHash, ...clean } = user;
+  return clean as AppUser;
+}
+
+export async function verifyPasswordByIdentifier(identifier: string, password: string): Promise<AppUser | null> {
+  const user = await findUserByEmailOrUsername(
+    identifier.includes('@') ? identifier.toLowerCase() : identifier
+  );
+  if (!user || !user.passwordHash) return null;
+  const ok = await bcrypt.compare(password, user.passwordHash);
+  if (!ok) return null;
   const sb = supabaseAdmin();
   if (sb) {
     await sb.from('app_users').update({ last_login_at: new Date().toISOString() }).eq('id', user.id);
