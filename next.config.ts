@@ -11,9 +11,8 @@ const nextConfig: NextConfig = {
     ],
   },
 
-  // Skip TS and ESLint errors during Vercel build (we type-check separately)
+  // Skip TS errors during Vercel build (we type-check separately in CI)
   typescript: { ignoreBuildErrors: true },
-  eslint:     { ignoreDuringBuilds: true },
 
   // Server-side external packages (crypto libs must run on server)
   serverExternalPackages: ['tweetnacl', '@solana/web3.js'],

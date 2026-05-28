@@ -1819,3 +1819,26 @@ export function indicatorCount(): number {
 export function listIndicatorCategories(): IndicatorCategory[] {
   return Array.from(new Set(INDICATOR_REGISTRY.map((p) => p.category))) as IndicatorCategory[];
 }
+
+// ── runIndicator stub ─────────────────────────────────────────────────────────
+// Runtime compute engine — returns null until full quant engine is wired.
+export interface OhlcvContext {
+  open: number[];
+  high: number[];
+  low: number[];
+  close: number[];
+  volume: number[];
+  time: number[];
+}
+
+export function runIndicator(
+  code: string,
+  _ctx: OhlcvContext,
+  _params: Record<string, unknown> = {}
+): Record<string, number[]> | null {
+  const preset = INDICATOR_INDEX[code];
+  if (!preset) return null;
+  // Full compute engine is loaded client-side via the chart worker.
+  // Server-side computation is not yet wired — return empty series.
+  return { values: [] };
+}
