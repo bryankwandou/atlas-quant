@@ -19,18 +19,21 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
-  const [checking, setChecking] = useState(true);
 
-  // Redirect if already logged in
+  // Redirect if already logged in — non-blocking (form shows immediately)
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        router.replace('/chart');
-      } else {
-        setChecking(false);
-      }
-    });
-    return () => unsub();
+    // Fast path: localStorage session
+    if (localStorage.getItem('session_token') && localStorage.getItem('atlas_user')) {
+      router.replace('/chart');
+      return;
+    }
+    // Firebase async check — redirect silently if already signed in
+    try {
+      const unsub = onAuthStateChanged(auth, (user) => {
+        if (user) router.replace('/chart');
+      });
+      return () => unsub();
+    } catch { /* Firebase not configured — show form normally */ }
   }, [router]);
 
   const clearMessages = () => { setError(''); setInfo(''); };
@@ -91,15 +94,7 @@ export default function LoginPage() {
     }
   }, [router]);
 
-  if (checking) {
-    return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d1218' }}>
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
-          <path d="M4 19L12 5L20 19H16L12 12L8 19H4Z" fill="#7b61ff" opacity="0.8"/>
-        </svg>
-      </div>
-    );
-  }
+
 
   return (
     <div className="auth-root">

@@ -225,18 +225,18 @@ export default function LandingPage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(340px,1fr))', gap: 20 }}>
           {[
-            { icon: '⚡', title: 'Real-Time Quant Signals', desc: 'Deterministic multi-factor signal engine processes live market data and delivers precise BUY/SELL/NEUTRAL signals with confidence scores and risk-reward ratios.', color: '#7b61ff' },
-            { icon: '📊', title: 'Professional Charting', desc: 'Advanced candlestick charts with 16,000+ technical indicators, drawing tools, multiple timeframes from 1-second to monthly, and customizable sub-panels.', color: '#22c55e' },
-            { icon: '🤖', title: 'AI Market Analysis', desc: 'Deep learning models analyze market structure, identify regime shifts, and provide natural language market commentary with actionable insights.', color: '#f59e0b' },
-            { icon: '🛡️', title: 'Integrated Risk Management', desc: 'Built-in position sizing calculator, drawdown controls, kill switch, daily loss limits, and real-time P&L tracking to protect your capital.', color: '#ef4444' },
-            { icon: '🔍', title: 'Multi-Asset Screener', desc: 'Screen hundreds of crypto pairs and traditional assets simultaneously. Filter by momentum, volume, regime, and custom signal criteria.', color: '#06b6d4' },
-            { icon: '📈', title: 'Strategy Backtesting', desc: 'Validate your strategies against historical data with detailed performance metrics, drawdown analysis, and trade-by-trade logs.', color: '#8b5cf6' },
+            { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="#7b61ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>, title: 'Real-Time Quant Signals', desc: 'Deterministic multi-factor signal engine processes live market data and delivers precise BUY/SELL/NEUTRAL signals with confidence scores and risk-reward ratios.', color: '#7b61ff' },
+            { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="4" height="18" rx="1" fill="#22c55e" opacity=".8"/><rect x="10" y="8" width="4" height="13" rx="1" fill="#22c55e"/><rect x="17" y="5" width="4" height="16" rx="1" fill="#22c55e" opacity=".6"/></svg>, title: 'Professional Charting', desc: 'Advanced candlestick charts with 16,000+ technical indicators, drawing tools, multiple timeframes from 1-second to monthly, and customizable sub-panels.', color: '#22c55e' },
+            { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#f59e0b" strokeWidth="2"/><path d="M9 9c0-1.5 1.5-3 3-3s3 1.5 3 3c0 2-2 2.5-2 4.5" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round"/><circle cx="12" cy="18" r="1" fill="#f59e0b"/></svg>, title: 'AI Market Analysis', desc: 'Deep learning models analyze market structure, identify regime shifts, and provide natural language market commentary with actionable insights.', color: '#f59e0b' },
+            { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V7l8-4z" stroke="#ef4444" strokeWidth="2" strokeLinejoin="round"/><path d="M9 12l2 2 4-4" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>, title: 'Integrated Risk Management', desc: 'Built-in position sizing calculator, drawdown controls, kill switch, daily loss limits, and real-time P&L tracking to protect your capital.', color: '#ef4444' },
+            { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#06b6d4" strokeWidth="2"/><path d="M21 21l-4-4" stroke="#06b6d4" strokeWidth="2" strokeLinecap="round"/></svg>, title: 'Multi-Asset Screener', desc: 'Screen hundreds of crypto pairs and traditional assets simultaneously. Filter by momentum, volume, regime, and custom signal criteria.', color: '#06b6d4' },
+            { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><polyline points="16 7 22 7 22 13" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>, title: 'Strategy Backtesting', desc: 'Validate your strategies against historical data with detailed performance metrics, drawdown analysis, and trade-by-trade logs.', color: '#8b5cf6' },
           ].map(({ icon, title, desc, color }) => (
             <div key={title} style={{ padding: 28, borderRadius: 12, background: '#161c25', border: '1px solid #222a36', transition: 'all .2s' }}
               onMouseEnter={(e: any) => { e.currentTarget.style.borderColor=color; e.currentTarget.style.boxShadow=`0 0 24px ${color}18`; e.currentTarget.style.transform='translateY(-3px)'; }}
               onMouseLeave={(e: any) => { e.currentTarget.style.borderColor='#222a36'; e.currentTarget.style.boxShadow='none'; e.currentTarget.style.transform='none'; }}
             >
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, marginBottom: 16 }}>{icon}</div>
+              <div style={{ width: 44, height: 44, borderRadius: 10, background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>{icon}</div>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: '#cdd4e1', marginBottom: 8, letterSpacing: '-.2px' }}>{title}</h3>
               <p style={{ fontSize: 13, color: '#7a8294', lineHeight: 1.65 }}>{desc}</p>
             </div>
@@ -279,14 +279,14 @@ export default function LandingPage() {
             <div key={i} style={{ padding: '16px 24px', background: '#161c25', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '1px', color: i===1 ? '#7b61ff' : '#7a8294', borderBottom: '1px solid #222a36' }}>{h}</div>
           ))}
           {[
-            ['Real-time quant signals', '✅ Deterministic engine', '❌ Lagging indicators only'],
-            ['AI market analysis', '✅ Integrated LLM analysis', '❌ Manual or none'],
-            ['Risk management suite', '✅ Full kill-switch + limits', '⚠️ Basic stop-loss only'],
-            ['Sub-second data', '✅ Binance live feed', '⚠️ Delayed 15–20min'],
-            ['Indicators count', '✅ 16,000+ indicators', '⚠️ 100–500 indicators'],
-            ['Multi-asset screener', '✅ Crypto + Stocks + FX', '❌ Crypto only'],
-            ['Strategy backtesting', '✅ Built-in engine', '❌ Paid add-on'],
-            ['Price', '✅ Free tier available', '❌ $30–$80/mo from start'],
+            ['Real-time quant signals', '+ Deterministic engine', '– Lagging indicators only'],
+            ['AI market analysis', '+ Integrated LLM analysis', '– Manual or none'],
+            ['Risk management suite', '+ Full kill-switch + limits', '~ Basic stop-loss only'],
+            ['Sub-second data', '+ Binance live feed', '~ Delayed 15–20min'],
+            ['Indicators count', '+ 16,000+ indicators', '~ 100–500 indicators'],
+            ['Multi-asset screener', '+ Crypto + Stocks + FX', '– Crypto only'],
+            ['Strategy backtesting', '+ Built-in engine', '– Paid add-on'],
+            ['Price', '+ Free tier available', '– $30–$80/mo from start'],
           ].map(([feat, us, them], i) => (
             <>
               <div key={`f${i}`} style={{ padding: '14px 24px', background: i%2===0 ? '#0d1218' : '#111820', fontSize: 13, color: '#7a8294', borderBottom: '1px solid #1a2130' }}>{feat}</div>
@@ -371,7 +371,7 @@ export default function LandingPage() {
             { name: 'David K.', role: 'Fund Analyst', rating: 5, text: 'We evaluated 6 platforms. Atlas-Quant\'s deterministic signal engine and real-time data feed are best-in-class. The institutional tier pays for itself in one good trade.' },
           ].map(({ name, role, rating, text }) => (
             <div key={name} style={{ padding: 28, borderRadius: 12, background: '#161c25', border: '1px solid #222a36' }}>
-              <div style={{ display: 'flex', marginBottom: 12 }}>{Array(rating).fill(0).map((_,i) => <span key={i} style={{ color: '#f59e0b', fontSize: 14 }}>★</span>)}</div>
+              <div style={{ display: 'flex', gap: 2, marginBottom: 12 }}>{Array(rating).fill(0).map((_,i) => <svg key={i} width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>)}</div>
               <p style={{ color: '#cdd4e1', fontSize: 14, lineHeight: 1.7, marginBottom: 20 }}>&ldquo;{text}&rdquo;</p>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 13, color: '#cdd4e1' }}>{name}</div>
@@ -461,7 +461,7 @@ export default function LandingPage() {
 
           <div style={{ borderTop: '1px solid #1a2130', paddingTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <div style={{ fontSize: 11, color: '#4b5364' }}>© 2025 Atlas-Quant. All rights reserved.</div>
-            <div style={{ fontSize: 11, color: '#4b5364' }}>⚠️ For informational purposes only. Not financial advice. Manual execution only.</div>
+            <div style={{ fontSize: 11, color: '#4b5364' }}>For informational purposes only. Not financial advice. Manual execution only.</div>
           </div>
         </div>
       </footer>
