@@ -8,7 +8,7 @@ import {
   persistSession,
   onAuthStateChanged,
   auth,
-} from '@/lib/firebase-auth';
+} from '@/lib/atlas-auth';
 import '../auth.css';
 
 export default function LoginPage() {
@@ -49,8 +49,8 @@ export default function LoginPage() {
       }
       setLoading(true);
       try {
-        const { user, role } = await loginWithEmail(email.trim(), password);
-        persistSession(user, role);
+        const session = await loginWithEmail(email.trim(), password);
+        persistSession(session);
         router.replace('/chart');
       } catch (err: unknown) {
         const code = (err as { code?: string }).code ?? '';
@@ -76,8 +76,8 @@ export default function LoginPage() {
     setLoading(true);
     setInfo('Opening Google Sign-In…');
     try {
-      const { user, role } = await loginWithGoogle();
-      persistSession(user, role);
+      const session = await loginWithGoogle();
+      persistSession(session);
       router.replace('/chart');
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? '';
@@ -106,14 +106,14 @@ export default function LoginPage() {
             onClick={() => { setTab('email'); clearMessages(); }}
             type="button"
           >
-            📧 Email
+            [MSG] Email
           </button>
           <button
             className={`auth-tab${tab === 'google' ? ' active' : ''}`}
             onClick={() => { setTab('google'); clearMessages(); }}
             type="button"
           >
-            🔵 Google
+            [G] Google
           </button>
         </div>
 

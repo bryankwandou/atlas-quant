@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { onAuthStateChanged, auth, getUserRole, persistSession } from '@/lib/firebase-auth';
+import { onAuthStateChanged, auth, getUserRole, persistSession, getSession } from '@/lib/atlas-auth';
 import TopBar from '@/components/layout/TopBar';
 import Sidebar from '@/components/layout/Sidebar';
 import StatusBar from '@/components/layout/StatusBar';
@@ -15,19 +15,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // Primary guard: Firebase onAuthStateChanged (authoritative, real-time)
+    // Auth guard: check localStorage session (atlas-auth, no Firebase)
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         router.replace('/login');
         return;
       }
-      // Refresh localStorage session so other guards stay in sync
-      try {
-        const role = await getUserRole(user.uid);
-        persistSession(user, role);
-      } catch {
-        // non-fatal — keep going with cached role
-      }
+      // Refresh role from backend best-effort
+      try { await getUserRole(user.id); } catch { /* non-fatal */ }
       setReady(true);
     });
     return () => unsub();

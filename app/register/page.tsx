@@ -9,7 +9,7 @@ import {
   persistSession,
   onAuthStateChanged,
   auth,
-} from '@/lib/firebase-auth';
+} from '@/lib/atlas-auth';
 import '../auth.css';
 
 type StrengthLevel = 'weak' | 'medium' | 'strong';
@@ -88,8 +88,8 @@ export default function RegisterPage() {
 
       setLoading(true);
       try {
-        const { user, role } = await registerWithEmail(email.trim(), password, username.trim());
-        persistSession(user, role);
+        const session = await registerWithEmail(email.trim(), password, username.trim());
+        persistSession(session);
         setSuccess(true);
       } catch (err: unknown) {
         const code = (err as { code?: string }).code ?? '';
@@ -101,7 +101,7 @@ export default function RegisterPage() {
         } else if (code === 'auth/invalid-email') {
           setError('Invalid email address format.');
         } else if (code === 'auth/invalid-api-key' || code === 'auth/app-not-authorized' || !code) {
-          setError('Firebase not configured. Run: node scripts/setup-firebase.mjs');
+          setError('Auth service not available. Check server logs.');
         } else if (code === 'auth/network-request-failed') {
           setError('Network error. Check your connection and try again.');
         } else if (code === 'auth/too-many-requests') {
@@ -124,8 +124,8 @@ export default function RegisterPage() {
     setLoading(true);
     setInfo('Opening Google Sign-In…');
     try {
-      const { user, role } = await loginWithGoogle();
-      persistSession(user, role);
+      const session = await loginWithGoogle();
+      persistSession(session);
       router.replace('/chart');
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? '';

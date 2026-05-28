@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { sendPasswordReset } from '@/lib/firebase-auth';
+import { sendPasswordReset } from '@/lib/atlas-auth';
 import '../auth.css';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
