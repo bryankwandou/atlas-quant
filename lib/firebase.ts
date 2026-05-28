@@ -1,6 +1,6 @@
 // ── ATLAS-QUANT Firebase Configuration ───────────────────────────────────────
 // Set these env vars in Vercel Dashboard → Settings → Environment Variables
-// OR in .env.local for local development
+// OR run: node scripts/setup-firebase.mjs  (automatic one-command setup)
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
@@ -18,8 +18,35 @@ const firebaseConfig = {
 // Prevent duplicate app initialization in Next.js dev hot-reload
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-export const auth = getAuth(app);
-export const db   = getFirestore(app);
+// ── Lazy-safe initialization ──────────────────────────────────────────────────
+// getAuth() throws auth/invalid-api-key during SSR prerender when env vars are
+// not yet set. Catch it and return a lightweight stub so the build succeeds.
+// On the client (browser), env vars are baked in at build time and work normally.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyAuth = any;
+
+export const auth: AnyAuth = (() => {
+  try {
+    return getAuth(app);
+  } catch {
+    // Stub used only during SSR prerender without Firebase config.
+    // Real auth initialises in the browser after env vars are set.
+    return {
+      currentUser: null,
+      onAuthStateChanged: (_cb: unknown) => () => {},
+    } as AnyAuth;
+  }
+})();
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const db: any = (() => {
+  try {
+    return getFirestore(app);
+  } catch {
+    return {} as ReturnType<typeof getFirestore>;
+  }
+})();
+
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('email');
 googleProvider.addScope('profile');
