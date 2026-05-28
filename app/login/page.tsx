@@ -106,14 +106,14 @@ export default function LoginPage() {
             onClick={() => { setTab('email'); clearMessages(); }}
             type="button"
           >
-            [MSG] Email
+            Email
           </button>
           <button
             className={`auth-tab${tab === 'google' ? ' active' : ''}`}
             onClick={() => { setTab('google'); clearMessages(); }}
             type="button"
           >
-            [G] Google
+            Google
           </button>
         </div>
 

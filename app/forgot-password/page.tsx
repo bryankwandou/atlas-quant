@@ -66,7 +66,12 @@ export default function ForgotPasswordPage() {
 
           {sent ? (
             <>
-              <div className="auth-success-icon" style={{ textAlign: 'center' }}>📧</div>
+              <div className="auth-success-icon" style={{ textAlign: 'center' }}>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                  <rect x="2" y="4" width="20" height="16" rx="2" stroke="#7b61ff" strokeWidth="1.5"/>
+                  <path d="M2 8l10 6 10-6" stroke="#7b61ff" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </div>
               <div className="auth-success">
                 If an account exists for <strong>{email}</strong>, a password reset link has been sent. Check your inbox and spam folder.
               </div>

@@ -154,7 +154,12 @@ export default function RegisterPage() {
                 <span>·QUANT</span>
               </div>
             </div>
-            <div className="auth-success-icon">✅</div>
+            <div className="auth-success-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="#089981" strokeWidth="1.5"/>
+                <path d="M7.5 12l3 3 6-6" stroke="#089981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
             <div className="auth-success auth-success-mb">
               Account created successfully! Redirecting to dashboard…
             </div>
