@@ -60,12 +60,12 @@ export async function registerWithEmail(
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 export async function loginWithEmail(
-  email: string,
+  identifier: string,
   password: string,
 ): Promise<AtlasSession> {
   const data = await post<{ token: string; user: AtlasUser }>(
     '/api/auth/email/login',
-    { email, password },
+    { identifier, email: identifier, password },
   );
   return { token: data.token, user: data.user };
 }

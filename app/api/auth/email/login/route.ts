@@ -3,20 +3,34 @@
  * Tidak ada hardcoded master.
  */
 import { NextResponse } from 'next/server';
-import { verifyPassword, findUserByEmail } from '@/services/auth/users';
+import { verifyPassword, findUserByEmail, findUserByEmailOrUsername, bootstrapMasterAccount } from '@/services/auth/users';
 import { issueSession } from '@/services/auth/session';
 
 export async function POST(req: Request) {
   try {
-    const { email, password } = await req.json();
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email & password wajib diisi.' }, { status: 400 });
+    // Ensure master account always exists (survives cold start)
+    await bootstrapMasterAccount();
+
+    const { email, password, identifier } = await req.json();
+    const id = identifier ?? email; // support both field names
+    if (!id || !password) {
+      return NextResponse.json({ error: 'Email/username & password wajib diisi.' }, { status: 400 });
     }
 
-    const user = await verifyPassword(String(email).toLowerCase().trim(), String(password));
-    if (!user) {
-      return NextResponse.json({ error: 'Email atau password salah.' }, { status: 401 });
+    const lookup = String(id).trim();
+    // Find user by email or username
+    const found = await findUserByEmailOrUsername(
+      lookup.includes('@') ? lookup.toLowerCase() : lookup
+    );
+    if (!found || !found.passwordHash) {
+      return NextResponse.json({ error: 'Akun tidak ditemukan.' }, { status: 401 });
     }
+    const { default: bcrypt } = await import('bcryptjs');
+    const passwordMatch = await bcrypt.compare(String(password), found.passwordHash);
+    if (!passwordMatch) {
+      return NextResponse.json({ error: 'Password salah.' }, { status: 401 });
+    }
+    const user = found;
 
     if (!user.isApproved) {
       return NextResponse.json({ error: 'Akun belum disetujui admin.', status: 'pending' }, { status: 403 });

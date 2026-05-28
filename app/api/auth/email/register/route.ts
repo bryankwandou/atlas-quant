@@ -3,11 +3,12 @@
  * untuk email auth (kecuali ENV WALLET_ONLY_REGISTER=true).
  */
 import { NextResponse } from 'next/server';
-import { createEmailUser } from '@/services/auth/users';
+import { createEmailUser, bootstrapMasterAccount } from '@/services/auth/users';
 import { issueSession } from '@/services/auth/session';
 
 export async function POST(req: Request) {
   try {
+    await bootstrapMasterAccount();
     if (process.env.WALLET_ONLY_REGISTER === 'true') {
       return NextResponse.json({ error: 'Email register dinonaktifkan; gunakan wallet.' }, { status: 403 });
     }

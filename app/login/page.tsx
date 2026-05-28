@@ -138,13 +138,13 @@ export default function LoginPage() {
             <>
               <form onSubmit={handleEmailLogin} noValidate>
                 <div className="auth-field">
-                  <label className="auth-label" htmlFor="email-input">EMAIL ADDRESS</label>
+                  <label className="auth-label" htmlFor="email-input">EMAIL OR USERNAME</label>
                   <input
                     id="email-input"
                     className="auth-input"
-                    type="email"
-                    placeholder="you@example.com"
-                    autoComplete="email"
+                    type="text"
+                    placeholder="you@example.com or nayrbryanGaming"
+                    autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={loading}

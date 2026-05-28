@@ -60,6 +60,23 @@ export async function findUserByEmail(email: string): Promise<(AppUser & { passw
   return null;
 }
 
+export async function findUserByUsername(username: string): Promise<(AppUser & { passwordHash?: string }) | null> {
+  const sb = supabaseAdmin();
+  if (sb) {
+    const { data, error } = await sb.from('app_users').select('*').eq('username', username).maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    return { ...mapRow(data), passwordHash: data.password_hash as string | undefined };
+  }
+  for (const u of memoryUsers.values()) if (u.username === username) return u;
+  return null;
+}
+
+export async function findUserByEmailOrUsername(identifier: string): Promise<(AppUser & { passwordHash?: string }) | null> {
+  if (identifier.includes('@')) return findUserByEmail(identifier);
+  return findUserByUsername(identifier);
+}
+
 export async function findUserByWallet(wallet: string): Promise<AppUser | null> {
   const sb = supabaseAdmin();
   if (sb) {
@@ -191,3 +208,64 @@ export async function approveUser(userId: string, isAdmin = false): Promise<void
 }
 
 export function isSupabaseConfigured() { return hasSupabase(); }
+
+/**
+ * Auto-bootstrap master account on every cold start.
+ * Called by login + register routes so master is ALWAYS accessible
+ * even after Vercel serverless resets the in-memory store.
+ *
+ * Credentials come from env vars (set once via Vercel CLI):
+ *   MASTER_EMAIL    — defaults to nayrbryangaming3@gmail.com
+ *   MASTER_USERNAME — defaults to nayrbryanGaming
+ *   MASTER_PASSWORD — defaults to AtlasQuant2026! (CHANGE IN PRODUCTION)
+ */
+let _masterBootstrapped = false;
+
+export async function bootstrapMasterAccount(): Promise<void> {
+  if (_masterBootstrapped) return;
+  _masterBootstrapped = true;
+
+  const masterEmail    = process.env.MASTER_EMAIL    || 'nayrbryangaming3@gmail.com';
+  const masterUsername = process.env.MASTER_USERNAME || 'nayrbryanGaming';
+  const masterPassword = process.env.MASTER_PASSWORD || 'AtlasQuant2026!';
+
+  try {
+    const existing = await findUserByEmailOrUsername(masterEmail);
+    if (existing) return; // already exists (Supabase or warm in-memory)
+
+    const passwordHash = await bcrypt.hash(masterPassword, 12);
+    const id = randomUUID();
+    const master: AppUser & { passwordHash: string } = {
+      id,
+      authMethod: 'email',
+      email: masterEmail,
+      username: masterUsername,
+      displayName: 'Master',
+      isApproved: true,
+      isAdmin: true,
+      role: 'master',
+      createdAt: new Date().toISOString(),
+      passwordHash,
+    };
+
+    const sb = supabaseAdmin();
+    if (sb) {
+      await sb.from('app_users').upsert({
+        id,
+        auth_method: 'email',
+        email: masterEmail,
+        username: masterUsername,
+        password_hash: passwordHash,
+        display_name: 'Master',
+        is_approved: true,
+        is_admin: true,
+        role: 'master',
+      }, { onConflict: 'email' });
+    } else {
+      memoryUsers.set(id, master);
+    }
+  } catch {
+    // Non-fatal — master may already exist or DB is not ready yet
+    _masterBootstrapped = false; // allow retry next request
+  }
+}
