@@ -78,7 +78,7 @@ export default function RegisterPage() {
   };
 
   const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
+    async (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       setError('');
       setInfo('');
@@ -93,14 +93,23 @@ export default function RegisterPage() {
         setSuccess(true);
       } catch (err: unknown) {
         const code = (err as { code?: string }).code ?? '';
+        const msg  = (err as { message?: string }).message ?? '';
         if (code === 'auth/email-already-in-use') {
           setError('An account with this email already exists. Try signing in.');
         } else if (code === 'auth/weak-password') {
           setError('Password is too weak. Please use at least 6 characters.');
         } else if (code === 'auth/invalid-email') {
           setError('Invalid email address format.');
+        } else if (code === 'auth/invalid-api-key' || code === 'auth/app-not-authorized' || !code) {
+          setError('Firebase not configured. Run: node scripts/setup-firebase.mjs');
+        } else if (code === 'auth/network-request-failed') {
+          setError('Network error. Check your connection and try again.');
+        } else if (code === 'auth/too-many-requests') {
+          setError('Too many attempts. Please wait a few minutes and try again.');
+        } else if (code === 'auth/operation-not-allowed') {
+          setError('Email/password sign-up is not enabled. Enable it in Firebase Console → Authentication → Sign-in providers.');
         } else {
-          setError('Registration failed. Please try again.');
+          setError(`Registration failed (${code || msg || 'unknown error'}). Please try again.`);
         }
       } finally {
         setLoading(false);
