@@ -214,7 +214,11 @@ select{cursor:pointer;}
 .chart-toolbar-btn-primary{background:var(--aq-blue-light)!important;color:var(--aq-blue)!important;border:1px solid rgba(123,97,255,0.4);padding:4px 10px!important;font-weight:600;}
 .chart-toolbar-btn-primary:hover{background:rgba(123,97,255,0.22)!important;border-color:var(--aq-blue)!important;}
 .chart-panels{flex:1;min-height:0;position:relative;overflow:hidden;background:var(--aq-bg);display:flex;flex-direction:column;}
-.chart-panel{position:relative!important;overflow:hidden;flex-shrink:0;}
+/* CSS-first heights — JS useLayoutEffect overrides with exact px when user drags splitter */
+.chart-panel{overflow:hidden;flex-shrink:0;}
+.chart-panel-main{flex:62 0 0;min-height:80px;}
+.chart-panel-vol {flex:14 0 0;min-height:0;}
+.chart-panel-sub {flex:24 0 0;min-height:0;display:flex;flex-direction:column;}
 .main-chart-panel{flex:1;min-height:0;}
 .sub-chart-panel{flex-shrink:0;display:flex;flex-direction:column;border-top:1px solid var(--aq-border);}
 .sub-panel-header{height:24px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 8px;background:rgba(0,0,0,0.15);z-index:5;}

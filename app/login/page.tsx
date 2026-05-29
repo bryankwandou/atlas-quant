@@ -54,14 +54,18 @@ export default function LoginPage() {
         router.replace('/chart');
       } catch (err: unknown) {
         const code = (err as { code?: string }).code ?? '';
-        if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
-          setError('Invalid email or password. Please try again.');
+        const msg  = (err as Error).message ?? '';
+        // Show the actual server error message — much more helpful than generic text
+        const serverMsg = msg || 'Login gagal. Coba lagi.';
+        if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential'
+            || msg.toLowerCase().includes('salah') || msg.toLowerCase().includes('password')) {
+          setError('Email, username, atau password salah. Cek kembali dan coba lagi.');
         } else if (code === 'auth/too-many-requests') {
-          setError('Too many failed attempts. Please wait a moment and try again.');
+          setError('Terlalu banyak percobaan. Tunggu sebentar dan coba lagi.');
         } else if (code === 'auth/user-disabled') {
-          setError('This account has been disabled. Contact support.');
+          setError('Akun ini dinonaktifkan. Hubungi support.');
         } else {
-          setError('Login failed. Please try again.');
+          setError(serverMsg);
         }
       } finally {
         setLoading(false);
