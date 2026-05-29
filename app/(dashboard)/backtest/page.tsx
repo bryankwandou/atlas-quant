@@ -57,7 +57,7 @@ export default function BacktestPage() {
     <div className="panel-view">
       <div className="panel-header">
         <div className="panel-title">
-          <span>⚡</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
           <span>Backtesting Engine</span>
         </div>
         <button type="button" onClick={handleRun} disabled={loading} className="panel-action-btn primary">

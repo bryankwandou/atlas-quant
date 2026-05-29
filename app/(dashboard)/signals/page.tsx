@@ -21,7 +21,7 @@ export default function SignalsPage() {
     <div className="panel-view">
       <div className="panel-header">
         <div className="panel-title">
-          <span>⚡</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
           <span>{t('nav.signals')}</span>
         </div>
         <button
