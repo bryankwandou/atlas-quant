@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { useChartStore } from '@/store/chartStore';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -10,7 +10,7 @@ import {
   MousePointer, Crosshair, Minus, ArrowUpRight, MoveHorizontal, MoveVertical,
   GitFork, Triangle, Square, Circle, Pen, Highlighter, Eraser,
   TrendingUp, TrendingDown, Target, Type, FileText, Tag, Magnet,
-  LayoutDashboard, ShieldAlert, Activity, Bot,
+  LayoutDashboard, ShieldAlert, Activity, Bot, PanelLeftOpen, PanelLeftClose,
 } from 'lucide-react';
 
 // Drawing tool groups
@@ -81,6 +81,14 @@ export default function Sidebar() {
   const { drawingTool, setDrawingTool } = useChartStore();
   const { lang } = useLanguage();
   const [fibOpen, setFibOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    const app = document.querySelector('.atlas-app');
+    if (!app) return;
+    if (expanded) app.classList.add('sidebar-expanded');
+    else app.classList.remove('sidebar-expanded');
+  }, [expanded]);
 
   const navLabels: Record<string, string> = {
     dashboard: lang === 'id' ? 'Beranda'   : 'Dashboard',
@@ -158,6 +166,14 @@ export default function Sidebar() {
           }}
         >
           <Bot size={15} />
+        </button>
+        <button
+          type="button"
+          className={`sb-nav-btn ${expanded ? 'active' : ''}`}
+          title={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          onClick={() => setExpanded(v => !v)}
+        >
+          {expanded ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
         </button>
       </div>
     </nav>

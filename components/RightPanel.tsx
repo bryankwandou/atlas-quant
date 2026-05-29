@@ -364,7 +364,13 @@ export default function RightPanel() {
             </span>
           </div>
           <div className="t1mo-event-label">
-            {`D-${String(Math.floor((Date.now() - new Date('2022-02-24').getTime()) / 86400000) % 365).padStart(3,'0')} · E: 24-Feb-22`}
+            {(() => {
+              const now = new Date();
+              const start = new Date(now.getFullYear(), 0, 0);
+              const doy = Math.floor((now.getTime() - start.getTime()) / 86400000);
+              const d = now.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'2-digit' });
+              return `D-${String(doy).padStart(3,'0')} · ${d}`;
+            })()}
           </div>
         </div>
         <button type="button" className="t1mo-collapse-btn" title="Collapse">◀</button>
@@ -637,7 +643,7 @@ export default function RightPanel() {
                   borderColor:  killActive ? 'rgba(242,54,69,.3)'      : 'rgba(8,153,129,.3)',
                 }}
               >
-                {killActive ? '✕ Kill Switch Active' : '✓ Trade Allowed'}
+                {killActive ? 'STOP — Kill Switch Active' : 'Trade Allowed'}
               </div>
             </div>
 

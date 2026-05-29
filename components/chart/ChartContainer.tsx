@@ -6,6 +6,7 @@ import { useMarketData } from '@/hooks/useMarketData';
 import { useChartStore } from '@/store/chartStore';
 import { BarChart2, TrendingUp, Activity, Zap, Layers, Maximize2 } from 'lucide-react';
 import { computeIndicators } from '@/core/indicators/client';
+import { t1moCompute } from '@/src/core/indicators/t1mo';
 
 const CandlestickChartIcon = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -328,6 +329,34 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       });
     }
 
+    // ── T1MO Core — permanent overlay per DARURAT HUKUM design requirement ──
+    try {
+      const t1moResult = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes }, {});
+      if (t1moResult.meta.ready) {
+        const { backbone: t1moBB, magenta: t1moMG, topBox: t1moTop, btmBox: t1moBtm } = t1moResult.series;
+        // Backbone EMA — cyan solid
+        if (t1moBB) {
+          const s = (main as any).addSeries(LineSeries, { color: '#00bcd4', lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: true, title: 'Backbone' });
+          s.setData(times.map((t: number, i: number) => ({ time: t, value: (t1moBB as any[])[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
+        }
+        // Magenta EMA — pink dotted
+        if (t1moMG) {
+          const s = (main as any).addSeries(LineSeries, { color: '#e91e63', lineWidth: 1.5, lineStyle: 1, priceLineVisible: false, lastValueVisible: true, title: 'Magenta' });
+          s.setData(times.map((t: number, i: number) => ({ time: t, value: (t1moMG as any[])[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
+        }
+        // Top Box — orange
+        if (t1moTop) {
+          const s = (main as any).addSeries(LineSeries, { color: '#ff6f00', lineWidth: 1, lineStyle: 0, priceLineVisible: false, lastValueVisible: false, title: 'TopBox' });
+          s.setData(times.map((t: number, i: number) => ({ time: t, value: (t1moTop as any[])[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
+        }
+        // Bottom Box — steel gray
+        if (t1moBtm) {
+          const s = (main as any).addSeries(LineSeries, { color: '#9e9e9e', lineWidth: 1, lineStyle: 0, priceLineVisible: false, lastValueVisible: false, title: 'BtmBox' });
+          s.setData(times.map((t: number, i: number) => ({ time: t, value: (t1moBtm as any[])[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
+        }
+      }
+    } catch { /* T1MO compute error — non-fatal */ }
+
     // Signal markers
     if (showSignals && formatted.length > 20) {
       const sig = ind.latestSignal();
@@ -396,28 +425,25 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       };
 
       if (subPanel === 'atlas') {
-        const closes2 = formatted.map((c: any) => c.close);
-        const ema9v  = ind.ema(9);
-        const ema21v = ind.ema(21);
-        const rsi14v = ind.rsi(14);
-        const matrix = closes2.map((cl: number, i: number) => {
-          const score =
-            (ema9v[i] > ema21v[i] ? 1 : -1) * 25 +
-            (rsi14v[i] > 50 ? (rsi14v[i] - 50) : (rsi14v[i] - 50)) * 0.5 + 50;
-          const v = Math.max(0, Math.min(100, score));
-          return { time: formatted[i].time, value: v - 50, color: v > 50 ? 'rgba(8,153,129,0.6)' : 'rgba(242,54,69,0.6)' };
-        });
-        const ms = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
-        ms.setData(matrix.filter((d: any) => !isNaN(d.value)));
+        // T1MO Regime Strength + HMF (DARURAT HUKUM ATLAS Matrix)
+        try {
+          const t1moSub = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes }, {});
+          if (t1moSub.meta.ready) {
+            const rs = t1moSub.series.regimeStrength as number[];
+            const hmfVals = t1moSub.series.hmf as (number | null)[];
+            const regimeColors = (t1moSub.meta as any).regimeColors as string[];
+            // Regime strength histogram
+            const histS = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
+            histS.setData(times.map((t: number, i: number) => ({
+              time: t, value: rs[i] ?? 0, color: regimeColors[i] ?? 'rgba(255,255,255,0.3)',
+            })));
+            // HMF line
+            const hmfS = (subChart as any).addSeries(LineSeries, { color: '#ff6b35', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'HMF' });
+            hmfS.setData(times.map((t: number, i: number) => ({ time: t, value: hmfVals[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
+          }
+        } catch {}
         const baseline = (subChart as any).addSeries(LineSeries, { color: 'rgba(255,255,255,0.15)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
         baseline.setData(formatted.map((c: any) => ({ time: c.time, value: 0 })));
-        const hmaV = ind.hma(14);
-        const hmaScaled = hmaV.map((v: number, i: number) => {
-          const ref = formatted[i]?.close || 1;
-          return ((v - ref) / ref) * 100;
-        });
-        const hmaS = (subChart as any).addSeries(LineSeries, { color: '#ff6b35', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'HMA' });
-        hmaS.setData(formatted.map((c: any, i: number) => ({ time: c.time, value: hmaScaled[i] })).filter((d: any) => !isNaN(d.value) && isFinite(d.value)));
       } else if (subPanel === 'rsi') {
         addSubLine(ind.rsi(7), '#7e57c2', 'RSI(7)');
         [[30, 'rgba(8,153,129,0.3)'], [50, 'rgba(255,255,255,0.08)'], [70, 'rgba(242,54,69,0.3)']].forEach(([v, c]) => addLevel(v as number, c as string));
