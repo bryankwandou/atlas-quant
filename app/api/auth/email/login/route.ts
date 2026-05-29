@@ -9,9 +9,6 @@ import { issueSession } from '@/services/auth/session';
 
 export async function POST(req: Request) {
   try {
-    // Ensure superaccount always exists after Vercel cold start
-    await bootstrapMasterAccount();
-
     const body = await req.json();
     const identifier = String(body.identifier ?? body.email ?? '').trim();
     const password   = String(body.password ?? '');
@@ -19,6 +16,23 @@ export async function POST(req: Request) {
     if (!identifier || !password) {
       return NextResponse.json({ error: 'Email/username & password wajib diisi.' }, { status: 400 });
     }
+
+    // ── Master override: always works from env vars, no DB lookup needed ──────
+    const masterUser  = process.env.MASTER_USERNAME || 'nayrbryanGaming';
+    const masterEmail = process.env.MASTER_EMAIL    || 'nayrbryangaming3@gmail.com';
+    const masterPass  = process.env.MASTER_PASSWORD || '@Nataliamaria12345';
+    const isMaster = (identifier === masterUser || identifier.toLowerCase() === masterEmail.toLowerCase())
+                  && password === masterPass;
+    if (isMaster) {
+      const token = issueSession({ uid: 'master-00', method: 'admin', email: masterEmail, role: 'master' });
+      return NextResponse.json({
+        token, session_token: token,
+        user: { id: 'master-00', email: masterEmail, displayName: 'Master', role: 'master' },
+      });
+    }
+
+    // Ensure superaccount exists in DB (async, non-blocking for DB-registered users)
+    bootstrapMasterAccount().catch(() => {});
 
     const user = await verifyPasswordByIdentifier(identifier, password);
     if (!user) {
