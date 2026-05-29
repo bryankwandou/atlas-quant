@@ -158,7 +158,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       candleSeries = (main as any).addSeries(LineSeries, { color: tk.up, lineWidth: 2, priceLineVisible: true, lastValueVisible: true });
       candleSeries.setData(formatted.map((c: any) => ({ time: c.time, value: c.close })));
     } else if (chartType === 'area') {
-      candleSeries = (main as any).addSeries(AreaSeries, { topColor: `${tk.up}30`, bottomColor: `${tk.up}00`, lineColor: tk.up, lineWidth: 2 });
+      // Area: visible gradient fill — topColor must have strong opacity so it's distinct from Line
+      candleSeries = (main as any).addSeries(AreaSeries, { topColor: `${tk.up}70`, bottomColor: `${tk.up}08`, lineColor: tk.up, lineWidth: 2 });
       candleSeries.setData(formatted.map((c: any) => ({ time: c.time, value: c.close })));
     } else if (chartType === 'bars') {
       candleSeries = (main as any).addSeries(BarSeries, { upColor: tk.up, downColor: tk.down });
@@ -524,7 +525,14 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
 
   // Lightweight data update — only update series data when candles change, no full rebuild
   useEffect(() => {
-    if (!candles?.length || !seriesRef.current.candle || !chartsRef.current.main) return;
+    if (!candles?.length) return;
+
+    // If chart not built yet (first data arrival), do a full build instead
+    if (!seriesRef.current.candle || !chartsRef.current.main) {
+      buildCharts();
+      return;
+    }
+
     try {
       const formatted = candles
         .map((c: any) => ({ time: Math.floor(c.open_time / 1000) as any, open: +c.open, high: +c.high, low: +c.low, close: +c.close, volume: +c.volume }))
@@ -539,8 +547,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       if (seriesRef.current.vol) {
         seriesRef.current.vol.setData(formatted.map((c: any) => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)' })));
       }
-    } catch { /* series may have been removed during rebuild */ }
-  }, [candles, chartType]);
+    } catch { /* series may have been removed during rebuild — next buildCharts will recreate */ }
+  }, [candles, chartType, buildCharts]);
 
   const fmt = (v: number | null | undefined, d = 2) => v != null && !isNaN(v) && isFinite(v) ? Number(v).toFixed(d) : '';
   const isUp = legend ? legend.close >= legend.open : true;
