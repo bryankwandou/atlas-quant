@@ -34,7 +34,7 @@ export interface SessionPayload {
   exp: number;
 }
 
-export function issueSession(payload: Omit<SessionPayload, 'exp'>, ttlMs = 24 * 60 * 60 * 1000): string {
+export function issueSession(payload: Omit<SessionPayload, 'exp'>, ttlMs = 7 * 24 * 60 * 60 * 1000): string {
   const exp = Date.now() + ttlMs;
   const full: SessionPayload = { ...payload, exp };
   const body = b64url(Buffer.from(JSON.stringify(full)));

@@ -80,6 +80,13 @@ export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
+    // If already logged in, go straight to dashboard
+    const token = localStorage.getItem('session_token');
+    const user  = localStorage.getItem('atlas_user');
+    if (token && user) {
+      window.location.replace('/chart');
+      return;
+    }
     const h = () => setScrolled(window.scrollY > 40);
     window.addEventListener('scroll', h, { passive: true });
     return () => window.removeEventListener('scroll', h);

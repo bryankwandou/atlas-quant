@@ -74,21 +74,25 @@ export default function LoginPage() {
   const handleGoogleLogin = useCallback(async () => {
     clearMessages();
     setLoading(true);
-    setInfo('Opening Google Sign-In…');
+    setInfo('Menghubungi Google…');
     try {
       const session = await loginWithGoogle();
       persistSession(session);
       router.replace('/chart');
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? '';
-      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-        setError('Sign-in cancelled.');
+      if (code === 'auth/operation-not-allowed') {
+        // Google OAuth not yet wired server-side — guide user to email login
+        setError('Login Google belum aktif. Gunakan tab Email di atas dengan username/email dan password.');
+      } else if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        setError('Login dibatalkan.');
       } else if (code === 'auth/popup-blocked') {
-        setError('Popup blocked by browser. Please allow popups for this site.');
+        setError('Popup diblokir browser. Izinkan popup untuk situs ini.');
       } else {
-        setError('Google sign-in failed. Please try again.');
+        setError('Google sign-in gagal. Gunakan login Email.');
       }
       setInfo('');
+      setTab('email');   // auto-switch to email tab so user can proceed
     } finally {
       setLoading(false);
     }

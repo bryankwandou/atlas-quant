@@ -90,7 +90,7 @@ export default function StatusBar() {
         <div className="sb-sep" />
         <span className="sb-text">ATLAS-QUANT v2.12</span>
         <div className="sb-sep" />
-        <span className="sb-warning">⚠ Manual execution only</span>
+        <span className="sb-warning">Manual execution only</span>
       </div>
     </div>
   );
