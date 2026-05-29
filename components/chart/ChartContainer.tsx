@@ -50,6 +50,11 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const { candles, isLoading } = useMarketData(symbol, timeframe);
   const { activeIndicators, showSignals, chartType, setChartType, subPanel, setSubPanel } = useChartStore();
 
+  // Stable ref for candles — prevents buildCharts from re-running on every SWR poll
+  // (SWR creates a new array reference on each successful fetch even with same data)
+  const candlesRef = useRef<typeof candles>([]);
+  useEffect(() => { candlesRef.current = candles; }, [candles]);
+
   const [panelPct, setPanelPct] = useState([62, 14, 24]);
   const [dragging, setDragging] = useState<number | null>(null);
   const dragRef    = useRef<any>(null);
@@ -127,9 +132,10 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     Object.entries(chartsRef.current).forEach(([k, c]) => { if (k !== '_obs') try { c.remove(); } catch {} });
     chartsRef.current = {}; seriesRef.current = {};
 
-    if (!mainRef.current || !volRef.current || !subRef.current || !candles?.length) return;
+    const currentCandles = candlesRef.current;
+    if (!mainRef.current || !volRef.current || !subRef.current || !currentCandles?.length) return;
 
-    const formatted = candles
+    const formatted = currentCandles
       .map((c: any) => ({ time: Math.floor(c.open_time / 1000) as any, open: +c.open, high: +c.high, low: +c.low, close: +c.close, volume: +c.volume }))
       .sort((a: any, b: any) => a.time - b.time)
       .filter((c: any) => c.time > 0 && c.close > 0);
@@ -502,8 +508,10 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     });
     if (wrapRef.current) obs.observe(wrapRef.current);
     chartsRef.current._obs = obs;
-  }, [candles, theme, activeIndicators, showSignals, subPanel, baseOpts, panelPct, symbol, chartType]);
+  // candles removed from deps — reads via candlesRef.current to prevent rebuild on every SWR poll
+  }, [theme, activeIndicators, showSignals, subPanel, baseOpts, panelPct, symbol, chartType]);
 
+  // Full chart rebuild (structure changes: symbol, chartType, indicators, theme)
   useEffect(() => {
     const timer = setTimeout(buildCharts, 60);
     return () => {
@@ -513,6 +521,26 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       chartsRef.current = {};
     };
   }, [buildCharts]);
+
+  // Lightweight data update — only update series data when candles change, no full rebuild
+  useEffect(() => {
+    if (!candles?.length || !seriesRef.current.candle || !chartsRef.current.main) return;
+    try {
+      const formatted = candles
+        .map((c: any) => ({ time: Math.floor(c.open_time / 1000) as any, open: +c.open, high: +c.high, low: +c.low, close: +c.close, volume: +c.volume }))
+        .sort((a: any, b: any) => a.time - b.time)
+        .filter((c: any) => c.time > 0 && c.close > 0);
+      if (formatted.length < 2) return;
+      if (chartType === 'line' || chartType === 'area') {
+        seriesRef.current.candle.setData(formatted.map((c: any) => ({ time: c.time, value: c.close })));
+      } else {
+        seriesRef.current.candle.setData(formatted.map((c: any) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })));
+      }
+      if (seriesRef.current.vol) {
+        seriesRef.current.vol.setData(formatted.map((c: any) => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)' })));
+      }
+    } catch { /* series may have been removed during rebuild */ }
+  }, [candles, chartType]);
 
   const fmt = (v: number | null | undefined, d = 2) => v != null && !isNaN(v) && isFinite(v) ? Number(v).toFixed(d) : '';
   const isUp = legend ? legend.close >= legend.open : true;
