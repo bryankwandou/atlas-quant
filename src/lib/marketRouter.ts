@@ -239,6 +239,47 @@ export async function getBinanceOHLCV(
 
 // ─── Yahoo Finance ────────────────────────────────────────────────────────────
 
+// ─── Stooq fallback (free, no key, reliable from Vercel) ─────────────────────
+
+function toStooqSymbol(ticker: string): string {
+  if (ticker.startsWith('^')) return ticker.toLowerCase();            // ^GSPC → ^spx (no, ^gspc)
+  if (ticker.endsWith('=X')) return ticker.replace('=X', '').toLowerCase();  // EURUSD=X → eurusd
+  if (ticker.endsWith('=F')) return ticker.replace('=F', '').toLowerCase() + '.f'; // GC=F → gc.f
+  if (ticker.includes('.')) return ticker.toLowerCase();              // BBCA.JK → bbca.jk
+  return ticker.toLowerCase() + '.us';                                // AAPL → aapl.us
+}
+
+async function getStooqOHLCV(ticker: string, limit: number): Promise<OHLCVCandle[]> {
+  try {
+    const sym = toStooqSymbol(ticker);
+    const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(sym)}&i=d`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 5000);
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) return [];
+    const text = await res.text();
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) return [];
+    const assetClass = detectAssetClass(ticker).assetClass;
+    const candles: OHLCVCandle[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const [date, open, high, low, close, volume] = lines[i].split(',');
+      if (!date || !close) continue;
+      const ts = new Date(date.trim()).getTime();
+      if (!ts || isNaN(ts)) continue;
+      candles.push({
+        symbol: ticker, asset_class: assetClass, timeframe: '1d',
+        open_time: ts, close_time: ts + 86400000,
+        open: parseFloat(open), high: parseFloat(high),
+        low: parseFloat(low), close: parseFloat(close),
+        volume: parseFloat(volume || '0') || 0,
+      });
+    }
+    return candles.slice(-limit).filter(c => c.close > 0);
+  } catch { return []; }
+}
+
 export async function getYahooOHLCV(
   ticker: string,
   interval: string,
@@ -249,10 +290,13 @@ export async function getYahooOHLCV(
     const range = yahooRange(limit, yahooInterval);
     const url = `${YAHOO_BASE}/v8/finance/chart/${encodeURIComponent(ticker)}?interval=${yahooInterval}&range=${range}`;
 
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 5000);
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      next: { revalidate: revalidateSeconds(interval) },
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'application/json' },
+      signal: ctrl.signal,
     });
+    clearTimeout(t);
     if (!res.ok) return [];
 
     const json = await res.json();
@@ -454,10 +498,14 @@ export async function routeOHLCV(
     case 'futures':
     case 'forex': {
       const ticker = yahooTicker || symbol;
-      const data = await getYahooOHLCV(ticker, timeframe, limit);
-      // Market closed / intraday empty — fall back to daily so chart isn't blank
+      let data = await getYahooOHLCV(ticker, timeframe, limit);
+      // Market closed / intraday empty — fall back to daily
       if (data.length === 0 && !['1d','2d','3d','1w','2w','1M','3M','6M','12M'].includes(timeframe)) {
-        return getYahooOHLCV(ticker, '1d', Math.max(limit, 365));
+        data = await getYahooOHLCV(ticker, '1d', Math.max(limit, 365));
+      }
+      // Yahoo still empty — try Stooq (reliable from Vercel)
+      if (data.length === 0) {
+        data = await getStooqOHLCV(ticker, Math.max(limit, 365));
       }
       return data;
     }
