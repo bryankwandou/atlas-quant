@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getMacroIndicators } from '@/src/services/macro/vix';
 
-export const revalidate = 900; // 15 min
+export const dynamic = 'force-dynamic'; // 15 min
 
 export async function GET() {
   try {

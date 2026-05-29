@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * POST /api/macro/signal
  * Body: { symbol: string; timeframe: string; candles?: OHLCVCandle[] }

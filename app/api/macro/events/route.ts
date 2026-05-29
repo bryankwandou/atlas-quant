@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getEconomicCalendar } from '@/src/services/macro/economic-events';
 
-export const revalidate = 1800; // 30 min
+export const dynamic = 'force-dynamic'; // 30 min
 
 export async function GET() {
   try {

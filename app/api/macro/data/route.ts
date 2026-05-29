@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAllMacroData } from '@/src/services/macroData';
 
 // 5-minute server-side cache
-export const revalidate = 300;
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {

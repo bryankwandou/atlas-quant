@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCentralBankData } from '@/src/services/macro/central-bank';
 
-export const revalidate = 86400; // 24 hours
+export const dynamic = 'force-dynamic'; // 24 hours
 
 export async function GET() {
   try {

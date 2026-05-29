@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFundingRate, getTopFundingRates } from '@/src/services/macro/funding-rates';
 
-export const revalidate = 300; // 5 min
+export const dynamic = 'force-dynamic'; // 5 min
 
 export async function GET(req: NextRequest) {
   try {

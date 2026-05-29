@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getFearGreedIndex } from '@/src/services/macro/fear-greed';
 
-export const revalidate = 3600; // 1 hour
+export const dynamic = 'force-dynamic'; // 1 hour
 
 export async function GET() {
   try {
