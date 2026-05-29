@@ -526,14 +526,12 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   }, [buildCharts]);
 
   // Lightweight data update — only update series data when candles change, no full rebuild
+  // NOTE: buildCharts is intentionally NOT in deps — calling it here caused a rebuild loop:
+  // buildCharts fires → clears seriesRef → candles effect fires → calls buildCharts → loop
   useEffect(() => {
     if (!candles?.length) return;
-
-    // If chart not built yet (first data arrival), do a full build instead
-    if (!seriesRef.current.candle || !chartsRef.current.main) {
-      buildCharts();
-      return;
-    }
+    // Chart not ready yet — buildCharts useEffect will build it using candlesRef.current
+    if (!seriesRef.current.candle || !chartsRef.current.main) return;
 
     try {
       const formatted = candles
@@ -549,8 +547,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       if (seriesRef.current.vol) {
         seriesRef.current.vol.setData(formatted.map((c: any) => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)' })));
       }
-    } catch { /* series may have been removed during rebuild — next buildCharts will recreate */ }
-  }, [candles, chartType, buildCharts]);
+    } catch { /* series removed during concurrent rebuild — next poll will retry */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candles, chartType]);
 
   const fmt = (v: number | null | undefined, d = 2) => v != null && !isNaN(v) && isFinite(v) ? Number(v).toFixed(d) : '';
   const isUp = legend ? legend.close >= legend.open : true;

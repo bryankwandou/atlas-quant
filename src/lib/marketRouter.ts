@@ -209,32 +209,31 @@ export async function getBinanceOHLCV(
 ): Promise<OHLCVCandle[]> {
   const binanceInterval = BINANCE_INTERVAL_MAP[interval] || '15m';
 
-  // Try every Binance endpoint before falling back
-  for (const base of BINANCE_BASES) {
-    try {
-      const url = `${base}/klines?symbol=${pair.toUpperCase()}&interval=${binanceInterval}&limit=${limit}`;
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) continue;
-      const raw: any[][] = await res.json();
-      if (!Array.isArray(raw) || raw.length === 0) continue;
-      return raw.map((k) => ({
-        symbol:       pair.toUpperCase(),
-        asset_class:  'crypto',
-        timeframe:    interval,
-        open_time:    k[0],
-        open:         parseFloat(k[1]),
-        high:         parseFloat(k[2]),
-        low:          parseFloat(k[3]),
-        close:        parseFloat(k[4]),
-        volume:       parseFloat(k[5]),
-        close_time:   k[6],
-        quote_volume: parseFloat(k[7]),
-        trades_count: Number(k[8]),
-      }));
-    } catch { /* try next endpoint */ }
-  }
+  // Race all Binance endpoints simultaneously — 2s global timeout
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 2000);
 
-  // All Binance endpoints failed → use CryptoCompare
+  try {
+    const result = await Promise.any(
+      BINANCE_BASES.map(async base => {
+        const url = `${base}/klines?symbol=${pair.toUpperCase()}&interval=${binanceInterval}&limit=${limit}`;
+        const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+        if (!res.ok) throw new Error('not ok');
+        const raw: any[][] = await res.json();
+        if (!Array.isArray(raw) || raw.length === 0) throw new Error('empty');
+        return raw.map((k) => ({
+          symbol: pair.toUpperCase(), asset_class: 'crypto', timeframe: interval,
+          open_time: k[0], open: parseFloat(k[1]), high: parseFloat(k[2]),
+          low: parseFloat(k[3]), close: parseFloat(k[4]), volume: parseFloat(k[5]),
+          close_time: k[6], quote_volume: parseFloat(k[7]), trades_count: Number(k[8]),
+        }));
+      })
+    );
+    clearTimeout(timer);
+    return result;
+  } catch { clearTimeout(timer); }
+
+  // All Binance endpoints failed/timed out → CryptoCompare
   return getCryptoCompareOHLCV(pair, interval, limit);
 }
 
@@ -343,29 +342,37 @@ export async function getDexScreenerOHLCV(
 
 export async function getBinancePrice(pair: string): Promise<PriceData | null> {
   const sym = pair.toUpperCase();
-  // Try all Binance endpoints
-  for (const base of BINANCE_BASES) {
-    try {
-      const [priceRes, tickerRes] = await Promise.all([
-        fetch(`${base}/ticker/price?symbol=${sym}`, { cache: 'no-store' }),
-        fetch(`${base}/ticker/24hr?symbol=${sym}`,  { cache: 'no-store' }),
-      ]);
-      if (!priceRes.ok) continue;
-      const priceJson  = await priceRes.json();
-      const tickerJson = tickerRes.ok ? await tickerRes.json() : {};
-      if (!priceJson.price) continue;
-      return {
-        symbol:    sym,
-        price:     parseFloat(priceJson.price),
-        change24h: parseFloat(tickerJson.priceChangePercent || '0'),
-        high24h:   parseFloat(tickerJson.highPrice          || '0'),
-        low24h:    parseFloat(tickerJson.lowPrice           || '0'),
-        volume24h: parseFloat(tickerJson.volume             || '0'),
-        ts:        Date.now(),
-      };
-    } catch { /* try next */ }
-  }
-  // Fallback: CryptoCompare price
+
+  // Race all Binance endpoints simultaneously — 2s global timeout
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 2000);
+
+  try {
+    const winner = await Promise.any(
+      BINANCE_BASES.map(async base => {
+        const [pr, tr] = await Promise.all([
+          fetch(`${base}/ticker/price?symbol=${sym}`, { cache: 'no-store', signal: ctrl.signal }),
+          fetch(`${base}/ticker/24hr?symbol=${sym}`,  { cache: 'no-store', signal: ctrl.signal }),
+        ]);
+        if (!pr.ok) throw new Error('not ok');
+        const pj = await pr.json();
+        if (!pj.price) throw new Error('no price');
+        const tj = tr.ok ? await tr.json() : {};
+        return {
+          symbol: sym, price: parseFloat(pj.price),
+          change24h: parseFloat(tj.priceChangePercent || '0'),
+          high24h: parseFloat(tj.highPrice || '0'),
+          low24h: parseFloat(tj.lowPrice || '0'),
+          volume24h: parseFloat(tj.volume || '0'),
+          ts: Date.now(),
+        } as PriceData;
+      })
+    );
+    clearTimeout(timer);
+    return winner;
+  } catch { clearTimeout(timer); }
+
+  // Fallback: CryptoCompare (works from Vercel US)
   try {
     const fsym = sym.replace(/USDT$|BUSD$|USD$/, '') || 'BTC';
     const res = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${fsym}&tsyms=USD,USDT`, { cache: 'no-store' });
