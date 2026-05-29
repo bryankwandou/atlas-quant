@@ -1,10 +1,20 @@
 import { detectAssetClass } from '@/src/data/symbolCatalog';
 
-const BINANCE_BASE   = process.env.BINANCE_BASE_URL || 'https://api.binance.com/api/v3';
+// Binance backup endpoints — api.binance.com often geo-blocked on Vercel US
+const BINANCE_BASES = [
+  process.env.BINANCE_BASE_URL || '',
+  'https://api4.binance.com/api/v3',
+  'https://api3.binance.com/api/v3',
+  'https://api2.binance.com/api/v3',
+  'https://api1.binance.com/api/v3',
+  'https://api.binance.com/api/v3',
+].filter(Boolean);
+const BINANCE_BASE   = BINANCE_BASES[0];
 const YAHOO_BASE     = 'https://query1.finance.yahoo.com';
 const DEXSCREENER    = 'https://api.dexscreener.com/latest/dex';
 const ALPHA_KEY      = process.env.ALPHA_VANTAGE_KEY || '';
 const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
+const CC_BASE        = 'https://min-api.cryptocompare.com/data/v2';
 
 // ─── Shared candle shape ──────────────────────────────────────────────────────
 export interface OHLCVCandle {
@@ -133,36 +143,99 @@ function yahooRange(limit: number, interval: string): string {
   return 'max';
 }
 
-// ─── Binance ──────────────────────────────────────────────────────────────────
+// ─── CryptoCompare fallback (works from Vercel US datacenter) ────────────────
+
+function ccEndpoint(interval: string): { endpoint: string; aggregate: number } {
+  const m: Record<string, { endpoint: string; aggregate: number }> = {
+    '1m':  { endpoint: 'histominute', aggregate: 1  },
+    '3m':  { endpoint: 'histominute', aggregate: 3  },
+    '5m':  { endpoint: 'histominute', aggregate: 5  },
+    '15m': { endpoint: 'histominute', aggregate: 15 },
+    '30m': { endpoint: 'histominute', aggregate: 30 },
+    '45m': { endpoint: 'histominute', aggregate: 45 },
+    '1h':  { endpoint: 'histohour',   aggregate: 1  },
+    '2h':  { endpoint: 'histohour',   aggregate: 2  },
+    '3h':  { endpoint: 'histohour',   aggregate: 3  },
+    '4h':  { endpoint: 'histohour',   aggregate: 4  },
+    '6h':  { endpoint: 'histohour',   aggregate: 6  },
+    '8h':  { endpoint: 'histohour',   aggregate: 8  },
+    '12h': { endpoint: 'histohour',   aggregate: 12 },
+    '1d':  { endpoint: 'histoday',    aggregate: 1  },
+    '3d':  { endpoint: 'histoday',    aggregate: 3  },
+    '1w':  { endpoint: 'histoday',    aggregate: 7  },
+    '2w':  { endpoint: 'histoday',    aggregate: 14 },
+    '1M':  { endpoint: 'histoday',    aggregate: 30 },
+  };
+  return m[interval] ?? { endpoint: 'histominute', aggregate: 15 };
+}
+
+async function getCryptoCompareOHLCV(pair: string, interval: string, limit: number): Promise<OHLCVCandle[]> {
+  try {
+    // BTC/USDT → fsym=BTC tsym=USDT (treat USDT as USD for CC)
+    const fsym = pair.replace(/USDT$|BUSD$|USD$|BTC$|ETH$|BNB$/, '').toUpperCase() || 'BTC';
+    const tsym = pair.endsWith('USDT') || pair.endsWith('BUSD') || pair.endsWith('USD') ? 'USDT' : 'BTC';
+    const { endpoint, aggregate } = ccEndpoint(interval);
+    const url = `${CC_BASE}/${endpoint}?fsym=${fsym}&tsym=${tsym}&limit=${Math.min(limit, 2000)}&aggregate=${aggregate}`;
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return [];
+    const json = await res.json() as { Response?: string; Data?: { Data?: any[] } };
+    if (json.Response !== 'Success' || !json.Data?.Data?.length) return [];
+    const intervalMs = aggregate * ({ histominute: 60, histohour: 3600, histoday: 86400 }[endpoint] ?? 900) * 1000;
+    return json.Data.Data
+      .filter((c: any) => c.open > 0)
+      .map((c: any) => ({
+        symbol:      pair.toUpperCase(),
+        asset_class: 'crypto',
+        timeframe:   interval,
+        open_time:   c.time * 1000,
+        open:        c.open,
+        high:        c.high,
+        low:         c.low,
+        close:       c.close,
+        volume:      c.volumeto,
+        close_time:  c.time * 1000 + intervalMs,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+// ─── Binance (with multi-endpoint fallback → CryptoCompare) ──────────────────
 
 export async function getBinanceOHLCV(
   pair: string,
   interval: string,
   limit: number
 ): Promise<OHLCVCandle[]> {
-  try {
-    const binanceInterval = BINANCE_INTERVAL_MAP[interval] || '15m';
-    const url = `${BINANCE_BASE}/klines?symbol=${pair.toUpperCase()}&interval=${binanceInterval}&limit=${limit}`;
-    const res = await fetch(url, { next: { revalidate: revalidateSeconds(interval) } });
-    if (!res.ok) return [];
-    const raw: any[][] = await res.json();
-    return raw.map((k) => ({
-      symbol:       pair.toUpperCase(),
-      asset_class:  'crypto',
-      timeframe:    interval,
-      open_time:    k[0],
-      open:         parseFloat(k[1]),
-      high:         parseFloat(k[2]),
-      low:          parseFloat(k[3]),
-      close:        parseFloat(k[4]),
-      volume:       parseFloat(k[5]),
-      close_time:   k[6],
-      quote_volume: parseFloat(k[7]),
-      trades_count: Number(k[8]),
-    }));
-  } catch {
-    return [];
+  const binanceInterval = BINANCE_INTERVAL_MAP[interval] || '15m';
+
+  // Try every Binance endpoint before falling back
+  for (const base of BINANCE_BASES) {
+    try {
+      const url = `${base}/klines?symbol=${pair.toUpperCase()}&interval=${binanceInterval}&limit=${limit}`;
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) continue;
+      const raw: any[][] = await res.json();
+      if (!Array.isArray(raw) || raw.length === 0) continue;
+      return raw.map((k) => ({
+        symbol:       pair.toUpperCase(),
+        asset_class:  'crypto',
+        timeframe:    interval,
+        open_time:    k[0],
+        open:         parseFloat(k[1]),
+        high:         parseFloat(k[2]),
+        low:          parseFloat(k[3]),
+        close:        parseFloat(k[4]),
+        volume:       parseFloat(k[5]),
+        close_time:   k[6],
+        quote_volume: parseFloat(k[7]),
+        trades_count: Number(k[8]),
+      }));
+    } catch { /* try next endpoint */ }
   }
+
+  // All Binance endpoints failed → use CryptoCompare
+  return getCryptoCompareOHLCV(pair, interval, limit);
 }
 
 // ─── Yahoo Finance ────────────────────────────────────────────────────────────
@@ -269,26 +342,38 @@ export async function getDexScreenerOHLCV(
 // ─── Price fetchers ───────────────────────────────────────────────────────────
 
 export async function getBinancePrice(pair: string): Promise<PriceData | null> {
+  const sym = pair.toUpperCase();
+  // Try all Binance endpoints
+  for (const base of BINANCE_BASES) {
+    try {
+      const [priceRes, tickerRes] = await Promise.all([
+        fetch(`${base}/ticker/price?symbol=${sym}`, { cache: 'no-store' }),
+        fetch(`${base}/ticker/24hr?symbol=${sym}`,  { cache: 'no-store' }),
+      ]);
+      if (!priceRes.ok) continue;
+      const priceJson  = await priceRes.json();
+      const tickerJson = tickerRes.ok ? await tickerRes.json() : {};
+      if (!priceJson.price) continue;
+      return {
+        symbol:    sym,
+        price:     parseFloat(priceJson.price),
+        change24h: parseFloat(tickerJson.priceChangePercent || '0'),
+        high24h:   parseFloat(tickerJson.highPrice          || '0'),
+        low24h:    parseFloat(tickerJson.lowPrice           || '0'),
+        volume24h: parseFloat(tickerJson.volume             || '0'),
+        ts:        Date.now(),
+      };
+    } catch { /* try next */ }
+  }
+  // Fallback: CryptoCompare price
   try {
-    const sym = pair.toUpperCase();
-    const [priceRes, tickerRes] = await Promise.all([
-      fetch(`${BINANCE_BASE}/ticker/price?symbol=${sym}`, { next: { revalidate: 5 } }),
-      fetch(`${BINANCE_BASE}/ticker/24hr?symbol=${sym}`,  { next: { revalidate: 10 } }),
-    ]);
-    if (!priceRes.ok) return null;
-
-    const priceJson  = await priceRes.json();
-    const tickerJson = tickerRes.ok ? await tickerRes.json() : {};
-
-    return {
-      symbol:    sym,
-      price:     parseFloat(priceJson.price),
-      change24h: parseFloat(tickerJson.priceChangePercent || '0'),
-      high24h:   parseFloat(tickerJson.highPrice          || '0'),
-      low24h:    parseFloat(tickerJson.lowPrice           || '0'),
-      volume24h: parseFloat(tickerJson.volume             || '0'),
-      ts:        Date.now(),
-    };
+    const fsym = sym.replace(/USDT$|BUSD$|USD$/, '') || 'BTC';
+    const res = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${fsym}&tsyms=USD,USDT`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const json = await res.json() as Record<string, number>;
+    const price = json.USDT ?? json.USD ?? 0;
+    if (!price) return null;
+    return { symbol: sym, price, change24h: 0, high24h: 0, low24h: 0, volume24h: 0, ts: Date.now() };
   } catch {
     return null;
   }
