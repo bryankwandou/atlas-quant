@@ -331,10 +331,10 @@ export default function RightPanel() {
     : null;
 
   const tabs = [
-    { id: 'signal',    label: 'Sinyal',   icon: '⚡' },
-    { id: 'watchlist', label: 'Pantauan', icon: '👁' },
-    { id: 'ai',        label: 'AI',       icon: '🤖' },
-    { id: 'risk',      label: 'Risiko',   icon: '🛡' },
+    { id: 'signal',    label: 'Sinyal',   icon: null },
+    { id: 'watchlist', label: 'Pantauan', icon: null },
+    { id: 'ai',        label: 'AI',       icon: null },
+    { id: 'risk',      label: 'Risiko',   icon: null },
   ];
 
   // ── Risk param keys aligned to userStore ────────────────────────────────
@@ -645,7 +645,7 @@ export default function RightPanel() {
             <div className="risk-params">
               {riskParams.map(({ label, key, suffix, step, min }) => (
                 <div key={key} className="risk-param-row">
-                  <span className="risk-param-icon">📊</span>
+                  <span className="risk-param-icon">—</span>
                   <span className="risk-param-label">{label}</span>
                   <div className="risk-input-wrap">
                     <input

@@ -2,12 +2,12 @@
 // ── ATLAS-QUANT Right Icon Rail ───────────────────────────────────────────────
 // Matches DARURAT HUKUM reference: RightRail.jsx + rail-config.js
 
+import { useRouter, usePathname } from 'next/navigation';
 import {
-  List, BarChart2, TrendingUp, Shield, BookOpen, Activity,
-  Code2, Info, Keyboard, Bell, Calendar, Newspaper,
+  List, TrendingUp, Shield, BookOpen, Activity,
+  Info, Bell, Calendar, Newspaper,
 } from 'lucide-react';
 
-// Inline SVG icons for exact DARURAT HUKUM match
 const IconScreener = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <rect x="2" y="3" width="20" height="14" rx="2"/>
@@ -51,32 +51,42 @@ const IconKeyboardSvg = ({ size = 15 }: { size?: number }) => (
 );
 
 export default function RightRail() {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const nav = (href: string) => router.push(href);
+  const isActive = (href: string) => pathname === href || pathname.startsWith(href);
+
+  const setRightTab = (tab: string) => {
+    document.dispatchEvent(new CustomEvent('atlas:set-right-tab', { detail: tab }));
+  };
+
   return (
     <div className="right-rail">
 
       {/* ── Market Panes ─────────────────── */}
-      <button className="rr-btn" title="Watchlist">
+      <button type="button" className={`rr-btn ${isActive('/chart') ? 'active' : ''}`} title="Watchlist" onClick={() => setRightTab('watchlist')}>
         <List size={16} />
       </button>
-      <button className="rr-btn" title="Data Window">
+      <button type="button" className="rr-btn" title="Data Window" onClick={() => setRightTab('data')}>
         <IconDataWindow size={16} />
       </button>
-      <button className="rr-btn" title="Stock Screener">
+      <button type="button" className={`rr-btn ${isActive('/screener') ? 'active' : ''}`} title="Market Screener" onClick={() => nav('/screener')}>
         <IconScreener size={16} />
       </button>
 
       <div className="rr-divider" />
 
       {/* ── Flow / Events ────────────────── */}
-      <button className="rr-btn" title="Economic Calendar" style={{ position: 'relative' }}>
+      <button type="button" className="rr-btn" title="Economic Calendar" onClick={() => setRightTab('calendar')}>
         <Calendar size={16} />
         <span className="rr-dot" />
       </button>
-      <button className="rr-btn" title="News Flow" style={{ position: 'relative' }}>
+      <button type="button" className="rr-btn" title="News Flow" onClick={() => setRightTab('news')}>
         <Newspaper size={16} />
         <span className="rr-badge">4</span>
       </button>
-      <button className="rr-btn" title="Alerts" style={{ position: 'relative' }}>
+      <button type="button" className="rr-btn" title="Alerts" onClick={() => setRightTab('alerts')}>
         <Bell size={16} />
         <span className="rr-badge">2</span>
       </button>
@@ -84,40 +94,39 @@ export default function RightRail() {
       <div className="rr-divider" />
 
       {/* ── Analysis ─────────────────────── */}
-      <button className="rr-btn" title="Signal Panel">
+      <button type="button" className={`rr-btn ${isActive('/signals') ? 'active' : ''}`} title="Signal Panel" onClick={() => nav('/signals')}>
         <Activity size={16} />
       </button>
-      <button className="rr-btn" title="Risk Panel">
+      <button type="button" className="rr-btn" title="Risk Panel" onClick={() => setRightTab('risk')}>
         <Shield size={16} />
       </button>
-      <button className="rr-btn" title="Trading Plan">
+      <button type="button" className="rr-btn" title="Trading Plan" onClick={() => setRightTab('plan')}>
         <IconTarget size={16} />
       </button>
 
       <div className="rr-divider" />
 
       {/* ── Workspace ────────────────────── */}
-      <button className="rr-btn" title="Object Tree">
+      <button type="button" className="rr-btn" title="Object Tree" onClick={() => setRightTab('objects')}>
         <IconObjectTree size={16} />
       </button>
-      <button className="rr-btn" title="Trading Journal">
+      <button type="button" className={`rr-btn ${isActive('/journal') ? 'active' : ''}`} title="Trading Journal" onClick={() => nav('/journal')}>
         <BookOpen size={16} />
       </button>
-      <button className="rr-btn" title="Strategy Backtest">
+      <button type="button" className={`rr-btn ${isActive('/backtest') ? 'active' : ''}`} title="Strategy Backtest" onClick={() => nav('/backtest')}>
         <TrendingUp size={16} />
       </button>
-      <button className="rr-btn" title="Script Editor">
+      <button type="button" className="rr-btn" title="Script Editor" onClick={() => setRightTab('pine')}>
         <IconPineScript size={16} />
       </button>
 
-      {/* ── Spacer ───────────────────────── */}
       <div className="rr-spacer" />
 
       {/* ── Bottom Utility ───────────────── */}
-      <button className="rr-btn" title="Keyboard Shortcuts">
+      <button type="button" className="rr-btn" title="Keyboard Shortcuts" onClick={() => setRightTab('keyboard')}>
         <IconKeyboardSvg size={15} />
       </button>
-      <button className="rr-btn" title="Help & Documentation">
+      <button type="button" className="rr-btn" title="Help & Documentation" onClick={() => setRightTab('help')}>
         <Info size={16} />
       </button>
     </div>

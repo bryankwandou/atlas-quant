@@ -46,7 +46,7 @@ export default function ScalpPanel({ symbol }: { symbol: string }) {
   return (
     <div className={`scalp-panel ${isActive ? (isBuy ? 'border-buy' : 'border-sell') : 'border-neutral'}`}>
       <div className="scalp-header">
-        <span className="scalp-label">⚡ SCALP 1M</span>
+        <span className="scalp-label">SCALP 1M</span>
         <span className="scalp-countdown">Refresh: {countdown}s</span>
       </div>
 
@@ -81,7 +81,7 @@ export default function ScalpPanel({ symbol }: { symbol: string }) {
       )}
 
       <div className="scalp-strategy">{signal.strategy}</div>
-      <div className="scalp-warning">⚠️ {t('signal.manual_only')}</div>
+      <div className="scalp-warning">{t('signal.manual_only')}</div>
     </div>
   );
 }

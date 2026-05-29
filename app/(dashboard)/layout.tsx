@@ -15,14 +15,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // Instant localStorage check — no async API call, no redirect race
-    const session = getSession();
-    if (!session) {
+    try {
+      const session = getSession();
+      if (!session) {
+        router.replace('/login');
+        return;
+      }
+      setReady(true);
+    } catch {
       router.replace('/login');
-      return;
     }
-    setReady(true);
-  }, [router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!ready) {
     return (

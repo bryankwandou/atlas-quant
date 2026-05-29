@@ -64,18 +64,26 @@ export default function ScreenerPage() {
 
   useEffect(() => {
     setLoading(true);
-    fetch('/api/market/symbols')
-      .then(r => r.json())
-      .then(d => setRawRows(d.symbols || []))
-      .catch(() => setRawRows([]))
-      .finally(() => setLoading(false));
+    const classes = ['index','commodity','futures','forex','stock_us','stock_id','stock_cn','stock_eu','stock_sa','dex','crypto','memecoin'];
+    Promise.allSettled(
+      classes.map(ac => fetch(`/api/market/symbols?assetClass=${ac}`).then(r => r.json()))
+    ).then(results => {
+      const all: Omit<SymbolRow, 'rsi' | 'signal' | 'score'>[] = [];
+      results.forEach(r => {
+        if (r.status === 'fulfilled' && r.value?.symbols?.length) all.push(...r.value.symbols);
+      });
+      setRawRows(all);
+    }).finally(() => setLoading(false));
   }, []);
 
   const rows = enrich(rawRows);
 
   const filtered = rows.filter(s => {
     if (signalFilter !== 'all' && s.signal !== signalFilter) return false;
-    if (assetFilter !== 'all' && s.assetClass && s.assetClass !== assetFilter) return false;
+    if (assetFilter !== 'all') {
+      if (assetFilter === 'stock') return s.assetClass?.startsWith('stock_') ?? false;
+      if (s.assetClass !== assetFilter) return false;
+    }
     return true;
   });
 
@@ -95,8 +103,18 @@ export default function ScreenerPage() {
           >
             <option value="all">All Assets</option>
             <option value="crypto">Crypto</option>
-            <option value="stock">Stocks</option>
+            <option value="memecoin">Memecoins</option>
             <option value="forex">Forex</option>
+            <option value="index">Indices</option>
+            <option value="commodity">Commodities</option>
+            <option value="futures">Futures</option>
+            <option value="stock">All Stocks</option>
+            <option value="stock_us">US Stocks</option>
+            <option value="stock_id">IDX Stocks</option>
+            <option value="stock_cn">CN Stocks</option>
+            <option value="stock_eu">EU Stocks</option>
+            <option value="stock_sa">ME Stocks</option>
+            <option value="dex">DEX</option>
           </select>
           <select
             className="screener-filter-select"

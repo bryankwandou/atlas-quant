@@ -30,7 +30,7 @@ export default function SignalsPage() {
           disabled={loading}
           className="panel-action-btn primary"
         >
-          {loading ? 'Generating...' : '⚡ Generate Signal'}
+          {loading ? 'Generating...' : 'Generate Signal'}
         </button>
       </div>
 

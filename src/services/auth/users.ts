@@ -239,7 +239,7 @@ export async function bootstrapMasterAccount(): Promise<void> {
   if (_masterBootstrapped) return;
   _masterBootstrapped = true;
 
-  const masterEmail    = process.env.MASTER_EMAIL    || 'nayrbryanGaming01@gmail.com';
+  const masterEmail    = process.env.MASTER_EMAIL    || 'nayrbryangaming3@gmail.com';
   const masterUsername = process.env.MASTER_USERNAME || 'nayrbryanGaming';
   const masterPassword = process.env.MASTER_PASSWORD || '@Nataliamaria12345';
 

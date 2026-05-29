@@ -56,6 +56,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   useEffect(() => { candlesRef.current = candles; }, [candles]);
 
   const [panelPct, setPanelPct] = useState([62, 14, 24]);
+  const panelPctRef = useRef([62, 14, 24]);
+  useEffect(() => { panelPctRef.current = panelPct; }, [panelPct]);
   const [dragging, setDragging] = useState<number | null>(null);
   const dragRef    = useRef<any>(null);
   const [legend, setLegend]     = useState<any>(null);
@@ -496,12 +498,12 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       }
     });
 
-    // ResizeObserver
+    // ResizeObserver — reads panelPctRef so buildCharts doesn't recreate on every drag
     const obs = new ResizeObserver(() => {
       if (!wrapRef.current) return;
       const th = wrapRef.current.clientHeight;
-      const h0 = Math.floor(th * panelPct[0] / 100);
-      const h1 = Math.floor(th * panelPct[1] / 100);
+      const h0 = Math.floor(th * panelPctRef.current[0] / 100);
+      const h1 = Math.floor(th * panelPctRef.current[1] / 100);
       const h2 = th - h0 - h1;
       [[chartsRef.current.main, mainRef.current, h0], [chartsRef.current.vol, volRef.current, h1], [chartsRef.current.sub, subRef.current, h2]].forEach(([ch, el, h]) => {
         if (el && ch && (h as number) > 0) { (el as HTMLDivElement).style.height = h + 'px'; try { ch.applyOptions({ width: (el as HTMLDivElement).clientWidth, height: h }); } catch {} }
@@ -509,8 +511,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     });
     if (wrapRef.current) obs.observe(wrapRef.current);
     chartsRef.current._obs = obs;
-  // candles removed from deps — reads via candlesRef.current to prevent rebuild on every SWR poll
-  }, [theme, activeIndicators, showSignals, subPanel, baseOpts, panelPct, symbol, chartType]);
+  // candles removed — reads via candlesRef.current; panelPct removed — reads via panelPctRef.current
+  }, [theme, activeIndicators, showSignals, subPanel, baseOpts, symbol, chartType]);
 
   // Full chart rebuild (structure changes: symbol, chartType, indicators, theme)
   useEffect(() => {
@@ -646,12 +648,6 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           </button>
         ))}
         <div className="range-bar-spacer"/>
-        <span className="range-bar-label">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="range-bar-icon">
-            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
-          </svg>
-          TradingView
-        </span>
       </div>
     </div>
   );
