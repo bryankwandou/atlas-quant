@@ -47,8 +47,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const chartsRef = useRef<Record<string, any>>({});
   const seriesRef = useRef<Record<string, any>>({});
 
-  const { theme }              = useTheme();
-  const { candles, isLoading } = useMarketData(symbol, timeframe);
+  const { theme }                        = useTheme();
+  const { candles, isLoading, marketClosed } = useMarketData(symbol, timeframe);
   const { activeIndicators, showSignals, chartType, setChartType, subPanel, setSubPanel } = useChartStore();
 
   // Stable ref for candles — prevents buildCharts from re-running on every SWR poll
@@ -613,6 +613,13 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           <button className="chart-toolbar-btn icon-only" onClick={() => chartsRef.current.main?.timeScale().fitContent()} title="Fit"><Maximize2 size={13}/></button>
         </div>
       </div>
+
+      {/* Market closed notice */}
+      {marketClosed && !isLoading && (
+        <div style={{ background:'rgba(245,158,11,0.12)', borderBottom:'1px solid rgba(245,158,11,0.25)', padding:'3px 12px', fontSize:10, color:'#f59e0b', display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
+          <span>Market closed — showing daily data</span>
+        </div>
+      )}
 
       {/* Panels */}
       <div ref={wrapRef} className="chart-panels">

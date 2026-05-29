@@ -87,26 +87,17 @@ export async function GET(req: NextRequest) {
     const data = await routeOHLCV(symbol, timeframe, limit);
 
     if (data && data.length > 0) {
-      // Persist crypto candles to Supabase asynchronously
-      if (isCrypto) {
-        upsertOHLCV(data).catch(() => {});
-      }
+      if (isCrypto) upsertOHLCV(data).catch(() => {});
+      // Detect if we fell back to daily (market closed for intraday request)
+      const isIntradayRequest = !['1d','2d','3d','1w','2w','1M','3M','6M','12M'].includes(timeframe);
+      const isFallbackDaily = isIntradayRequest && data[0]?.timeframe === '1d';
       return NextResponse.json({
-        symbol,
-        timeframe,
-        data,
-        source: 'live',
-        count: data.length,
+        symbol, timeframe, data, source: 'live', count: data.length,
+        marketClosed: isFallbackDaily || false,
       });
     }
 
-    return NextResponse.json({
-      symbol,
-      timeframe,
-      data: [],
-      source: 'empty',
-      count: 0,
-    });
+    return NextResponse.json({ symbol, timeframe, data: [], source: 'empty', count: 0 });
   } catch {
     return NextResponse.json(
       { error: 'Failed to fetch market data', symbol, timeframe, data: [] },

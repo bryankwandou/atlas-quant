@@ -454,7 +454,12 @@ export async function routeOHLCV(
     case 'futures':
     case 'forex': {
       const ticker = yahooTicker || symbol;
-      return getYahooOHLCV(ticker, timeframe, limit);
+      const data = await getYahooOHLCV(ticker, timeframe, limit);
+      // Market closed / intraday empty — fall back to daily so chart isn't blank
+      if (data.length === 0 && !['1d','2d','3d','1w','2w','1M','3M','6M','12M'].includes(timeframe)) {
+        return getYahooOHLCV(ticker, '1d', Math.max(limit, 365));
+      }
+      return data;
     }
 
     default:

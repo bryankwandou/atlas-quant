@@ -45,6 +45,7 @@ export function useMarketData(symbol: string, timeframe: string, limit?: number)
     candles: data?.data || [],
     source: data?.source,
     count: data?.count || 0,
+    marketClosed: data?.marketClosed || false,
     isLoading,
     error,
     refresh: mutate,
