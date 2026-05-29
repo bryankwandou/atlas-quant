@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState, useCallback, useLayoutEffect } from 'react';
+import { useEffect, useRef, useState, useCallback, useLayoutEffect, useMemo } from 'react';
 import { createChart, ColorType, CandlestickSeries, LineSeries, HistogramSeries, BarSeries, AreaSeries } from 'lightweight-charts';
 import { useTheme } from '@/hooks/useTheme';
 import { useMarketData } from '@/hooks/useMarketData';
@@ -58,7 +58,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const [activeRange, setActiveRange] = useState<string>('3M');
 
   const isDark = theme === 'dark';
-  const tk = {
+  // Memoize tk — prevents buildCharts from rebuilding on every render
+  const tk = useMemo(() => ({
     bg:     isDark ? '#131722' : '#ffffff',
     text2:  isDark ? '#787b86' : '#787b86',
     border: isDark ? '#2a2e39' : '#e0e3eb',
@@ -71,7 +72,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     ema200:isDark ? '#9c27b0' : '#7b1fa2',
     vwap:  isDark ? '#00bcd4' : '#0097a7',
     bb:    isDark ? '#42a5f5' : '#1976d2',
-  };
+  }), [isDark]);
 
   // ── Draggable Splitter ──────────────────────────────────────
   const startDrag = useCallback((idx: number, e: React.MouseEvent) => {
