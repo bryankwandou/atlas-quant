@@ -350,7 +350,7 @@ export default function LandingPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
                   {features.map(f => (
                     <div key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: '#cdd4e1' }}>
-                      <span style={{ color, flexShrink: 0, marginTop: 1 }}>✓</span>
+                      <span style={{ color, flexShrink: 0, marginTop: 1, fontSize: 10, fontWeight: 700 }}>OK</span>
                       {f}
                     </div>
                   ))}

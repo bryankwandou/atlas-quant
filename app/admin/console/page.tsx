@@ -283,7 +283,7 @@ export default function AdminDashboard() {
 
       {config?.isBootstrap && (
         <div className="px-6 py-2 bg-amber-600/10 border-b border-amber-600/30 text-xs text-amber-300">
-          ⚠ You are using the bootstrap password. Change it now (min 12 chars).
+          WARNING: You are using the bootstrap password. Change it now (min 12 chars).
         </div>
       )}
 

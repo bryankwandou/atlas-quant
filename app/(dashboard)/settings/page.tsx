@@ -68,7 +68,7 @@ export default function SettingsPage() {
                 {(['id', 'en'] as const).map(l => (
                   <button key={l} type="button" onClick={() => setLang(l)}
                     className={`settings-option-btn${lang === l ? ' active' : ''}`}>
-                    {l === 'id' ? '🇮🇩 Indonesia' : '🇬🇧 English'}
+                    {l === 'id' ? 'ID - Indonesia' : 'EN - English'}
                   </button>
                 ))}
               </div>

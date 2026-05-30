@@ -79,7 +79,7 @@ export default function JournalPage() {
           <span>{t('nav.journal')}</span>
         </div>
         <button type="button" className="panel-action-btn primary" onClick={() => setShowForm(v => !v)}>
-          {showForm ? '✕ Cancel' : '+ New Trade'}
+          {showForm ? 'Cancel' : '+ New Trade'}
         </button>
       </div>
 
