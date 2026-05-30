@@ -79,17 +79,13 @@ export const t1moCompute = (
   const backbone = ema(ctx.close, backboneLen);
   const magenta = ema(ctx.close, magentaLen);
 
-  // === Box (mean ± (hi-lo)/2 * mult)
+  // === Box — pure Donchian channel (rolling N-bar high/low) for staircase appearance
   const topBox: (number | null)[] = [];
   const btmBox: (number | null)[] = [];
   for (let i = 0; i < n; i++) {
     const start = Math.max(0, i - boxLb + 1);
-    const hi = Math.max(...ctx.high.slice(start, i + 1));
-    const lo = Math.min(...ctx.low.slice(start, i + 1));
-    const m = (ctx.close.slice(start, i + 1).reduce((s, x) => s + x, 0)) / Math.max(1, i - start + 1);
-    const range = hi - lo;
-    topBox.push(m + range * boxMult);
-    btmBox.push(m - range * boxMult);
+    topBox.push(Math.max(...ctx.high.slice(start, i + 1)));
+    btmBox.push(Math.min(...ctx.low.slice(start, i + 1)));
   }
 
   // === HMF — momentum EMA dari close delta
