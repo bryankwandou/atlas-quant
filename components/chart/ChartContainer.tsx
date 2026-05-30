@@ -121,7 +121,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   }, [panelPct]);
 
   const baseOpts = useCallback((el: HTMLDivElement) => ({
-    layout: { background: { type: ColorType.Solid, color: tk.bg }, textColor: tk.text2, fontFamily: 'Roboto Mono, monospace', fontSize: 10 },
+    layout: { background: { type: ColorType.Solid, color: tk.bg }, textColor: tk.text2, fontFamily: 'Roboto Mono, monospace', fontSize: 10, attributionLogo: false },
     grid:   { vertLines: { color: tk.grid, style: 1 }, horzLines: { color: tk.grid, style: 1 } },
     crosshair: { mode: 1, vertLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true }, horzLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true } },
     rightPriceScale: { borderColor: tk.border, textColor: tk.text2 },
