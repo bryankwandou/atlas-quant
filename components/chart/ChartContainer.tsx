@@ -59,6 +59,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const [panelPct, setPanelPct] = useState([62, 14, 24]);
   const panelPctRef    = useRef([62, 14, 24]);
   const buildPendingRef = useRef(false);
+  const dataLengthRef  = useRef(0); // tracks candle count for range bar
   useEffect(() => { panelPctRef.current = panelPct; }, [panelPct]);
   const [dragging, setDragging] = useState<number | null>(null);
   const dragRef    = useRef<any>(null);
@@ -374,6 +375,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         try { candleSeries.setMarkers(markers.sort((a: any, b: any) => a.time - b.time)); } catch {}
       }
     }
+    dataLengthRef.current = formatted.length;
     main.timeScale().fitContent();
     // Set a default visible range so the chart doesn't show the entire history
     {
@@ -383,9 +385,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         '10m': 96,  '15m': 96,  '30m': 90, '45m': 80,
         '1h':  168, '2h':  120, '3h':  90, '4h':  180,
         '6h':  90,  '8h':  60,  '12h': 60,
-        '1d':  365, '2d':  180, '3d':  120,
-        '1w':  156, '2w':  78,
-        '1M':  60,  '3M':  24,  '6M':  12, '12M': 8,
+        '1d':  90,  '2d':  60,  '3d':  45,  // 3 months default — match reference design
+        '1w':  52,  '2w':  26,
+        '1M':  24,  '3M':  12,  '6M':  8,   '12M': 5,
       };
       const defaultCandles = ZOOM_CANDLES[timeframe] ?? 120;
       if (formatted.length > defaultCandles) {
@@ -698,24 +700,30 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
               setActiveRange(r);
               const main = chartsRef.current.main;
               if (!main) return;
-              const now = Math.floor(Date.now() / 1000);
-              const rangeMap: Record<string, number> = {
-                '1D':  86400,
-                '5D':  86400 * 5,
-                '1M':  86400 * 30,
-                '3M':  86400 * 90,
-                '6M':  86400 * 180,
-                'YTD': now - Math.floor(new Date(new Date().getFullYear(), 0, 1).getTime() / 1000),
-                '1Y':  86400 * 365,
-                '5Y':  86400 * 365 * 5,
-                'All': 86400 * 365 * 20,
+              const total = dataLengthRef.current;
+              if (!total) return;
+              // Candle counts per range — works for any TF including non-continuous stocks
+              const TF_PER_DAY: Record<string, number> = {
+                '1s':86400,'15s':5760,'30s':2880,'1m':1440,'3m':480,'5m':288,
+                '15m':96,'30m':48,'1h':24,'2h':12,'4h':6,'6h':4,'8h':3,'12h':2,'1d':1,'1w':0.14,'1M':0.033,
               };
-              const seconds = rangeMap[r] ?? 86400 * 90;
+              const perDay = TF_PER_DAY[timeframe] ?? 1;
+              const now2 = new Date(); const yd = now2.getDay(); const daysThisYear = Math.floor((now2.getTime() - new Date(now2.getFullYear(),0,0).getTime())/86400000);
+              const rangeMap: Record<string, number> = {
+                '1D': Math.ceil(perDay),
+                '5D': Math.ceil(perDay * 5),
+                '1M': Math.ceil(perDay * 30),
+                '3M': Math.ceil(perDay * 90),
+                '6M': Math.ceil(perDay * 180),
+                'YTD': Math.ceil(perDay * daysThisYear),
+                '1Y': Math.ceil(perDay * 365),
+                '5Y': Math.ceil(perDay * 365 * 5),
+                'All': total,
+              };
+              const nCandles = Math.min(rangeMap[r] ?? Math.ceil(perDay * 90), total);
               try {
-                main.timeScale().setVisibleRange({ from: (now - seconds) as any, to: now as any });
-              } catch {
-                main.timeScale().fitContent();
-              }
+                main.timeScale().setVisibleLogicalRange({ from: total - nCandles - 1, to: total + 3 });
+              } catch { main.timeScale().fitContent(); }
             }}
           >
             {r}
