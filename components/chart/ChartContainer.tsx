@@ -335,9 +335,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       const t1moResult = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes }, {});
       if (t1moResult.meta.ready) {
         const { backbone: t1moBB, magenta: t1moMG, topBox: t1moTop, btmBox: t1moBtm } = t1moResult.series;
-        // Backbone EMA — cyan solid
+        // Backbone EMA — blue (match reference design)
         if (t1moBB) {
-          const s = (main as any).addSeries(LineSeries, { color: '#00bcd4', lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: true, title: 'Backbone' });
+          const s = (main as any).addSeries(LineSeries, { color: '#1976d2', lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: true, title: 'Backbone' });
           s.setData(times.map((t: number, i: number) => ({ time: t, value: (t1moBB as any[])[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
         }
         // Magenta EMA — pink dotted
@@ -345,14 +345,14 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           const s = (main as any).addSeries(LineSeries, { color: '#e91e63', lineWidth: 1.5, lineStyle: 1, priceLineVisible: false, lastValueVisible: true, title: 'Magenta' });
           s.setData(times.map((t: number, i: number) => ({ time: t, value: (t1moMG as any[])[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
         }
-        // Top Box — orange
+        // Top Box — orange solid (Donchian upper — staircase)
         if (t1moTop) {
-          const s = (main as any).addSeries(LineSeries, { color: '#ff6f00', lineWidth: 1, lineStyle: 0, priceLineVisible: false, lastValueVisible: false, title: 'TopBox' });
+          const s = (main as any).addSeries(LineSeries, { color: '#ff6f00', lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: true, title: 'TopBox' });
           s.setData(times.map((t: number, i: number) => ({ time: t, value: (t1moTop as any[])[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
         }
-        // Bottom Box — steel gray
+        // Bottom Box — gray (Donchian lower — staircase)
         if (t1moBtm) {
-          const s = (main as any).addSeries(LineSeries, { color: '#9e9e9e', lineWidth: 1, lineStyle: 0, priceLineVisible: false, lastValueVisible: false, title: 'BtmBox' });
+          const s = (main as any).addSeries(LineSeries, { color: '#757575', lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: true, title: 'BtmBox' });
           s.setData(times.map((t: number, i: number) => ({ time: t, value: (t1moBtm as any[])[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
         }
       }
