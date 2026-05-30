@@ -443,48 +443,45 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             const ema21v = ind.ema(21);
             const rsi14v = ind.rsi(14);
 
-            // ── T1MO Pixel Strip — fills entire ATLAS Matrix panel (proven: 1 candle = 3 bars) ──
-            // Force pixel scale to fill the panel with exactly 3 rows (values 1, 2, 3)
-            try {
-              (subChart as any).priceScale('right').applyOptions({
-                autoScale: false, visible: false,
-                // Fixed min/max so 3 rows fill the panel
-              });
-            } catch {}
+            // ── T1MO Pixel — DYNAMIC oscillating histogram (moves with every candle) ──
+            // Bukti: setiap candle → bar naik/turun sesuai HMF + warna berubah sesuai regime
+            const rsi7v  = ind.rsi(7);
+            const macdV  = ind.macd(12, 26, 9);
 
-            // Row 1 (top): Regime Strength
-            const pixR1 = (subChart as any).addSeries(HistogramSeries, {
-              priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false,
-              color: '#ffea00',
+            // Bar 1: HMF colored by Regime (primary T1MO signal)
+            const bar1 = (subChart as any).addSeries(HistogramSeries, {
+              priceScaleId: 'right', lastValueVisible: true, priceLineVisible: false, title: 'HMF',
             });
-            pixR1.setData(times.map((t: number, i: number) => ({ time: t, value: 3, color: regimeColors[i] ?? '#ffea00' })));
-            pixR1.priceScale().applyOptions({ autoScale: false, visible: false });
+            bar1.setData(times.map((t: number, i: number) => ({
+              time: t,
+              value: hmfVals[i] ?? 0,
+              color: regimeColors[i] ?? '#ffea00',
+            })).filter((d: any) => isFinite(d.value)));
 
-            // Row 2 (middle): EMA cross
-            const pixR2 = (subChart as any).addSeries(HistogramSeries, {
-              priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false,
+            // Bar 2: RSI(7) - 50 deviation (oscillates above/below zero, colored by momentum)
+            const bar2 = (subChart as any).addSeries(HistogramSeries, {
+              priceScaleId: 'right2', lastValueVisible: true, priceLineVisible: false, title: 'RSI7',
             });
-            pixR2.setData(times.map((t: number, i: number) => ({
-              time: t, value: 2,
-              color: (ema9v[i] ?? 0) > (ema21v[i] ?? 0) ? '#00e676' : '#ff1744',
-            })));
+            bar2.setData(times.map((t: number, i: number) => {
+              const v = (rsi7v[i] ?? 50) - 50;
+              return { time: t, value: v, color: v > 0 ? '#00e676' : v < -10 ? '#ff1744' : '#ffea00' };
+            }).filter((d: any) => !isNaN(d.value)));
+            try { (subChart as any).priceScale('right2').applyOptions({ scaleMargins: { top: 0, bottom: 0.5 }, visible: false }); } catch {}
 
-            // Row 3 (bottom): RSI state
-            const pixR3 = (subChart as any).addSeries(HistogramSeries, {
-              priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false,
+            // Bar 3: MACD histogram (oscillates, colored bullish/bearish)
+            const bar3 = (subChart as any).addSeries(HistogramSeries, {
+              priceScaleId: 'right3', lastValueVisible: true, priceLineVisible: false, title: 'MACD',
             });
-            pixR3.setData(times.map((t: number, i: number) => ({
-              time: t, value: 1,
-              color: (rsi14v[i] ?? 50) > 60 ? '#00e676' : (rsi14v[i] ?? 50) < 40 ? '#ff1744' : '#ffea00',
-            })));
+            bar3.setData(times.map((t: number, i: number) => ({
+              time: t,
+              value: macdV.histogram[i] ?? 0,
+              color: (macdV.histogram[i] ?? 0) >= 0 ? '#00e676' : '#ff1744',
+            })).filter((d: any) => !isNaN(d.value)));
+            try { (subChart as any).priceScale('right3').applyOptions({ scaleMargins: { top: 0.5, bottom: 0 }, visible: false }); } catch {}
 
-            // HMF value shown as last-value label only (no line — pixel fills panel)
-            const hmfS = (subChart as any).addSeries(LineSeries, {
-              color: 'rgba(255,107,53,0)', lineWidth: 0, priceLineVisible: false, lastValueVisible: true, title: 'HMF',
-              priceScaleId: 'hmf',
-            });
-            hmfS.setData(times.map((t: number, i: number) => ({ time: t, value: hmfVals[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
-            try { (subChart as any).priceScale('hmf').applyOptions({ visible: false, scaleMargins: { top: 0, bottom: 0.95 } }); } catch {}
+            // Baseline
+            const bl = (subChart as any).addSeries(LineSeries, { color: 'rgba(255,255,255,0.15)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+            bl.setData(formatted.map((c: any) => ({ time: c.time, value: 0 })));
           }
         } catch {}
         const baseline = (subChart as any).addSeries(LineSeries, { color: 'rgba(255,255,255,0.1)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
