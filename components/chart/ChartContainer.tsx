@@ -337,7 +337,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
 
     // ── T1MO Core — permanent overlay per DARURAT HUKUM design requirement ──
     try {
-      const t1moResult = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes }, {});
+      const t1moResult = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes, open: closes, time: times } as any, {});
       if (t1moResult.meta.ready) {
         const { backbone: t1moBB, magenta: t1moMG, topBox: t1moTop, btmBox: t1moBtm } = t1moResult.series;
         // Backbone EMA — blue (match reference design)
@@ -434,7 +434,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       if (subPanel === 'atlas') {
         // T1MO Regime Strength + HMF (DARURAT HUKUM ATLAS Matrix)
         try {
-          const t1moSub = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes }, {});
+          const t1moSub = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes, open: closes, time: times } as any, {});
           if (t1moSub.meta.ready) {
             const rs = t1moSub.series.regimeStrength as number[];
             const hmfVals = t1moSub.series.hmf as (number | null)[];
@@ -443,12 +443,12 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             const ema21v = ind.ema(21);
             const rsi14v = ind.rsi(14);
 
-            // ── T1MO Pixel — DYNAMIC oscillating histogram (moves with every candle) ──
-            // Bukti: setiap candle → bar naik/turun sesuai HMF + warna berubah sesuai regime
+            // ── T1MO Pixel — 3 BARS PER CANDLE, equal thirds of sub-panel ──
+            // Bukti hukum: 1 candle → 1 baris 3 bar T1MO (HMF | RSI7-50 | MACD hist)
             const rsi7v  = ind.rsi(7);
             const macdV  = ind.macd(12, 26, 9);
 
-            // Bar 1: HMF colored by Regime (primary T1MO signal)
+            // Bar 1 (top third): HMF colored by Regime (primary T1MO signal)
             const bar1 = (subChart as any).addSeries(HistogramSeries, {
               priceScaleId: 'right', lastValueVisible: true, priceLineVisible: false, title: 'HMF',
             });
@@ -457,18 +457,19 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
               value: hmfVals[i] ?? 0,
               color: regimeColors[i] ?? '#ffea00',
             })).filter((d: any) => isFinite(d.value)));
+            try { (subChart as any).priceScale('right').applyOptions({ scaleMargins: { top: 0.02, bottom: 0.68 }, visible: true, autoScale: true }); } catch {}
 
-            // Bar 2: RSI(7) - 50 deviation (oscillates above/below zero, colored by momentum)
+            // Bar 2 (middle third): RSI(7) - 50 deviation
             const bar2 = (subChart as any).addSeries(HistogramSeries, {
-              priceScaleId: 'right2', lastValueVisible: true, priceLineVisible: false, title: 'RSI7',
+              priceScaleId: 'right2', lastValueVisible: true, priceLineVisible: false, title: 'RSI7Δ',
             });
             bar2.setData(times.map((t: number, i: number) => {
               const v = (rsi7v[i] ?? 50) - 50;
               return { time: t, value: v, color: v > 0 ? '#00e676' : v < -10 ? '#ff1744' : '#ffea00' };
             }).filter((d: any) => !isNaN(d.value)));
-            try { (subChart as any).priceScale('right2').applyOptions({ scaleMargins: { top: 0, bottom: 0.5 }, visible: false }); } catch {}
+            try { (subChart as any).priceScale('right2').applyOptions({ scaleMargins: { top: 0.35, bottom: 0.35 }, visible: false, autoScale: true }); } catch {}
 
-            // Bar 3: MACD histogram (oscillates, colored bullish/bearish)
+            // Bar 3 (bottom third): MACD histogram
             const bar3 = (subChart as any).addSeries(HistogramSeries, {
               priceScaleId: 'right3', lastValueVisible: true, priceLineVisible: false, title: 'MACD',
             });
@@ -477,15 +478,17 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
               value: macdV.histogram[i] ?? 0,
               color: (macdV.histogram[i] ?? 0) >= 0 ? '#00e676' : '#ff1744',
             })).filter((d: any) => !isNaN(d.value)));
-            try { (subChart as any).priceScale('right3').applyOptions({ scaleMargins: { top: 0.5, bottom: 0 }, visible: false }); } catch {}
+            try { (subChart as any).priceScale('right3').applyOptions({ scaleMargins: { top: 0.68, bottom: 0.02 }, visible: false, autoScale: true }); } catch {}
 
-            // Baseline
-            const bl = (subChart as any).addSeries(LineSeries, { color: 'rgba(255,255,255,0.15)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
-            bl.setData(formatted.map((c: any) => ({ time: c.time, value: 0 })));
+            // Zero baselines for each third
+            const bl1 = (subChart as any).addSeries(LineSeries, { priceScaleId: 'right',  color: 'rgba(255,255,255,0.1)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+            bl1.setData(formatted.map((c: any) => ({ time: c.time, value: 0 })));
+            const bl2 = (subChart as any).addSeries(LineSeries, { priceScaleId: 'right2', color: 'rgba(255,255,255,0.1)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+            bl2.setData(formatted.map((c: any) => ({ time: c.time, value: 0 })));
+            const bl3 = (subChart as any).addSeries(LineSeries, { priceScaleId: 'right3', color: 'rgba(255,255,255,0.1)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+            bl3.setData(formatted.map((c: any) => ({ time: c.time, value: 0 })));
           }
         } catch {}
-        const baseline = (subChart as any).addSeries(LineSeries, { color: 'rgba(255,255,255,0.1)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
-        baseline.setData(formatted.map((c: any) => ({ time: c.time, value: 0 })));
       } else if (subPanel === 'rsi') {
         addSubLine(ind.rsi(7), '#7e57c2', 'RSI(7)');
         [[30, 'rgba(8,153,129,0.3)'], [50, 'rgba(255,255,255,0.08)'], [70, 'rgba(242,54,69,0.3)']].forEach(([v, c]) => addLevel(v as number, c as string));
@@ -582,7 +585,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   // candles removed — reads via candlesRef.current; panelPct removed — reads via panelPctRef.current
   }, [theme, activeIndicators, showSignals, subPanel, baseOpts, symbol, chartType]);
 
-  // Full chart rebuild — marks pending so candles effect won't double-fire
+  // Full chart rebuild — does NOT destroy chart in cleanup (avoids 60ms blank flash).
+  // buildCharts() itself destroys old charts at its start.
   useEffect(() => {
     buildPendingRef.current = true;
     const timer = setTimeout(() => {
@@ -592,11 +596,19 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     return () => {
       clearTimeout(timer);
       buildPendingRef.current = false;
+      // intentionally NOT destroying charts here — prevents white flash on every dep change
+    };
+  }, [buildCharts]);
+
+  // Unmount-only cleanup
+  useEffect(() => {
+    return () => {
       if (chartsRef.current._obs) chartsRef.current._obs.disconnect();
       Object.entries(chartsRef.current).forEach(([k, c]) => { if (k !== '_obs') try { c.remove(); } catch {} });
       chartsRef.current = {};
+      seriesRef.current = {};
     };
-  }, [buildCharts]);
+  }, []);
 
   // Lightweight data update — or trigger rebuild when data arrives after chart was cleared
   useEffect(() => {
@@ -693,9 +705,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       <div ref={wrapRef} className="chart-panels">
         {isLoading && <div className="chart-loading"><div className="spinner"/><span>Loading {symbol}...</span></div>}
         <div ref={mainRef} className="chart-panel chart-panel-main"/>
-        <div className={`chart-splitter ${dragging===0?'dragging':''}`} style={{top:`${panelPct[0]}%`}} onMouseDown={e=>startDrag(0,e)}><div className="splitter-line"/></div>
-        <div ref={volRef} className="chart-panel chart-panel-vol"><div className="subchart-label2">VOLUME</div></div>
-        <div className={`chart-splitter ${dragging===1?'dragging':''}`} style={{top:`${panelPct[0]+panelPct[1]}%`}} onMouseDown={e=>startDrag(1,e)}><div className="splitter-line"/></div>
+        <div className={`chart-splitter${dragging===0?' dragging':''}`} onMouseDown={e=>startDrag(0,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
+        <div ref={volRef} className="chart-panel chart-panel-vol"><div className="subchart-label2">VOL</div></div>
+        <div className={`chart-splitter${dragging===1?' dragging':''}`} onMouseDown={e=>startDrag(1,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
         <div ref={subRef} className="chart-panel chart-panel-sub">
           <div className="subchart-tabs-row">
             {SUB_PANELS.map(p=><button type="button" key={p.id} className={`subchart-tab ${subPanel===p.id?'active':''}`} onClick={()=>setSubPanel(p.id)}>{p.label}</button>)}

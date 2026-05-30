@@ -97,12 +97,14 @@ select{cursor:pointer;}
 /* ── Right panel resize handle ───────────────────────────── */
 .right-panel-handle{
   grid-area:right;
-  width:4px;cursor:col-resize;
-  background:transparent;z-index:50;
+  width:5px;cursor:col-resize;
+  background:rgba(255,255,255,0.04);
+  border-right:1px solid var(--aq-border2);
+  z-index:50;
   justify-self:start;align-self:stretch;
-  transition:background .15s;
+  transition:background .15s,border-color .15s;
 }
-.right-panel-handle:hover,.right-panel-handle.dragging{background:rgba(123,97,255,.4);}
+.right-panel-handle:hover,.right-panel-handle.dragging{background:rgba(123,97,255,.25);border-right-color:var(--aq-blue);}
 
 /* ── Right Icon Rail ─────────────────────────────────────── */
 .right-rail{
@@ -204,7 +206,7 @@ select{cursor:pointer;}
 .atlas-app.sidebar-expanded .sb-tool-btn .sb-tool-lbl{display:block;}
 .sb-tool-sep{width:24px;height:1px;background:var(--aq-border);margin:4px auto;opacity:.6;}
 .sb-tool-grp{display:none;font-size:9px;font-weight:700;color:var(--aq-text3);text-transform:uppercase;letter-spacing:1.4px;padding:6px 9px 2px;}
-.sb-bottom{width:100%;padding:3px 6px;display:flex;flex-direction:column;align-items:center;gap:1px;}
+.sb-bottom{width:100%;padding:3px 6px;display:flex;flex-direction:column;align-items:center;gap:1px;flex-shrink:0;}
 .sb-badge{position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:var(--aq-down);border:1.5px solid var(--aq-bg2);}
 /* Sidebar icons (Sidebar.tsx class names) */
 .sidebar{grid-area:sidebar;display:flex;flex-direction:column;align-items:center;background:var(--aq-bg2);border-right:1px solid var(--aq-border);padding:4px 0;overflow:hidden;}
@@ -248,9 +250,13 @@ select{cursor:pointer;}
 .sub-chart-panel:hover .sub-panel-actions{opacity:1;}
 .sub-panel-btn{width:18px;height:18px;border-radius:3px;display:flex;align-items:center;justify-content:center;color:var(--aq-text2);transition:all .1s;}
 .sub-panel-btn:hover{background:var(--aq-bg3);color:var(--aq-text);}
-.chart-splitter{flex-shrink:0;height:4px!important;position:relative!important;z-index:20;cursor:row-resize;}
-.splitter-line{width:100%;height:1px;background:var(--aq-border);transition:all .1s;margin-top:1.5px;}
-.chart-splitter:hover .splitter-line,.chart-splitter.dragging .splitter-line{background:var(--aq-blue);opacity:.8;}
+.chart-splitter{flex-shrink:0;height:6px;cursor:row-resize;display:flex;align-items:center;justify-content:center;position:relative;z-index:20;background:transparent;transition:background .1s;}
+.chart-splitter:hover,.chart-splitter.dragging{background:rgba(123,97,255,.08);}
+.splitter-line{position:absolute;left:0;right:0;height:1px;background:var(--aq-border2);transition:background .1s;}
+.chart-splitter:hover .splitter-line,.chart-splitter.dragging .splitter-line{background:var(--aq-blue);}
+.splitter-grip{display:flex;gap:2px;z-index:1;}
+.splitter-grip::before,.splitter-grip::after{content:'';width:16px;height:2px;border-radius:1px;background:var(--aq-text3);opacity:0;transition:opacity .1s;}
+.chart-splitter:hover .splitter-grip::before,.chart-splitter:hover .splitter-grip::after,.chart-splitter.dragging .splitter-grip::before,.chart-splitter.dragging .splitter-grip::after{opacity:.6;background:var(--aq-blue);}
 
 /* ── Sub-panel tabs ──────────────────────────────────────────── */
 .subchart-tabs-row{height:24px;flex-shrink:0;display:flex;align-items:center;gap:1px;padding:0 4px;background:rgba(0,0,0,0.15);border-bottom:1px solid var(--aq-border);overflow-x:auto;scrollbar-width:none;}

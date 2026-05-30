@@ -1,10 +1,11 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Search, X, Layers, Bell, Camera, Sun, Moon, Globe, Settings } from 'lucide-react';
+import { ChevronDown, Search, X, Layers, Bell, Camera, Sun, Moon, Globe, Settings, LogOut } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useChartStore } from '@/store/chartStore';
 import { useMarketPrice } from '@/hooks/useMarketData';
+import { clearSession } from '@/lib/atlas-auth';
 
 // ── Inline SVG icons matching ATLAS-QUANT DARURAT HUKUM icon set ──────────────
 const IconAtlas = ({ size = 18 }: { size?: number }) => (
@@ -359,6 +360,16 @@ export default function TopBar() {
           onClick={() => window.location.href = '/settings'}
         >
           <Settings size={15} />
+        </button>
+
+        <div className="tv-sep" />
+
+        <button
+          className="tb-right-btn"
+          title={tl('Keluar', 'Sign Out')}
+          onClick={() => { clearSession(); window.location.replace('/login'); }}
+        >
+          <LogOut size={14} />
         </button>
       </div>
 

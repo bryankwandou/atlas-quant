@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Power, Bot, Activity } from 'lucide-react';
+import { RefreshCw, Power, Bot, Activity, ChevronLeft, AlertTriangle } from 'lucide-react';
 import { useChartStore } from '@/store/chartStore';
 import { useUserStore } from '@/store/userStore';
 import { useMarketData, useMarketPrice } from '@/hooks/useMarketData';
@@ -401,7 +401,7 @@ export default function RightPanel() {
             })()}
           </div>
         </div>
-        <button type="button" className="t1mo-collapse-btn" title="Collapse">◀</button>
+        <button type="button" className="t1mo-collapse-btn" title="Collapse"><ChevronLeft size={12}/></button>
       </div>
 
       {/* ── Tabs ──────────────────────────────────────────────────────────── */}
@@ -574,7 +574,7 @@ export default function RightPanel() {
                   {REGIME_ID_LABELS[regime.regime] ?? regime.regime}
                 </div>
                 <div className="kondisi-pasar-warn">
-                  <span>⚠</span> Eksekusi manual — tidak ada auto trade
+                  <AlertTriangle size={9}/> Eksekusi manual — tidak ada auto trade
                 </div>
               </div>
             )}
