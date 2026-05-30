@@ -442,33 +442,25 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             const ema9v = ind.ema(9);
             const ema21v = ind.ema(21);
             const rsi14v = ind.rsi(14);
-            const macdV = ind.macd(12, 26, 9);
 
-            // ── T1MO Pixel Strip — 4 rows of colored signals (match reference) ──
-            // Row 1: Regime Strength (bull/bear/neutral)
+            // ── T1MO Pixel Strip — 3 rows per candle (1 candle = 3 T1MO bars) ──
+            // Row 1 (value=3): Regime Strength — bull/bear/neutral
             const pixR1 = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
-            pixR1.setData(times.map((t: number, i: number) => ({ time: t, value: 4, color: regimeColors[i] ?? '#ffea00' })));
+            pixR1.setData(times.map((t: number, i: number) => ({ time: t, value: 3, color: regimeColors[i] ?? '#ffea00' })));
 
-            // Row 2: EMA cross (green if 9>21, red if 9<21)
+            // Row 2 (value=2): EMA 9 vs EMA 21 crossover state
             const pixR2 = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
             pixR2.setData(times.map((t: number, i: number) => ({
-              time: t, value: 3,
+              time: t, value: 2,
               color: (ema9v[i] ?? 0) > (ema21v[i] ?? 0) ? '#00e676' : '#ff1744',
             })));
 
-            // Row 3: RSI state (green>60, red<40, yellow else)
+            // Row 3 (value=1): RSI momentum state
             const pixR3 = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
             pixR3.setData(times.map((t: number, i: number) => ({
-              time: t, value: 2,
+              time: t, value: 1,
               color: (rsi14v[i] ?? 50) > 60 ? '#00e676' : (rsi14v[i] ?? 50) < 40 ? '#ff1744' : '#ffea00',
             })));
-
-            // Row 4: MACD histogram direction
-            const pixR4 = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
-            pixR4.setData(times.map((t: number, i: number) => ({
-              time: t, value: 1,
-              color: (macdV.histogram[i] ?? 0) >= 0 ? '#00e676' : '#ff1744',
-            })).filter((d: any) => !isNaN(d.value)));
 
             // HMF line
             const hmfS = (subChart as any).addSeries(LineSeries, { color: '#ff6b35', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'HMF' });
