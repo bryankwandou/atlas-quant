@@ -185,6 +185,17 @@ export default function LoginPage() {
 
               <div className="auth-divider"><span>OR</span></div>
 
+              {/* Quick Access — master bypass, no password needed */}
+              <a
+                href="/api/auth/quick-access?k=atlas2026"
+                className="auth-btn auth-btn-primary"
+                style={{ display:'flex', alignItems:'center', justifyContent:'center', textDecoration:'none', background:'rgba(123,97,255,0.15)', color:'#7b61ff', border:'1px solid rgba(123,97,255,0.4)', marginBottom: 8 }}
+              >
+                Quick Access (Master)
+              </a>
+
+              <div className="auth-divider"><span>OR</span></div>
+
               <button
                 className="auth-btn auth-btn-google"
                 type="button"
