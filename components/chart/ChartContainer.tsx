@@ -57,7 +57,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   useEffect(() => { candlesRef.current = candles; }, [candles]);
 
   const [panelPct, setPanelPct] = useState([62, 14, 24]);
-  const panelPctRef = useRef([62, 14, 24]);
+  const panelPctRef    = useRef([62, 14, 24]);
+  const buildPendingRef = useRef(false);
   useEffect(() => { panelPctRef.current = panelPct; }, [panelPct]);
   const [dragging, setDragging] = useState<number | null>(null);
   const dragRef    = useRef<any>(null);
@@ -540,24 +541,35 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   // candles removed — reads via candlesRef.current; panelPct removed — reads via panelPctRef.current
   }, [theme, activeIndicators, showSignals, subPanel, baseOpts, symbol, chartType]);
 
-  // Full chart rebuild (structure changes: symbol, chartType, indicators, theme)
+  // Full chart rebuild — marks pending so candles effect won't double-fire
   useEffect(() => {
-    const timer = setTimeout(buildCharts, 60);
+    buildPendingRef.current = true;
+    const timer = setTimeout(() => {
+      buildPendingRef.current = false;
+      buildCharts();
+    }, 60);
     return () => {
       clearTimeout(timer);
+      buildPendingRef.current = false;
       if (chartsRef.current._obs) chartsRef.current._obs.disconnect();
       Object.entries(chartsRef.current).forEach(([k, c]) => { if (k !== '_obs') try { c.remove(); } catch {} });
       chartsRef.current = {};
     };
   }, [buildCharts]);
 
-  // Lightweight data update — only update series data when candles change, no full rebuild
-  // NOTE: buildCharts is intentionally NOT in deps — calling it here caused a rebuild loop:
-  // buildCharts fires → clears seriesRef → candles effect fires → calls buildCharts → loop
+  // Lightweight data update — or trigger rebuild when data arrives after chart was cleared
   useEffect(() => {
     if (!candles?.length) return;
-    // Chart not ready yet — buildCharts useEffect will build it using candlesRef.current
-    if (!seriesRef.current.candle || !chartsRef.current.main) return;
+
+    if (!seriesRef.current.candle || !chartsRef.current.main) {
+      // Chart not yet built (data arrived after buildCharts returned early).
+      // Trigger a rebuild only if one isn't already pending to prevent loops.
+      if (!buildPendingRef.current) {
+        buildPendingRef.current = true;
+        setTimeout(() => { buildPendingRef.current = false; buildCharts(); }, 30);
+      }
+      return;
+    }
 
     try {
       const formatted = candles
@@ -573,7 +585,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       if (seriesRef.current.vol) {
         seriesRef.current.vol.setData(formatted.map((c: any) => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)' })));
       }
-    } catch { /* series removed during concurrent rebuild — next poll will retry */ }
+    } catch { /* series removed during concurrent rebuild */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, chartType]);
 

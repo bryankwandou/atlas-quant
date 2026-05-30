@@ -200,7 +200,46 @@ async function getCryptoCompareOHLCV(pair: string, interval: string, limit: numb
   }
 }
 
-// ─── Binance (with multi-endpoint fallback → CryptoCompare) ──────────────────
+// ─── OKX fallback (no geo-block, free, reliable from Vercel) ─────────────────
+
+const OKX_BAR_MAP: Record<string, string> = {
+  '1m':'1m','3m':'3m','5m':'5m','15m':'15m','30m':'30m','1h':'1H',
+  '2h':'2H','4h':'4H','6h':'6H','12h':'12H','1d':'1D','1w':'1W','1M':'1M',
+};
+
+async function getOKXOHLCV(pair: string, interval: string, limit: number): Promise<OHLCVCandle[]> {
+  try {
+    const instId = pair.replace(/USDT$/i, '-USDT').replace(/BTC$/i, '-BTC');
+    const bar = OKX_BAR_MAP[interval] || '15m';
+    const url = `https://www.okx.com/api/v5/market/candles?instId=${instId}&bar=${bar}&limit=${Math.min(limit, 300)}`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 5000);
+    const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) return [];
+    const json = await res.json() as { code: string; data: string[][] };
+    if (json.code !== '0' || !json.data?.length) return [];
+    const intervalMs = intervalMsMap[interval] || 900_000;
+    return json.data
+      .map((k: string[]) => ({
+        symbol: pair.toUpperCase(), asset_class: 'crypto', timeframe: interval,
+        open_time: Number(k[0]), close_time: Number(k[0]) + intervalMs,
+        open: parseFloat(k[1]), high: parseFloat(k[2]),
+        low: parseFloat(k[3]), close: parseFloat(k[4]),
+        volume: parseFloat(k[5]),
+      }))
+      .filter(c => c.close > 0)
+      .reverse();
+  } catch { return []; }
+}
+
+const intervalMsMap: Record<string, number> = {
+  '1m':60000,'3m':180000,'5m':300000,'15m':900000,'30m':1800000,
+  '1h':3600000,'2h':7200000,'4h':14400000,'6h':21600000,'12h':43200000,
+  '1d':86400000,'1w':604800000,'1M':2592000000,
+};
+
+// ─── Binance (with multi-endpoint fallback → OKX → CryptoCompare) ────────────
 
 export async function getBinanceOHLCV(
   pair: string,
@@ -233,7 +272,9 @@ export async function getBinanceOHLCV(
     return result;
   } catch { clearTimeout(timer); }
 
-  // All Binance endpoints failed/timed out → CryptoCompare
+  // All Binance endpoints failed/timed out → OKX → CryptoCompare
+  const okx = await getOKXOHLCV(pair, interval, limit);
+  if (okx.length > 0) return okx;
   return getCryptoCompareOHLCV(pair, interval, limit);
 }
 
