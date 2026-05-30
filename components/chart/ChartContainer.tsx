@@ -443,31 +443,36 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             const ema21v = ind.ema(21);
             const rsi14v = ind.rsi(14);
 
-            // ── T1MO Pixel Strip — 3 rows per candle (1 candle = 3 T1MO bars) ──
-            // Row 1 (value=3): Regime Strength — bull/bear/neutral
-            const pixR1 = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+            // ── T1MO Pixel Strip — 3 rows per candle on dedicated pixel scale ──
+            // Configure a separate 'pixel' scale pinned to bottom 25% of panel
+            try {
+              subChart.priceScale('pixel').applyOptions({
+                autoScale: false, scaleMargins: { top: 0.75, bottom: 0 }, visible: false,
+              });
+            } catch {}
+
+            // Row 1: Regime Strength — bull/bear/neutral
+            const pixR1 = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'pixel', lastValueVisible: false, priceLineVisible: false });
             pixR1.setData(times.map((t: number, i: number) => ({ time: t, value: 3, color: regimeColors[i] ?? '#ffea00' })));
 
-            // Row 2 (value=2): EMA 9 vs EMA 21 crossover state
-            const pixR2 = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+            // Row 2: EMA 9 vs EMA 21 crossover
+            const pixR2 = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'pixel', lastValueVisible: false, priceLineVisible: false });
             pixR2.setData(times.map((t: number, i: number) => ({
               time: t, value: 2,
               color: (ema9v[i] ?? 0) > (ema21v[i] ?? 0) ? '#00e676' : '#ff1744',
             })));
 
-            // Row 3 (value=1): RSI momentum state
-            const pixR3 = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+            // Row 3: RSI momentum (green>60, red<40, yellow neutral)
+            const pixR3 = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'pixel', lastValueVisible: false, priceLineVisible: false });
             pixR3.setData(times.map((t: number, i: number) => ({
               time: t, value: 1,
               color: (rsi14v[i] ?? 50) > 60 ? '#00e676' : (rsi14v[i] ?? 50) < 40 ? '#ff1744' : '#ffea00',
             })));
 
-            // HMF line
+            // HMF oscillator line — main scale (top 75%)
             const hmfS = (subChart as any).addSeries(LineSeries, { color: '#ff6b35', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'HMF' });
             hmfS.setData(times.map((t: number, i: number) => ({ time: t, value: hmfVals[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
-
-            // rs amplitude line (replaces simple histogram for cleaner look)
-            const hmfBase = (subChart as any).addSeries(LineSeries, { color: 'rgba(255,107,53,0.3)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+            const hmfBase = (subChart as any).addSeries(LineSeries, { color: 'rgba(255,107,53,0.2)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
             hmfBase.setData(formatted.map((c: any) => ({ time: c.time, value: 0 })));
           }
         } catch {}

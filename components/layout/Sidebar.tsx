@@ -113,6 +113,7 @@ export default function Sidebar() {
               title={navLabels[key]}
             >
               <Icon size={16} />
+              <span className="sb-nav-label">{navLabels[key]}</span>
             </Link>
           );
         })}
