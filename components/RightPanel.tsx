@@ -295,21 +295,49 @@ export default function RightPanel() {
     return () => document.removeEventListener('atlas:set-right-tab', handler as EventListener);
   }, [setRightPanelTab]);
 
-  // ── AI Read Chart ────────────────────────────────────────────────────────
+  // ── AI Read Chart — uses local AI (no API key needed) ───────────────────
   const handleAiReadChart = useCallback(async () => {
-    if (!candles?.length) return;
     setAiLoading(true);
+    setAiText('');
     try {
-      const last20 = candles.slice(-20);
-      const res = await fetch('/api/ai/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol, timeframe, candles: last20 }),
-      });
-      const d = await res.json();
-      setAiText(d.analysis || d.commentary || 'Analysis not available.');
+      // Try Groq first if configured, fall back to local AI
+      let text = '';
+
+      if (candles?.length) {
+        const groqRes = await fetch('/api/ai/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol, timeframe, candles: candles.slice(-20) }),
+        }).catch(() => null);
+
+        if (groqRes?.ok) {
+          const d = await groqRes.json();
+          text = d.analysis || d.commentary || '';
+        }
+      }
+
+      // Local AI fallback — always works, zero API key
+      if (!text) {
+        const question = `Analyze ${symbol} on ${timeframe} timeframe. What is the current market signal and key price levels? Give a concise trading insight.`;
+        const localRes = await fetch('/api/ai/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question, symbol, interval: timeframe }),
+        });
+        const d = await localRes.json();
+        const lc = d.liveContext;
+        if (lc) {
+          text = `${d.answer}\n\nSignal: ${lc.signal} (${lc.confidence}% confidence) — Price: ${lc.price}`;
+          if (lc.kelly) text += ` — Kelly: ${(lc.kelly * 100).toFixed(1)}%`;
+        } else {
+          text = d.answer || 'Analysis not available.';
+        }
+        if (d.risk) text += `\n\nRisk: ${d.risk}`;
+      }
+
+      setAiText(text);
     } catch {
-      setAiText('AI connection failed.');
+      setAiText('AI analysis error. Check connection.');
     } finally {
       setAiLoading(false);
     }
@@ -578,8 +606,8 @@ export default function RightPanel() {
           <div className="rp-ai">
             {/* Header */}
             <div className="ai-header">
-              <div className="ai-model-badge">🤖 Llama-3.3-70B</div>
-              <span className="ai-status">● Live</span>
+              <div className="ai-model-badge">ATLAS Local AI</div>
+              <span className="ai-status">● Active</span>
             </div>
 
             {/* AI message / commentary */}
