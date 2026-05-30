@@ -433,17 +433,47 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             const rs = t1moSub.series.regimeStrength as number[];
             const hmfVals = t1moSub.series.hmf as (number | null)[];
             const regimeColors = (t1moSub.meta as any).regimeColors as string[];
-            // Regime strength histogram
-            const histS = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
-            histS.setData(times.map((t: number, i: number) => ({
-              time: t, value: rs[i] ?? 0, color: regimeColors[i] ?? 'rgba(255,255,255,0.3)',
+            const ema9v = ind.ema(9);
+            const ema21v = ind.ema(21);
+            const rsi14v = ind.rsi(14);
+            const macdV = ind.macd(12, 26, 9);
+
+            // ── T1MO Pixel Strip — 4 rows of colored signals (match reference) ──
+            // Row 1: Regime Strength (bull/bear/neutral)
+            const pixR1 = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+            pixR1.setData(times.map((t: number, i: number) => ({ time: t, value: 4, color: regimeColors[i] ?? '#ffea00' })));
+
+            // Row 2: EMA cross (green if 9>21, red if 9<21)
+            const pixR2 = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+            pixR2.setData(times.map((t: number, i: number) => ({
+              time: t, value: 3,
+              color: (ema9v[i] ?? 0) > (ema21v[i] ?? 0) ? '#00e676' : '#ff1744',
             })));
+
+            // Row 3: RSI state (green>60, red<40, yellow else)
+            const pixR3 = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+            pixR3.setData(times.map((t: number, i: number) => ({
+              time: t, value: 2,
+              color: (rsi14v[i] ?? 50) > 60 ? '#00e676' : (rsi14v[i] ?? 50) < 40 ? '#ff1744' : '#ffea00',
+            })));
+
+            // Row 4: MACD histogram direction
+            const pixR4 = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false });
+            pixR4.setData(times.map((t: number, i: number) => ({
+              time: t, value: 1,
+              color: (macdV.histogram[i] ?? 0) >= 0 ? '#00e676' : '#ff1744',
+            })).filter((d: any) => !isNaN(d.value)));
+
             // HMF line
             const hmfS = (subChart as any).addSeries(LineSeries, { color: '#ff6b35', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'HMF' });
             hmfS.setData(times.map((t: number, i: number) => ({ time: t, value: hmfVals[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
+
+            // rs amplitude line (replaces simple histogram for cleaner look)
+            const hmfBase = (subChart as any).addSeries(LineSeries, { color: 'rgba(255,107,53,0.3)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+            hmfBase.setData(formatted.map((c: any) => ({ time: c.time, value: 0 })));
           }
         } catch {}
-        const baseline = (subChart as any).addSeries(LineSeries, { color: 'rgba(255,255,255,0.15)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+        const baseline = (subChart as any).addSeries(LineSeries, { color: 'rgba(255,255,255,0.1)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
         baseline.setData(formatted.map((c: any) => ({ time: c.time, value: 0 })));
       } else if (subPanel === 'rsi') {
         addSubLine(ind.rsi(7), '#7e57c2', 'RSI(7)');
