@@ -59,13 +59,17 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const [panelPct, setPanelPct] = useState([62, 14, 24]);
   const panelPctRef    = useRef([62, 14, 24]);
   const buildPendingRef = useRef(false);
-  const dataLengthRef  = useRef(0); // tracks candle count for range bar
+  const dataLengthRef  = useRef(0);
+  const defaultZoomedRef = useRef(false); // apply default zoom once per symbol
   useEffect(() => { panelPctRef.current = panelPct; }, [panelPct]);
   const [dragging, setDragging] = useState<number | null>(null);
   const dragRef    = useRef<any>(null);
   const [legend, setLegend]     = useState<any>(null);
   const [ctxMenu, setCtxMenu]   = useState<any>(null);
   const [activeRange, setActiveRange] = useState<string>('3M');
+
+  // Reset default zoom flag when symbol changes so new symbol auto-zooms
+  useEffect(() => { defaultZoomedRef.current = false; }, [symbol]);
 
   const isDark = theme === 'dark';
   // Memoize tk — prevents buildCharts from rebuilding on every render
@@ -616,6 +620,21 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       }
       if (seriesRef.current.vol) {
         seriesRef.current.vol.setData(formatted.map((c: any) => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)' })));
+      }
+      // Apply default zoom once after first successful data update
+      if (!defaultZoomedRef.current && chartsRef.current.main && formatted.length > 0) {
+        defaultZoomedRef.current = true;
+        dataLengthRef.current = formatted.length;
+        const ZOOM: Record<string, number> = {
+          '1s':180,'15s':120,'30s':90,'1m':120,'3m':100,'5m':100,'15m':96,'30m':90,
+          '1h':168,'2h':120,'4h':180,'6h':90,'12h':60,'1d':90,'2d':60,'3d':45,'1w':52,'1M':24,
+        };
+        const n = ZOOM[timeframe] ?? 120;
+        if (formatted.length > n) {
+          try {
+            chartsRef.current.main.timeScale().setVisibleLogicalRange({ from: formatted.length - n - 1, to: formatted.length + 3 });
+          } catch {}
+        }
       }
     } catch { /* series removed during concurrent rebuild */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
