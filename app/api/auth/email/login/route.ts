@@ -19,10 +19,17 @@ export async function POST(req: Request) {
 
     // ── Master override: always works from env vars, no DB lookup needed ──────
     const masterUser  = process.env.MASTER_USERNAME || 'nayrbryanGaming';
-    const masterEmail = process.env.MASTER_EMAIL    || 'nayrbryangaming3@gmail.com';
     const masterPass  = process.env.MASTER_PASSWORD || '@Nataliamaria12345';
-    const isMaster = (identifier === masterUser || identifier.toLowerCase() === masterEmail.toLowerCase())
-                  && password === masterPass;
+    // Accept any of the known master email/username variants
+    const MASTER_IDENTIFIERS = [
+      masterUser,
+      process.env.MASTER_EMAIL || 'nayrbryangaming3@gmail.com',
+      'nayrbryanGaming01@gmail.com',
+      'nayrbryangaming01@gmail.com',
+      'nayrbryan',
+    ].map(s => s.toLowerCase());
+    const masterEmail = process.env.MASTER_EMAIL || 'nayrbryangaming3@gmail.com';
+    const isMaster = MASTER_IDENTIFIERS.includes(identifier.toLowerCase()) && password === masterPass;
     if (isMaster) {
       const token = issueSession({ uid: 'master-00', method: 'admin', email: masterEmail, role: 'master' });
       return NextResponse.json({
