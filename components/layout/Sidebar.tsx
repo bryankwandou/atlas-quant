@@ -84,10 +84,15 @@ export default function Sidebar() {
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    const app = document.querySelector('.atlas-app');
+    const app = document.querySelector('.atlas-app') as HTMLElement | null;
     if (!app) return;
-    if (expanded) app.classList.add('sidebar-expanded');
-    else app.classList.remove('sidebar-expanded');
+    if (expanded) {
+      app.classList.add('sidebar-expanded');
+      app.style.setProperty('--sidebar-w', '160px');
+    } else {
+      app.classList.remove('sidebar-expanded');
+      app.style.removeProperty('--sidebar-w');
+    }
   }, [expanded]);
 
   const navLabels: Record<string, string> = {
