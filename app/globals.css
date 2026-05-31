@@ -235,11 +235,11 @@ select{cursor:pointer;}
 .chart-toolbar-btn-primary{background:var(--aq-blue-light)!important;color:var(--aq-blue)!important;border:1px solid rgba(123,97,255,0.4);padding:4px 10px!important;font-weight:600;}
 .chart-toolbar-btn-primary:hover{background:rgba(123,97,255,0.22)!important;border-color:var(--aq-blue)!important;}
 .chart-panels{flex:1;min-height:0;position:relative;overflow:hidden;background:var(--aq-bg);}
-/* Absolute-positioned panels — JS sets top+height precisely (TradingView style) */
+/* Absolute-positioned panels — JS sets exact top+height on drag; CSS gives fallback before JS runs */
 .chart-panel{overflow:hidden;position:absolute;left:0;right:0;}
 .chart-panel-main{top:0;height:62%;}
-.chart-panel-vol {height:14%;}
-.chart-panel-sub {display:flex;flex-direction:column;}
+.chart-panel-vol {top:62%;height:14%;}
+.chart-panel-sub {top:76%;bottom:0;height:24%;display:flex;flex-direction:column;}
 .main-chart-panel{flex:1;min-height:0;}
 .sub-chart-panel{flex-shrink:0;display:flex;flex-direction:column;border-top:1px solid var(--aq-border);}
 .sub-panel-header{height:24px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 8px;background:rgba(0,0,0,0.15);z-index:5;}
@@ -606,22 +606,7 @@ a[title*="TradingView"] {
   display:none!important;opacity:0!important;pointer-events:none!important;
 }
 
-/* ── Sidebar smooth expand transition ───────────────────── */
-.atlas-app{
-  transition:grid-template-columns .2s ease;
-}
-.left-sidebar{
-  transition:width .2s ease;
-  width:var(--sidebar-w);
-}
-
-/* ── Sidebar expanded state — full labels like TradingView ── */
-.atlas-app.sidebar-expanded .sb-nav-btn{
-  width:100%;justify-content:flex-start;padding:0 12px;gap:10px;
-}
-.atlas-app.sidebar-expanded .sb-nav-label{display:block;font-size:11px;}
-.atlas-app.sidebar-expanded .sb-tool-btn{justify-content:flex-start;padding:5px 12px;}
-.atlas-app.sidebar-expanded .sb-div{width:calc(100% - 16px);margin:3px 8px;}
+/* ── Sidebar expanded state (no duplicate — canonical rules above at lines 193-206) ── */
 
 /* ── Chart sub-panel absolute fill ──────────────────────── */
 .sub-chart-inner{flex:1;min-height:0;position:relative;overflow:hidden;}
