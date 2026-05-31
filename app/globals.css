@@ -234,12 +234,12 @@ select{cursor:pointer;}
 .chart-toolbar-btn.active{background:var(--aq-blue-light);color:var(--aq-blue);}
 .chart-toolbar-btn-primary{background:var(--aq-blue-light)!important;color:var(--aq-blue)!important;border:1px solid rgba(123,97,255,0.4);padding:4px 10px!important;font-weight:600;}
 .chart-toolbar-btn-primary:hover{background:rgba(123,97,255,0.22)!important;border-color:var(--aq-blue)!important;}
-.chart-panels{flex:1;min-height:0;position:relative;overflow:hidden;background:var(--aq-bg);display:flex;flex-direction:column;}
-/* CSS-first heights — JS useLayoutEffect overrides with exact px when user drags splitter */
-.chart-panel{overflow:hidden;flex-shrink:0;}
-.chart-panel-main{flex:62 0 0;min-height:80px;}
-.chart-panel-vol {flex:14 0 0;min-height:0;}
-.chart-panel-sub {flex:24 0 0;min-height:0;display:flex;flex-direction:column;}
+.chart-panels{flex:1;min-height:0;position:relative;overflow:hidden;background:var(--aq-bg);}
+/* Absolute-positioned panels — JS sets top+height precisely (TradingView style) */
+.chart-panel{overflow:hidden;position:absolute;left:0;right:0;}
+.chart-panel-main{top:0;height:62%;}
+.chart-panel-vol {height:14%;}
+.chart-panel-sub {display:flex;flex-direction:column;}
 .main-chart-panel{flex:1;min-height:0;}
 .sub-chart-panel{flex-shrink:0;display:flex;flex-direction:column;border-top:1px solid var(--aq-border);}
 .sub-panel-header{height:24px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 8px;background:rgba(0,0,0,0.15);z-index:5;}
@@ -250,13 +250,13 @@ select{cursor:pointer;}
 .sub-chart-panel:hover .sub-panel-actions{opacity:1;}
 .sub-panel-btn{width:18px;height:18px;border-radius:3px;display:flex;align-items:center;justify-content:center;color:var(--aq-text2);transition:all .1s;}
 .sub-panel-btn:hover{background:var(--aq-bg3);color:var(--aq-text);}
-.chart-splitter{flex-shrink:0;height:6px;cursor:row-resize;display:flex;align-items:center;justify-content:center;position:relative;z-index:20;background:transparent;transition:background .1s;}
-.chart-splitter:hover,.chart-splitter.dragging{background:rgba(123,97,255,.08);}
-.splitter-line{position:absolute;left:0;right:0;height:1px;background:var(--aq-border2);transition:background .1s;}
+.chart-splitter{position:absolute;left:0;right:0;height:6px;cursor:row-resize;display:flex;align-items:center;justify-content:center;z-index:20;background:transparent;transition:background .1s;transform:translateY(-3px);}
+.chart-splitter:hover,.chart-splitter.dragging{background:rgba(123,97,255,.12);}
+.splitter-line{position:absolute;left:0;right:0;height:1px;top:50%;background:var(--aq-border2);transition:background .1s;}
 .chart-splitter:hover .splitter-line,.chart-splitter.dragging .splitter-line{background:var(--aq-blue);}
-.splitter-grip{display:flex;gap:2px;z-index:1;}
-.splitter-grip::before,.splitter-grip::after{content:'';width:16px;height:2px;border-radius:1px;background:var(--aq-text3);opacity:0;transition:opacity .1s;}
-.chart-splitter:hover .splitter-grip::before,.chart-splitter:hover .splitter-grip::after,.chart-splitter.dragging .splitter-grip::before,.chart-splitter.dragging .splitter-grip::after{opacity:.6;background:var(--aq-blue);}
+.splitter-grip{display:flex;gap:3px;align-items:center;}
+.splitter-grip::before,.splitter-grip::after{content:'';width:20px;height:2px;border-radius:1px;background:var(--aq-border2);transition:all .1s;}
+.chart-splitter:hover .splitter-grip::before,.chart-splitter:hover .splitter-grip::after,.chart-splitter.dragging .splitter-grip::before,.chart-splitter.dragging .splitter-grip::after{background:var(--aq-blue);opacity:.8;}
 
 /* ── Sub-panel tabs ──────────────────────────────────────────── */
 .subchart-tabs-row{height:24px;flex-shrink:0;display:flex;align-items:center;gap:1px;padding:0 4px;background:rgba(0,0,0,0.15);border-bottom:1px solid var(--aq-border);overflow-x:auto;scrollbar-width:none;}
@@ -594,3 +594,35 @@ select{cursor:pointer;}
 .sb-regime-label.down{color:var(--aq-down)!important;}
 .sb-regime-label.neutral{color:var(--aq-neutral)!important;}
 .sb-warning{color:var(--aq-neutral);font-size:9px;white-space:nowrap;opacity:.9;}
+
+/* ── Suppress LWC TradingView attribution watermark ─────── */
+.chart-panel a[href*="tradingview"],
+.chart-panel a[href*="lightweight-charts"],
+.chart-panel div[style*="tradingview"],
+.chart-panel svg[style*="opacity"] a,
+.tv-lightweight-charts a,
+.tv-lightweight-charts canvas + div a,
+a[title*="TradingView"] {
+  display:none!important;opacity:0!important;pointer-events:none!important;
+}
+
+/* ── Sidebar smooth expand transition ───────────────────── */
+.atlas-app{
+  transition:grid-template-columns .2s ease;
+}
+.left-sidebar{
+  transition:width .2s ease;
+  width:var(--sidebar-w);
+}
+
+/* ── Sidebar expanded state — full labels like TradingView ── */
+.atlas-app.sidebar-expanded .sb-nav-btn{
+  width:100%;justify-content:flex-start;padding:0 12px;gap:10px;
+}
+.atlas-app.sidebar-expanded .sb-nav-label{display:block;font-size:11px;}
+.atlas-app.sidebar-expanded .sb-tool-btn{justify-content:flex-start;padding:5px 12px;}
+.atlas-app.sidebar-expanded .sb-div{width:calc(100% - 16px);margin:3px 8px;}
+
+/* ── Chart sub-panel absolute fill ──────────────────────── */
+.sub-chart-inner{flex:1;min-height:0;position:relative;overflow:hidden;}
+

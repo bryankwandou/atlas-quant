@@ -109,15 +109,22 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     document.addEventListener('mouseup', onUp);
   }, [panelPct]);
 
+  const spl1Ref = useRef<HTMLDivElement>(null);
+  const spl2Ref = useRef<HTMLDivElement>(null);
+
   useLayoutEffect(() => {
     if (!wrapRef.current) return;
     const th = wrapRef.current.clientHeight;
     const h0 = Math.floor(th * panelPct[0] / 100);
     const h1 = Math.floor(th * panelPct[1] / 100);
     const h2 = th - h0 - h1;
-    if (mainRef.current) { mainRef.current.style.height = h0 + 'px'; mainRef.current.style.top = '0'; }
-    if (volRef.current)  { volRef.current.style.height  = h1 + 'px'; volRef.current.style.top  = h0 + 'px'; }
-    if (subRef.current)  { subRef.current.style.height  = h2 + 'px'; subRef.current.style.top  = (h0 + h1) + 'px'; }
+    // Absolute positioning: each panel has top+height
+    if (mainRef.current) { mainRef.current.style.top = '0px'; mainRef.current.style.height = h0 + 'px'; }
+    if (volRef.current)  { volRef.current.style.top  = h0 + 'px'; volRef.current.style.height = h1 + 'px'; }
+    if (subRef.current)  { subRef.current.style.top  = (h0 + h1) + 'px'; subRef.current.style.height = h2 + 'px'; }
+    // Splitters positioned at panel boundaries
+    if (spl1Ref.current) spl1Ref.current.style.top = h0 + 'px';
+    if (spl2Ref.current) spl2Ref.current.style.top = (h0 + h1) + 'px';
     Object.entries(chartsRef.current).forEach(([k, c]) => {
       if (k === '_obs') return;
       const el = k === 'main' ? mainRef.current : k === 'vol' ? volRef.current : subRef.current;
@@ -569,15 +576,20 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       }
     });
 
-    // ResizeObserver — reads panelPctRef so buildCharts doesn't recreate on every drag
+    // ResizeObserver — absolute layout: update top+height for all panels + splitters
     const obs = new ResizeObserver(() => {
       if (!wrapRef.current) return;
       const th = wrapRef.current.clientHeight;
       const h0 = Math.floor(th * panelPctRef.current[0] / 100);
       const h1 = Math.floor(th * panelPctRef.current[1] / 100);
       const h2 = th - h0 - h1;
+      if (mainRef.current) { mainRef.current.style.top = '0px'; mainRef.current.style.height = h0 + 'px'; }
+      if (volRef.current)  { volRef.current.style.top  = h0 + 'px'; volRef.current.style.height = h1 + 'px'; }
+      if (subRef.current)  { subRef.current.style.top  = (h0+h1) + 'px'; subRef.current.style.height = h2 + 'px'; }
+      if (spl1Ref.current) spl1Ref.current.style.top = h0 + 'px';
+      if (spl2Ref.current) spl2Ref.current.style.top = (h0+h1) + 'px';
       [[chartsRef.current.main, mainRef.current, h0], [chartsRef.current.vol, volRef.current, h1], [chartsRef.current.sub, subRef.current, h2]].forEach(([ch, el, h]) => {
-        if (el && ch && (h as number) > 0) { (el as HTMLDivElement).style.height = h + 'px'; try { ch.applyOptions({ width: (el as HTMLDivElement).clientWidth, height: h }); } catch {} }
+        if (el && ch && (h as number) > 0) { try { ch.applyOptions({ width: (el as HTMLDivElement).clientWidth, height: h }); } catch {} }
       });
     });
     if (wrapRef.current) obs.observe(wrapRef.current);
@@ -705,9 +717,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       <div ref={wrapRef} className="chart-panels">
         {isLoading && <div className="chart-loading"><div className="spinner"/><span>Loading {symbol}...</span></div>}
         <div ref={mainRef} className="chart-panel chart-panel-main"/>
-        <div className={`chart-splitter${dragging===0?' dragging':''}`} onMouseDown={e=>startDrag(0,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
+        <div ref={spl1Ref} className={`chart-splitter${dragging===0?' dragging':''}`} onMouseDown={e=>startDrag(0,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
         <div ref={volRef} className="chart-panel chart-panel-vol"><div className="subchart-label2">VOL</div></div>
-        <div className={`chart-splitter${dragging===1?' dragging':''}`} onMouseDown={e=>startDrag(1,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
+        <div ref={spl2Ref} className={`chart-splitter${dragging===1?' dragging':''}`} onMouseDown={e=>startDrag(1,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
         <div ref={subRef} className="chart-panel chart-panel-sub">
           <div className="subchart-tabs-row">
             {SUB_PANELS.map(p=><button type="button" key={p.id} className={`subchart-tab ${subPanel===p.id?'active':''}`} onClick={()=>setSubPanel(p.id)}>{p.label}</button>)}
