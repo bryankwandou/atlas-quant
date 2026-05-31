@@ -60,6 +60,7 @@ interface ChartStore {
   subPanel: string;
   showIndicatorModal: boolean;
   fibConfig: FibConfig;
+  superRefresh: boolean;
 
   setSymbol: (s: string) => void;
   setTimeframe: (tf: string) => void;
@@ -82,6 +83,7 @@ interface ChartStore {
   toggleIndicatorModal: () => void;
   openIndicatorModal: () => void;
   closeIndicatorModal: () => void;
+  toggleSuperRefresh: () => void;
 }
 
 export const useChartStore = create<ChartStore>()(
@@ -98,6 +100,7 @@ export const useChartStore = create<ChartStore>()(
       subPanel: 'atlas',
       showIndicatorModal: false,
       fibConfig: DEFAULT_FIB_CONFIG,
+      superRefresh: false,
 
       setSymbol:    (symbol)    => set({ symbol }),
       setTimeframe: (timeframe) => set({ timeframe }),
@@ -149,6 +152,7 @@ export const useChartStore = create<ChartStore>()(
       setDrawingTool: (drawingTool) => set({ drawingTool }),
       setRightPanelTab: (rightPanelTab) => set({ rightPanelTab }),
       setSubPanel: (subPanel) => set({ subPanel }),
+      toggleSuperRefresh: () => set(s => ({ superRefresh: !s.superRefresh })),
 
       toggleIndicatorModal: () => set(s => ({ showIndicatorModal: !s.showIndicatorModal })),
       openIndicatorModal:   () => set({ showIndicatorModal: true }),

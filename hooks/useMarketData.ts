@@ -1,5 +1,6 @@
 'use client';
 import useSWR from 'swr';
+import { useChartStore } from '@/store/chartStore';
 import type { AllMacroData } from '@/src/services/macroData';
 import type { MacroEnhancedSignal } from '@/src/core/quant/macro-signal';
 
@@ -15,29 +16,31 @@ const fetcher = (url: string) => fetch(url).then(r => {
 /** Returns a limit appropriate for the timeframe — enough history without waste. */
 function getLimit(tf: string): number {
   const map: Record<string, number> = {
-    '1s': 300, '15s': 300, '30s': 300,
-    '1m': 500, '3m': 500, '5m': 500,
-    '10m': 500, '15m': 500, '30m': 500, '45m': 500,
-    '1h': 720, '2h': 720, '3h': 500, '4h': 720,
-    '6h': 500, '8h': 500, '12h': 500,
-    '1d': 1500, '2d': 750, '3d': 500,
-    '1w': 520, '2w': 260,
-    '1M': 240, '3M': 80, '6M': 50, '12M': 30,
+    '1s': 500, '15s': 500, '30s': 500,
+    '1m': 1000, '3m': 1000, '5m': 1000,
+    '10m': 1000, '15m': 1000, '30m': 1000, '45m': 1000,
+    '1h': 1500, '2h': 1500, '3h': 1000, '4h': 2000,
+    '6h': 1000, '8h': 1000, '12h': 1000,
+    '1d': 3000, '2d': 1500, '3d': 1000,
+    '1w': 1000, '2w': 500,
+    '1M': 360, '3M': 120, '6M': 60, '12M': 30,
   };
-  return map[tf] ?? 500;
+  return map[tf] ?? 1000;
 }
 
 export function useMarketData(symbol: string, timeframe: string, limit?: number) {
+  const superRefresh = useChartStore(s => s.superRefresh);
   const resolvedLimit = limit ?? getLimit(timeframe);
+  const refreshInterval = superRefresh ? 1000 : getRefreshInterval(timeframe);
   const { data, error, isLoading, mutate } = useSWR(
     symbol
       ? `/api/market/ohlcv?symbol=${symbol}&timeframe=${timeframe}&limit=${resolvedLimit}`
       : null,
     fetcher,
     {
-      refreshInterval: getRefreshInterval(timeframe),
+      refreshInterval,
       revalidateOnFocus: false,
-      dedupingInterval: 5000,
+      dedupingInterval: superRefresh ? 500 : 5000,
     }
   );
 

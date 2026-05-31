@@ -175,7 +175,7 @@ export default function RightPanel() {
   const { symbol, timeframe, rightPanelTab, setRightPanelTab, setSymbol } = useChartStore();
   const { riskPerTrade, maxDailyLoss, maxTradesDay, cooldownAfterLoss, updateRisk } = useUserStore();
 
-  const { candles } = useMarketData(symbol, timeframe);
+  const { candles, isLoading: candlesLoading } = useMarketData(symbol, timeframe);
   const { priceData } = useMarketPrice(symbol);
 
   // Signal tab state
@@ -198,7 +198,7 @@ export default function RightPanel() {
 
   // ── Compute indicators ──────────────────────────────────────────────────
   const computeAll = useCallback(() => {
-    if (!candles || candles.length < 30) return;
+    if (!candles || candles.length < 10) return;
 
     const closes  = candles.map((c: any) => c.close  as number);
     const highs   = candles.map((c: any) => c.high   as number);
@@ -426,6 +426,19 @@ export default function RightPanel() {
         ════════════════════════════════════════════════════════════════ */}
         {rightPanelTab === 'signal' && (
           <>
+            {/* Loading / empty state */}
+            {candlesLoading && (
+              <div className="rp-loading-row">
+                <div className="rp-spinner" />
+                <span>Memuat data {symbol}…</span>
+              </div>
+            )}
+            {!candlesLoading && (!candles || candles.length === 0) && (
+              <div className="rp-no-data">
+                <span>Tidak ada data untuk {symbol}</span>
+                <span className="rp-no-data-sub">Coba ganti simbol atau timeframe</span>
+              </div>
+            )}
             {/* Version row */}
             <div className="rp-version-row">
               <span className="rp-version-badge">v1.0.15 SCIENTIFIC</span>

@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Search, X, Layers, Bell, Camera, Sun, Moon, Globe, Settings, LogOut } from 'lucide-react';
+import { ChevronDown, Search, X, Layers, Bell, Camera, Sun, Moon, Globe, Settings, LogOut, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useChartStore } from '@/store/chartStore';
@@ -72,7 +72,7 @@ const IconKeyboard = ({ size = 15 }: { size?: number }) => (
 );
 
 // ── Config matching ATLAS-QUANT DARURAT HUKUM dashboard-config.js ─────────────
-const QUICK_TFS = ['1m', '5m', '15m', '1h', '4h', '1d'];
+const QUICK_TFS = ['1s', '1m', '5m', '15m', '1h', '4h', '1d'];
 const TF_GROUPS = [
   { g: 'seconds', tfs: ['1s', '15s', '30s'] },
   { g: 'minutes', tfs: ['1m', '3m', '5m', '15m', '30m'] },
@@ -96,6 +96,7 @@ export default function TopBar() {
   const {
     symbol, timeframe, setSymbol, setTimeframe,
     activeIndicators, openIndicatorModal,
+    superRefresh, toggleSuperRefresh,
   } = useChartStore();
   const { priceData } = useMarketPrice(symbol);
 
@@ -341,6 +342,15 @@ export default function TopBar() {
         </button>
         <button className="tb-right-btn" title="Keyboard Shortcuts">
           <IconKeyboard size={15} />
+        </button>
+
+        <button
+          className={`tb-right-btn${superRefresh ? ' tb-super-refresh-active' : ''}`}
+          title={superRefresh ? 'Super Refresh ON — 1s update (klik untuk mati)' : 'Super Refresh OFF — klik untuk update 1s'}
+          onClick={toggleSuperRefresh}
+        >
+          <Zap size={14} />
+          {superRefresh && <span className="tb-sr-label">1s</span>}
         </button>
 
         <div className="tv-sep" />
