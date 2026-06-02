@@ -171,30 +171,37 @@ function ccEndpoint(interval: string): { endpoint: string; aggregate: number } {
 
 async function getCryptoCompareOHLCV(pair: string, interval: string, limit: number): Promise<OHLCVCandle[]> {
   try {
-    // BTC/USDT → fsym=BTC tsym=USDT (treat USDT as USD for CC)
     const fsym = pair.replace(/USDT$|BUSD$|USD$|BTC$|ETH$|BNB$/, '').toUpperCase() || 'BTC';
     const tsym = pair.endsWith('USDT') || pair.endsWith('BUSD') || pair.endsWith('USD') ? 'USDT' : 'BTC';
     const { endpoint, aggregate } = ccEndpoint(interval);
-    const url = `${CC_BASE}/${endpoint}?fsym=${fsym}&tsym=${tsym}&limit=${Math.min(limit, 2000)}&aggregate=${aggregate}`;
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) return [];
-    const json = await res.json() as { Response?: string; Data?: { Data?: any[] } };
-    if (json.Response !== 'Success' || !json.Data?.Data?.length) return [];
     const intervalMs = aggregate * ({ histominute: 60, histohour: 3600, histoday: 86400 }[endpoint] ?? 900) * 1000;
-    return json.Data.Data
-      .filter((c: any) => c.open > 0)
-      .map((c: any) => ({
-        symbol:      pair.toUpperCase(),
-        asset_class: 'crypto',
-        timeframe:   interval,
-        open_time:   c.time * 1000,
-        open:        c.open,
-        high:        c.high,
-        low:         c.low,
-        close:       c.close,
-        volume:      c.volumeto,
-        close_time:  c.time * 1000 + intervalMs,
+    const batchSize = endpoint === 'histominute' ? 2000 : 2000;
+    const allCandles: OHLCVCandle[] = [];
+    let toTs: number | undefined;
+    let remaining = Math.min(limit, endpoint === 'histoday' ? 5000 : 2000);
+
+    // Paginate backwards in time until we have enough candles
+    while (remaining > 0 && allCandles.length < limit) {
+      const batchLimit = Math.min(remaining, batchSize);
+      let url = `${CC_BASE}/${endpoint}?fsym=${fsym}&tsym=${tsym}&limit=${batchLimit}&aggregate=${aggregate}`;
+      if (toTs) url += `&toTs=${toTs}`;
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) break;
+      const json = await res.json() as { Response?: string; Data?: { Data?: any[] } };
+      if (json.Response !== 'Success' || !json.Data?.Data?.length) break;
+      const batch = json.Data.Data.filter((c: any) => c.open > 0).map((c: any) => ({
+        symbol: pair.toUpperCase(), asset_class: 'crypto', timeframe: interval,
+        open_time: c.time * 1000, open: c.open, high: c.high, low: c.low, close: c.close,
+        volume: c.volumeto, close_time: c.time * 1000 + intervalMs,
       }));
+      if (batch.length === 0) break;
+      allCandles.unshift(...batch);
+      toTs = Math.floor(batch[0].open_time / 1000) - 1;
+      remaining -= batch.length;
+      // Only paginate for daily/weekly timeframes (not minute/hour — too many requests)
+      if (!['histoday'].includes(endpoint)) break;
+    }
+    return allCandles.slice(-limit);
   } catch {
     return [];
   }
@@ -272,10 +279,10 @@ export async function getBinanceOHLCV(
     return result;
   } catch { clearTimeout(timer); }
 
-  // All Binance endpoints failed/timed out → OKX → CryptoCompare
-  const okx = await getOKXOHLCV(pair, interval, limit);
-  if (okx.length > 0) return okx;
-  return getCryptoCompareOHLCV(pair, interval, limit);
+  // All Binance endpoints failed/timed out → CryptoCompare (unlimited history) → OKX (300 max)
+  const cc = await getCryptoCompareOHLCV(pair, interval, limit);
+  if (cc.length > 0) return cc;
+  return getOKXOHLCV(pair, interval, limit);
 }
 
 // ─── Yahoo Finance ────────────────────────────────────────────────────────────
