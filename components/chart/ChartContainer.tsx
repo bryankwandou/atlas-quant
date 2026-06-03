@@ -456,10 +456,22 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     }
 
     // ── SUB CHART ─────────────────────────────────────────────
+    let subAnchorSeries: any = null;
     const subChartEl = subRef.current!.querySelector<HTMLDivElement>('.sub-chart-inner');
     if (subChartEl) {
       const subChart = createChart(subChartEl, baseOpts(subChartEl) as any);
       chartsRef.current.sub = subChart;
+
+      // Invisible anchor on its OWN price scale so cross-panel crosshair can be
+      // positioned in the sub panel without distorting the real indicator scale.
+      try {
+        subAnchorSeries = (subChart as any).addSeries(LineSeries, {
+          priceScaleId: 'xhair', color: 'rgba(0,0,0,0)', lineWidth: 1,
+          priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+        });
+        subAnchorSeries.setData(times.map((t: number) => ({ time: t, value: 0 })));
+        (subChart as any).priceScale('xhair').applyOptions({ visible: false, autoScale: true });
+      } catch {}
 
       const addSubLine = (vals: number[], color: string, title: string, lw = 1.5) => {
         const s = (subChart as any).addSeries(LineSeries, { color, lineWidth: lw, priceLineVisible: false, lastValueVisible: true, title });
@@ -596,19 +608,46 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       syncLogical(subChart, [main, volChart]);
     }
 
-    // Crosshair legend
+    // ── Cross-panel crosshair sync (TradingView-style locked panels) ──
+    // Hovering any panel draws the aligned vertical crosshair on all panels.
+    let xhairSyncing = false;
+    const syncXhair = (param: any, srcCh: any) => {
+      if (xhairSyncing) return;
+      xhairSyncing = true;
+      try {
+        const idx = param?.time ? formatted.findIndex((c: any) => c.time === param.time) : -1;
+        const targets = [
+          { ch: main,                   s: candleSeries,    v: idx >= 0 ? formatted[idx]?.close  : 0 },
+          { ch: chartsRef.current.vol,  s: volSeries,       v: idx >= 0 ? formatted[idx]?.volume : 0 },
+          { ch: chartsRef.current.sub,  s: subAnchorSeries, v: 0 },
+        ];
+        for (const t of targets) {
+          if (!t.ch || t.ch === srcCh) continue;
+          if (param?.time && idx >= 0 && t.s) t.ch.setCrosshairPosition(t.v ?? 0, param.time, t.s);
+          else t.ch.clearCrosshairPosition?.();
+        }
+      } catch {}
+      xhairSyncing = false;
+    };
+
+    // Crosshair legend + sync
     main.subscribeCrosshairMove((param: any) => {
-      if (!param.point || !param.time) { setLegend(null); return; }
-      const cd = param.seriesData?.get(candleSeries);
-      if (cd) {
-        const idx = formatted.findIndex((c: any) => c.time === param.time);
-        // For line/area, cd has .value not .open/.high/.low/.close
-        const candle = (chartType === 'line' || chartType === 'area')
-          ? { open: cd.value, high: cd.value, low: cd.value, close: cd.value }
-          : cd;
-        setLegend({ ...candle, ema9: addedSeries['EMA_9']?.vals[idx], ema21: addedSeries['EMA_21']?.vals[idx], vwap: addedSeries['VWAP']?.vals[idx] });
+      if (!param.point || !param.time) { setLegend(null); }
+      else {
+        const cd = param.seriesData?.get(candleSeries);
+        if (cd) {
+          const idx = formatted.findIndex((c: any) => c.time === param.time);
+          // For line/area, cd has .value not .open/.high/.low/.close
+          const candle = (chartType === 'line' || chartType === 'area')
+            ? { open: cd.value, high: cd.value, low: cd.value, close: cd.value }
+            : cd;
+          setLegend({ ...candle, ema9: addedSeries['EMA_9']?.vals[idx], ema21: addedSeries['EMA_21']?.vals[idx], vwap: addedSeries['VWAP']?.vals[idx] });
+        }
       }
+      syncXhair(param, main);
     });
+    try { volChart.subscribeCrosshairMove((param: any) => syncXhair(param, volChart)); } catch {}
+    try { if (chartsRef.current.sub) chartsRef.current.sub.subscribeCrosshairMove((param: any) => syncXhair(param, chartsRef.current.sub)); } catch {}
 
     // ResizeObserver — absolute layout: update top+height for all panels + splitters
     const obs = new ResizeObserver(() => {

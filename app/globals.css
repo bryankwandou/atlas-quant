@@ -112,6 +112,24 @@ select{cursor:pointer;}
 .right-panel-handle:hover,.right-panel-handle.dragging{background:rgba(123,97,255,.15);border-left-color:var(--aq-blue);}
 .right-panel-handle:hover::after,.right-panel-handle.dragging::after{background:var(--aq-blue);}
 
+/* ── Left sidebar resize handle ──────────────────────────── */
+.left-sidebar-handle{
+  grid-area:sidebar;
+  width:8px;cursor:col-resize;
+  background:transparent;
+  border-right:2px solid var(--aq-border);
+  z-index:50;
+  justify-self:end;align-self:stretch;
+  transition:background .12s,border-color .12s;
+  position:relative;
+}
+.left-sidebar-handle::after{
+  content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:2px;height:32px;border-radius:2px;background:var(--aq-border2);transition:background .12s;
+}
+.left-sidebar-handle:hover,.left-sidebar-handle.dragging{background:rgba(123,97,255,.15);border-right-color:var(--aq-blue);}
+.left-sidebar-handle:hover::after,.left-sidebar-handle.dragging::after{background:var(--aq-blue);}
+
 /* ── Right Icon Rail ─────────────────────────────────────── */
 .right-rail{
   grid-area:rightrail;

@@ -15,6 +15,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [ready, setReady] = useState(false);
   const appRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLDivElement>(null);
+  const leftHandleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -23,6 +24,49 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setReady(true);
     } catch { router.replace('/login'); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Restore persisted panel widths (so they aren't "static" between sessions)
+  useEffect(() => {
+    if (!ready) return;
+    const app = appRef.current;
+    if (!app) return;
+    try {
+      const rw = localStorage.getItem('atlas:right-w');
+      if (rw) app.style.setProperty('--right-w', `${rw}px`);
+      const sw = localStorage.getItem('atlas:sidebar-w');
+      if (sw) {
+        app.style.setProperty('--sidebar-w', `${sw}px`);
+        if (parseInt(sw) > 110) app.classList.add('sidebar-expanded');
+      }
+    } catch {}
+  }, [ready]);
+
+  // Drag-resize the LEFT sidebar (mirrors the right panel handle)
+  const onDragStartLeft = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const app = appRef.current;
+    const handle = leftHandleRef.current;
+    if (!app) return;
+    const startW = parseInt(getComputedStyle(app).getPropertyValue('--sidebar-w') || '52') || 52;
+    handle?.classList.add('dragging');
+    let finalW = startW;
+    const onMove = (ev: MouseEvent) => {
+      finalW = Math.max(48, Math.min(280, startW + (ev.clientX - startX)));
+      app.style.setProperty('--sidebar-w', `${finalW}px`);
+      // Auto show/hide labels like TradingView when wide enough
+      if (finalW > 110) app.classList.add('sidebar-expanded');
+      else app.classList.remove('sidebar-expanded');
+    };
+    const onUp = () => {
+      handle?.classList.remove('dragging');
+      try { localStorage.setItem('atlas:sidebar-w', String(finalW)); } catch {}
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }, []);
 
   const onDragStart = useCallback((e: React.MouseEvent) => {
@@ -34,12 +78,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const startW = parseInt(getComputedStyle(app).getPropertyValue('--right-w') || '280') || 280;
     handle?.classList.add('dragging');
 
+    let finalW = startW;
     const onMove = (ev: MouseEvent) => {
-      const newW = Math.max(160, Math.min(520, startW + (startX - ev.clientX)));
-      app.style.setProperty('--right-w', `${newW}px`);
+      finalW = Math.max(160, Math.min(520, startW + (startX - ev.clientX)));
+      app.style.setProperty('--right-w', `${finalW}px`);
     };
     const onUp = () => {
       handle?.classList.remove('dragging');
+      try { localStorage.setItem('atlas:right-w', String(finalW)); } catch {}
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
@@ -64,6 +110,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div ref={appRef} className="atlas-app device-laptop">
         <TopBar />
         <Sidebar />
+        <div ref={leftHandleRef} className="left-sidebar-handle" onMouseDown={onDragStartLeft} title="Drag to resize sidebar" />
         <main className="main-area">{children}</main>
         <div ref={handleRef} className="right-panel-handle" onMouseDown={onDragStart} title="Drag to resize" />
         <RightPanel />
