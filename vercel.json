@@ -1,4 +1,7 @@
 {
+  "crons": [
+    { "path": "/api/cron/auto-seed", "schedule": "0 0 * * *" }
+  ],
   "functions": {
     "app/api/market/ohlcv/route.ts":        { "maxDuration": 30 },
     "app/api/quant/signals/route.ts":       { "maxDuration": 45 },
@@ -9,6 +12,8 @@
     "app/api/ai/analyze/route.ts":          { "maxDuration": 60 },
     "app/api/cron/market-refresh/route.ts": { "maxDuration": 60 },
     "app/api/cron/auto-seed/route.ts":      { "maxDuration": 120 },
+    "app/api/cron/tick-1s/route.ts":        { "maxDuration": 60 },
+    "app/api/admin/db-doctor/route.ts":     { "maxDuration": 60 },
     "app/api/admin/migrate/route.ts":       { "maxDuration": 120 },
     "app/api/admin/seed-ohlcv/route.ts":    { "maxDuration": 300 },
     "app/api/admin/backtest/route.ts":      { "maxDuration": 300 },

@@ -1,0 +1,32 @@
+name: 1s Live Buffer (Solution 2)
+
+# Free, server-side 1-second OHLCV recorder for Vercel Hobby (where Vercel cron
+# is capped at once/day). GitHub Actions runs every 5 minutes and pings the
+# tick-1s endpoint, which pulls the last ~16 minutes of 1s candles and upserts
+# them — so the 5-minute gap is always covered with overlap (zero seconds lost).
+#
+# SETUP (one time):
+#   1. GitHub repo → Settings → Secrets and variables → Actions → New secret
+#   2. Name:  ATLAS_CRON_SECRET   Value: <same as CRON_SECRET in Vercel>
+#      (or use ADMIN_SECRET — the endpoint accepts either)
+#
+# Note: GitHub's scheduler can drift a few minutes under load; the 16-min
+# fetch window absorbs that. For exact-minute precision, use cron-job.org
+# (free, true 1-min) pointing at the same URL.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping tick-1s buffer
+        run: |
+          code=$(curl -s -o /tmp/out.json -w "%{http_code}" --max-time 60 \
+            "https://atlas-quant.vercel.app/api/cron/tick-1s?secret=${{ secrets.ATLAS_CRON_SECRET }}")
+          echo "HTTP $code"
+          cat /tmp/out.json
+          test "$code" = "200"

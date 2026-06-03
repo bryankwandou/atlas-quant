@@ -121,10 +121,14 @@ create table if not exists market_ohlcv (
     taker_buy_volume numeric(30,8) default 0,
     source          text default 'binance',
     created_at      timestamptz default now(),
-    unique(symbol, timeframe, open_time, exchange)
+    -- MUST match the app's upsert onConflict target (symbol,timeframe,open_time).
+    -- A 4-col constraint here silently breaks every write — see /api/admin/db-doctor.
+    unique(symbol, timeframe, open_time)
 );
 create index if not exists idx_ohlcv_lookup on market_ohlcv(symbol, timeframe, open_time desc);
 create index if not exists idx_ohlcv_class on market_ohlcv(asset_class, timeframe);
+-- Safety net: guarantees the 3-col ON CONFLICT target exists even on pre-existing tables.
+create unique index if not exists market_ohlcv_stf_uidx on market_ohlcv(symbol, timeframe, open_time);
 
 -- =============================================================
 -- INDICATORS — registry + cache
