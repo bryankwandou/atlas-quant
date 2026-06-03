@@ -358,6 +358,9 @@ export default function RightPanel() {
     ? ((lastC.high - lastC.low) / (prevC.high - prevC.low) * 100 - 100)
     : null;
 
+  const VALID_TABS = ['signal', 'watchlist', 'ai', 'risk'];
+  const activeTab = VALID_TABS.includes(rightPanelTab) ? rightPanelTab : 'signal';
+
   const tabs = [
     { id: 'signal',    label: 'Sinyal',   icon: null },
     { id: 'watchlist', label: 'Pantauan', icon: null },
@@ -410,7 +413,7 @@ export default function RightPanel() {
           <button
             key={tab.id}
             type="button"
-            className={`rp-tab${rightPanelTab === tab.id ? ' active' : ''}`}
+            className={`rp-tab${activeTab === tab.id ? ' active' : ''}`}
             onClick={() => setRightPanelTab(tab.id)}
           >
             <span className="rp-tab-icon">{tab.icon}</span>
@@ -424,7 +427,7 @@ export default function RightPanel() {
         {/* ════════════════════════════════════════════════════════════════
             SIGNAL TAB — T1MO style (folder 4 reference)
         ════════════════════════════════════════════════════════════════ */}
-        {rightPanelTab === 'signal' && (
+        {activeTab === 'signal' && (
           <>
             {/* Loading / empty state */}
             {candlesLoading && (
@@ -597,7 +600,7 @@ export default function RightPanel() {
         {/* ════════════════════════════════════════════════════════════════
             WATCHLIST TAB
         ════════════════════════════════════════════════════════════════ */}
-        {rightPanelTab === 'watchlist' && (
+        {activeTab === 'watchlist' && (
           <>
             <div className="section-hdr">Watchlist</div>
             {WATCHLIST.map(item => (
@@ -615,7 +618,7 @@ export default function RightPanel() {
         {/* ════════════════════════════════════════════════════════════════
             AI TAB
         ════════════════════════════════════════════════════════════════ */}
-        {rightPanelTab === 'ai' && (
+        {activeTab === 'ai' && (
           <div className="rp-ai">
             {/* Header */}
             <div className="ai-header">
@@ -672,7 +675,7 @@ export default function RightPanel() {
         {/* ════════════════════════════════════════════════════════════════
             RISK TAB
         ════════════════════════════════════════════════════════════════ */}
-        {rightPanelTab === 'risk' && (
+        {activeTab === 'risk' && (
           <div className="rp-risk">
             {/* Trade status badge */}
             <div className="risk-status-row">
