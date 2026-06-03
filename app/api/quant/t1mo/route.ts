@@ -4,7 +4,7 @@
  */
 import { NextResponse } from 'next/server';
 import { fetchOhlcv, type Timeframe } from '@/services/market/provider';
-import { runIndicator } from '@/core/indicators/registry';
+import { t1moCompute } from '@/core/indicators/t1mo';
 import { localCommentary } from '@/core/ai/local-brain';
 
 export async function GET(req: Request) {
@@ -39,7 +39,7 @@ export async function GET(req: Request) {
       time: candles.map((c) => c.time),
     };
 
-    const t1mo = runIndicator('T1MO_CORE', ctx, params);
+    const t1mo = t1moCompute(ctx, params);
     const brain = localCommentary({
       symbol,
       timeframe: tf,
