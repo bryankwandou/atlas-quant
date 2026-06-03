@@ -16,8 +16,8 @@ const fetcher = (url: string) => fetch(url).then(r => {
 /** Returns a limit appropriate for the timeframe — enough history without waste. */
 function getLimit(tf: string): number {
   const map: Record<string, number> = {
-    // sub-minute: Binance 1s API max is 1000 recent bars (limited history by design)
-    '1s': 1000, '5s': 1000, '10s': 1000, '15s': 1000, '30s': 1000, '45s': 1000,
+    // sub-minute: served from Neon (off-Vercel collector accumulates real 1s history)
+    '1s': 20000, '5s': 6000, '10s': 3000, '15s': 2000, '30s': 1500, '45s': 1000,
     // minutes: ~3.5 days on 1m, ~14 days on 5m, ~21 days on 15m
     '1m': 2000, '2m': 2000, '3m': 2000, '5m': 2000,
     '10m': 2000, '15m': 2000, '30m': 2000, '45m': 2000,
