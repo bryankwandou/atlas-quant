@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { routeOHLCV } from '@/src/lib/marketRouter';
 import { supabaseAdmin, upsertOHLCV } from '@/src/services/supabase';
+import { hasNeon, readOHLCVNeon, writeOHLCVNeon } from '@/src/services/ohlcvStore';
 
 // Expected milliseconds between candles for each timeframe
 const EXPECTED_INTERVAL_MS: Record<string, number> = {
@@ -45,6 +46,18 @@ export async function GET(req: NextRequest) {
 
   const isCrypto = /^[A-Z0-9]+(USDT|BTC|ETH|BNB)$/i.test(symbol);
 
+  // Neon cache first (durable, never auto-pauses) — only for crypto/memecoin
+  if (isCrypto && hasNeon()) {
+    try {
+      const cached = await readOHLCVNeon(symbol, timeframe, limit);
+      if (cached.length >= 50 && isCacheValid(cached, timeframe)) {
+        return NextResponse.json({
+          symbol, timeframe, data: cached, source: 'cache', backend: 'neon', count: cached.length,
+        });
+      }
+    } catch { /* fall through to Supabase / live */ }
+  }
+
   // Try Supabase cache only for crypto/memecoin assets
   if (isCrypto) {
     try {
@@ -87,10 +100,12 @@ export async function GET(req: NextRequest) {
     const data = await routeOHLCV(symbol, timeframe, limit);
 
     if (data && data.length > 0) {
-      // Await so the write actually completes before the serverless function
-      // freezes (fire-and-forget gets killed on Vercel). upsertOHLCV self-heals
-      // the schema; .catch keeps a DB hiccup from breaking the live response.
-      if (isCrypto) await upsertOHLCV(data).catch(() => {});
+      // Persist to the durable backend. Await so the write completes before the
+      // serverless function freezes (fire-and-forget gets killed on Vercel).
+      if (isCrypto) {
+        if (hasNeon()) await writeOHLCVNeon(data as any).catch(() => {});
+        else await upsertOHLCV(data).catch(() => {});
+      }
       // Detect if we fell back to daily (market closed for intraday request)
       const isIntradayRequest = !['1d','2d','3d','1w','2w','1M','3M','6M','12M'].includes(timeframe);
       const isFallbackDaily = isIntradayRequest && data[0]?.timeframe === '1d';

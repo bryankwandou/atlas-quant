@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBinanceOHLCV } from '@/src/lib/marketRouter';
 import { upsertOHLCV } from '@/src/services/supabase';
+import { hasNeon, writeOHLCVNeon } from '@/src/services/ohlcvStore';
 
 /**
  * Vercel Cron · /api/cron/tick-1s  (Solution 2 — 1-second live buffer)
@@ -46,7 +47,8 @@ export async function GET(req: NextRequest) {
         perSymbol.push({ symbol, fetched: 0, stored: false, error: 'no data' });
         continue;
       }
-      await upsertOHLCV(candles); // throws on real DB error (no longer swallowed here)
+      if (hasNeon()) await writeOHLCVNeon(candles as any);
+      else await upsertOHLCV(candles);
       totalStored += candles.length;
       perSymbol.push({ symbol, fetched: candles.length, stored: true });
     } catch (e: any) {

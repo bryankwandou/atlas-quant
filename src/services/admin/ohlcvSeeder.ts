@@ -8,6 +8,7 @@
  */
 
 import { supabaseAuthAdmin } from '@/src/services/supabase-auth';
+import { hasNeon, writeOHLCVNeon } from '@/src/services/ohlcvStore';
 
 const DEFAULT_SYMBOLS = [
   // Crypto majors
@@ -81,19 +82,25 @@ export async function seedOhlcv(opts: { symbols?: string[]; timeframes?: string[
           trades_count: 0,
         }));
 
-        // Upsert in chunks of 200 to keep payload small
-        const chunk = 200;
+        // Persist to durable backend (Neon if configured, else Supabase)
         let ok = 0;
-        for (let i = 0; i < rows.length; i += chunk) {
-          const slice = rows.slice(i, i + chunk);
-          const { error } = await supabaseAuthAdmin
-            .from('market_ohlcv')
-            .upsert(slice, { onConflict: 'symbol,timeframe,open_time', ignoreDuplicates: false });
-          if (error) {
-            result.errors.push({ symbol: sym, timeframe: tf, error: error.message });
-            break;
+        if (hasNeon()) {
+          const n = await writeOHLCVNeon(rows as any);
+          ok = n > 0 ? n : 0;
+          if (n < 0) result.errors.push({ symbol: sym, timeframe: tf, error: 'neon write skipped' });
+        } else {
+          const chunk = 200;
+          for (let i = 0; i < rows.length; i += chunk) {
+            const slice = rows.slice(i, i + chunk);
+            const { error } = await supabaseAuthAdmin
+              .from('market_ohlcv')
+              .upsert(slice, { onConflict: 'symbol,timeframe,open_time', ignoreDuplicates: false });
+            if (error) {
+              result.errors.push({ symbol: sym, timeframe: tf, error: error.message });
+              break;
+            }
+            ok += slice.length;
           }
-          ok += slice.length;
         }
         result.inserted += ok;
         result.perSymbol.push({ symbol: sym, timeframe: tf, inserted: ok, source: multi.source });
