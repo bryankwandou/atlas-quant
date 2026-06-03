@@ -97,10 +97,12 @@ async function generateAndReturn(
   shouldSave: boolean,
   userPubkey?: string,
 ): Promise<Response> {
-  // Fetch candles and macro data in parallel
+  // Fetch candles and macro data in parallel.
+  // Macro aggregates 6 slow external sources — cap it at 8s and fall back to a
+  // neutral macro so signal EXECUTION never hangs/times out.
   const [candles, macroData] = await Promise.all([
     routeOHLCV(symbol, timeframe, 200),
-    getAllMacroData(),
+    macroWithTimeout(8000),
   ]);
 
   if (!candles || candles.length < 50) {
@@ -179,6 +181,25 @@ async function generateAndReturn(
       },
     },
   });
+}
+
+// Neutral macro fallback (mirrors getAllMacroData's per-source defaults) so a
+// slow external source can never stall signal execution.
+const NEUTRAL_MACRO: any = {
+  fearGreed: { value: 50, label: 'Neutral', timestamp: Date.now() },
+  macro: { fedFundsRate: 5.33, yieldCurve10y2y: -0.2, unemploymentRate: 4.1, cpi: 3.5, dollarIndex: 104.5 },
+  weather: { temperature: 20, windspeed: 10, weathercode: 0, riskScore: 5 },
+  geopolitical: { score: 30, events: [], trend: 'stable' },
+  calendar: { events: [], hasHighImpactToday: false },
+  centralBank: [],
+  macroScore: 50, marketBias: 'NEUTRAL', riskLevel: 'MEDIUM', ts: Date.now(),
+};
+
+function macroWithTimeout(ms: number): Promise<any> {
+  return Promise.race([
+    getAllMacroData().catch(() => NEUTRAL_MACRO),
+    new Promise((res) => setTimeout(() => res(NEUTRAL_MACRO), ms)),
+  ]);
 }
 
 function getSignalTTL(tf: string): number {
