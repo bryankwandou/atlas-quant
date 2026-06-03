@@ -50,8 +50,8 @@ const BINANCE_INTERVAL_MAP: Record<string, string> = {
   '5s':  '1s',   // fetch 1s, client aggregates to 5s
   '10s': '1s',   // fetch 1s, client aggregates to 10s
   '15s': '1s',   // fetch 1s, client aggregates to 15s
-  '30s': '1s',   // fetch 1s, client aggregates to 30s
-  '45s': '1m',   // closest native Binance interval
+  '30s': '1s',   // fetch 1s, aggregate to 30s
+  '45s': '1s',   // fetch 1s, aggregate to 45s
   '1m':  '1m',
   '2m':  '1m',   // fetch 1m, aggregate to 2m
   '3m':  '3m',
@@ -180,6 +180,28 @@ function ccEndpoint(interval: string): { endpoint: string; aggregate: number } {
 // sub-minute data and previously DEFAULTED to 15m — silently returning
 // 15-minute candles mislabeled as 1s/5s/15s/30s/45s. Return empty instead.
 const SUB_MINUTE = new Set(['1s', '5s', '10s', '15s', '30s', '45s']);
+
+// Sub-minute aggregation factors (built from a 1s base). 1s itself is the base.
+const SUBMIN_SECONDS: Record<string, number> = { '5s': 5, '10s': 10, '15s': 15, '30s': 30, '45s': 45 };
+
+/** Aggregate 1s base candles into N-second OHLCV buckets. */
+function aggregateSeconds(base: OHLCVCandle[], sec: number, interval: string): OHLCVCandle[] {
+  const ms = sec * 1000;
+  const m = new Map<number, OHLCVCandle>();
+  for (const k of base) {
+    const bt = Math.floor(k.open_time / ms) * ms;
+    const e = m.get(bt);
+    if (!e) {
+      m.set(bt, { ...k, timeframe: interval, open_time: bt, close_time: bt + ms - 1 });
+    } else {
+      e.high = Math.max(e.high, k.high);
+      e.low = Math.min(e.low, k.low);
+      e.close = k.close;
+      e.volume += k.volume;
+    }
+  }
+  return [...m.values()].sort((a, b) => a.open_time - b.open_time);
+}
 
 async function getCryptoCompareOHLCV(pair: string, interval: string, limit: number): Promise<OHLCVCandle[]> {
   if (SUB_MINUTE.has(interval)) return [];
@@ -311,35 +333,34 @@ export async function getBinanceOHLCV(
   const BINANCE_MAX = 1000; // Binance hard limit per call
   const MAX_PAGES   = 5;    // cap at 5 pages = 5000 bars to avoid Vercel timeouts
 
-  // For sub-minute intervals, Binance 1s API only stores ~few hours of history.
-  // Don't paginate — just take what's available.
-  const subMinute = ['1s', '5s', '10s', '15s', '30s', '45s'].includes(interval);
-  const effectiveLimit = Math.min(limit, subMinute ? BINANCE_MAX : MAX_PAGES * BINANCE_MAX);
+  const aggSec = SUBMIN_SECONDS[interval]; // 5/10/15/30/45 → aggregate from 1s base
+  // For aggregated sub-minute, fetch enough 1s base to yield ~limit bars.
+  const baseNeeded = aggSec
+    ? Math.min(limit * aggSec, MAX_PAGES * BINANCE_MAX)
+    : Math.min(limit, interval === '1s' ? MAX_PAGES * BINANCE_MAX : MAX_PAGES * BINANCE_MAX);
 
-  if (effectiveLimit <= BINANCE_MAX) {
-    // Single call path
-    const raw = await fetchBinancePage(pair, binanceInterval, effectiveLimit);
-    if (raw.length > 0) return raw.map(k => rawToCandle(k, pair, interval));
+  let base: OHLCVCandle[] = [];
+  if (baseNeeded <= BINANCE_MAX) {
+    const raw = await fetchBinancePage(pair, binanceInterval, baseNeeded);
+    if (raw.length > 0) base = raw.map(k => rawToCandle(k, pair, interval));
   } else {
     // Multi-page paginated fetch — pages backward from now to build full history
-    const allCandles: OHLCVCandle[] = [];
     let endTime: number | undefined;
-    let remaining = effectiveLimit;
-
-    while (remaining > 0 && allCandles.length < effectiveLimit) {
+    let remaining = baseNeeded;
+    while (remaining > 0 && base.length < baseNeeded) {
       const pageSize = Math.min(remaining, BINANCE_MAX);
       const raw = await fetchBinancePage(pair, binanceInterval, pageSize, endTime);
       if (raw.length === 0) break;
-
-      const batch = raw.map(k => rawToCandle(k, pair, interval));
-      allCandles.unshift(...batch);           // prepend older data to the front
-      endTime = raw[0][0] - 1;               // next page: end just before oldest bar
-      remaining -= batch.length;
-
-      if (batch.length < pageSize) break;    // no more historical data available
+      base.unshift(...raw.map(k => rawToCandle(k, pair, interval)));
+      endTime = raw[0][0] - 1;
+      remaining -= raw.length;
+      if (raw.length < pageSize) break;
     }
+  }
 
-    if (allCandles.length > 0) return allCandles.slice(-limit);
+  if (base.length > 0) {
+    if (aggSec) return aggregateSeconds(base, aggSec, interval).slice(-limit);
+    return base.slice(-limit);
   }
 
   // All Binance endpoints failed → CryptoCompare (unlimited history) → OKX (300 max)
