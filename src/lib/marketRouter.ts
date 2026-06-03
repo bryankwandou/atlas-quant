@@ -1,8 +1,12 @@
 import { detectAssetClass } from '@/src/data/symbolCatalog';
 
-// Binance backup endpoints — api.binance.com often geo-blocked on Vercel US
+// Binance endpoints. api*.binance.com are geo-blocked (HTTP 451) from Vercel/
+// GitHub datacenters; data-api.binance.vision is Binance's PUBLIC market-data
+// endpoint that is NOT geo-restricted — so it goes first and unblocks
+// klines/ticker from any datacenter.
 const BINANCE_BASES = [
   process.env.BINANCE_BASE_URL || '',
+  'https://data-api.binance.vision/api/v3',
   'https://api4.binance.com/api/v3',
   'https://api3.binance.com/api/v3',
   'https://api2.binance.com/api/v3',

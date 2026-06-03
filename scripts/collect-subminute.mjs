@@ -21,7 +21,8 @@ if (!DB || !DB.includes('neon.tech')) { console.error('No Neon DATABASE_URL'); p
 const sql = neon(DB);
 
 const SYMBOLS = (process.env.SYMBOLS || 'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT').split(',');
-const BINANCE = ['https://api4.binance.com/api/v3','https://api3.binance.com/api/v3','https://api1.binance.com/api/v3','https://api.binance.com/api/v3'];
+// data-api.binance.vision is NOT geo-blocked (works from GitHub/Vercel runners)
+const BINANCE = ['https://data-api.binance.vision/api/v3','https://api4.binance.com/api/v3','https://api3.binance.com/api/v3','https://api.binance.com/api/v3'];
 const PAGES = Number(process.env.PAGES || 8); // 8*1000 = 8000s ≈ 2.2h of 1s per run
 
 async function fetch1s(sym) {
