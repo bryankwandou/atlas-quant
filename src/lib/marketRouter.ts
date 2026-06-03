@@ -47,8 +47,9 @@ export interface PriceData {
 /** Maps internal timeframe strings to Binance kline intervals */
 const BINANCE_INTERVAL_MAP: Record<string, string> = {
   '1s':  '1s',
-  '15s': '1m',
-  '30s': '1m',
+  '15s': '1s',
+  '30s': '1s',
+  '45s': '1s',
   '1m':  '1m',
   '3m':  '3m',
   '5m':  '5m',

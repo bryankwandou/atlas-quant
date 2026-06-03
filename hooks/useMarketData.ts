@@ -16,7 +16,7 @@ const fetcher = (url: string) => fetch(url).then(r => {
 /** Returns a limit appropriate for the timeframe — enough history without waste. */
 function getLimit(tf: string): number {
   const map: Record<string, number> = {
-    '1s': 500, '15s': 500, '30s': 500,
+    '1s': 500, '15s': 500, '30s': 500, '45s': 500,
     '1m': 1000, '3m': 1000, '5m': 1000,
     '10m': 1000, '15m': 1000, '30m': 1000, '45m': 1000,
     '1h': 1500, '2h': 1500, '3h': 1000, '4h': 2000,
@@ -211,9 +211,10 @@ export function useRegime(
 
 function getRefreshInterval(tf: string): number {
   const map: Record<string, number> = {
-    '1s':   2_000,
+    '1s':   1_000,
     '15s':  15_000,
     '30s':  30_000,
+    '45s':  45_000,
     '1m':   60_000,
     '3m':   180_000,
     '5m':   300_000,

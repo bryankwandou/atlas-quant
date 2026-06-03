@@ -74,7 +74,7 @@ const IconKeyboard = ({ size = 15 }: { size?: number }) => (
 // ── Config matching ATLAS-QUANT DARURAT HUKUM dashboard-config.js ─────────────
 const QUICK_TFS = ['1s', '1m', '5m', '15m', '1h', '4h', '1d'];
 const TF_GROUPS = [
-  { g: 'seconds', tfs: ['1s', '15s', '30s'] },
+  { g: 'seconds', tfs: ['1s', '15s', '30s', '45s'] },
   { g: 'minutes', tfs: ['1m', '3m', '5m', '15m', '30m'] },
   { g: 'hours',   tfs: ['1h', '2h', '4h', '12h'] },
   { g: 'days',    tfs: ['1d', '1w'] },

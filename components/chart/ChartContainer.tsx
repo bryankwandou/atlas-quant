@@ -49,7 +49,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
 
   const { theme }                        = useTheme();
   const { candles, isLoading, marketClosed } = useMarketData(symbol, timeframe);
-  const { activeIndicators, showSignals, chartType, setChartType, subPanel, setSubPanel } = useChartStore();
+  const { activeIndicators, showSignals, chartType, setChartType, subPanel, setSubPanel, timezone } = useChartStore();
 
   // Stable ref for candles — prevents buildCharts from re-running on every SWR poll
   // (SWR creates a new array reference on each successful fetch even with same data)
@@ -132,16 +132,26 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     });
   }, [panelPct]);
 
+  // Timezone offset in seconds for chart display
+  const tzOffsetSec = timezone === 'utc' ? 0 : timezone === 'gmt+7' ? 7 * 3600 : -(new Date().getTimezoneOffset() * 60);
+
   const baseOpts = useCallback((el: HTMLDivElement) => ({
     layout: { background: { type: ColorType.Solid, color: tk.bg }, textColor: tk.text2, fontFamily: 'Roboto Mono, monospace', fontSize: 10, attributionLogo: false },
     grid:   { vertLines: { color: tk.grid, style: 1 }, horzLines: { color: tk.grid, style: 1 } },
     crosshair: { mode: 1, vertLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true }, horzLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true } },
     rightPriceScale: { borderColor: tk.border, textColor: tk.text2 },
-    timeScale: { borderColor: tk.border, textColor: tk.text2, timeVisible: !['1M','3M','6M','12M'].includes(timeframe), secondsVisible: ['1s','15s','30s'].includes(timeframe), rightOffset: 10, lockVisibleTimeRangeOnResize: true },
+    timeScale: { borderColor: tk.border, textColor: tk.text2, timeVisible: !['1M','3M','6M','12M'].includes(timeframe), secondsVisible: ['1s','15s','30s','45s'].includes(timeframe), rightOffset: 10, lockVisibleTimeRangeOnResize: true },
+    localization: {
+      timeFormatter: (t: number) => {
+        const d = new Date((t + tzOffsetSec) * 1000);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+      },
+    },
     handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     handleScale:  { mouseWheel: true, pinch: true, axisPressedMouseMove: { time: true, price: true } },
     width: el.clientWidth || 800, height: el.clientHeight || 400,
-  }), [tk, timeframe]);
+  }), [tk, timeframe, tzOffsetSec]);
 
   const buildCharts = useCallback(() => {
     if (chartsRef.current._obs) chartsRef.current._obs.disconnect();

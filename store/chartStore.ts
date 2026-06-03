@@ -61,6 +61,7 @@ interface ChartStore {
   showIndicatorModal: boolean;
   fibConfig: FibConfig;
   superRefresh: boolean;
+  timezone: 'local' | 'utc' | 'gmt+7';
 
   setSymbol: (s: string) => void;
   setTimeframe: (tf: string) => void;
@@ -84,6 +85,7 @@ interface ChartStore {
   openIndicatorModal: () => void;
   closeIndicatorModal: () => void;
   toggleSuperRefresh: () => void;
+  setTimezone: (tz: 'local' | 'utc' | 'gmt+7') => void;
 }
 
 export const useChartStore = create<ChartStore>()(
@@ -101,6 +103,7 @@ export const useChartStore = create<ChartStore>()(
       showIndicatorModal: false,
       fibConfig: DEFAULT_FIB_CONFIG,
       superRefresh: false,
+      timezone: 'utc',
 
       setSymbol:    (symbol)    => set({ symbol }),
       setTimeframe: (timeframe) => set({ timeframe }),
@@ -153,6 +156,7 @@ export const useChartStore = create<ChartStore>()(
       setRightPanelTab: (rightPanelTab) => set({ rightPanelTab }),
       setSubPanel: (subPanel) => set({ subPanel }),
       toggleSuperRefresh: () => set(s => ({ superRefresh: !s.superRefresh })),
+      setTimezone: (timezone) => set({ timezone }),
 
       toggleIndicatorModal: () => set(s => ({ showIndicatorModal: !s.showIndicatorModal })),
       openIndicatorModal:   () => set({ showIndicatorModal: true }),

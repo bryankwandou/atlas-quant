@@ -608,6 +608,8 @@ select{cursor:pointer;}
 .sb-regime-label.down{color:var(--aq-down)!important;}
 .sb-regime-label.neutral{color:var(--aq-neutral)!important;}
 .sb-warning{color:var(--aq-neutral);font-size:9px;white-space:nowrap;opacity:.9;}
+.sb-tz-btn{background:var(--aq-bg3);border:1px solid var(--aq-border);border-radius:3px;color:var(--aq-text2);font-size:9px;padding:1px 5px;cursor:pointer;font-family:'Roboto Mono',monospace;transition:all .12s;}
+.sb-tz-btn:hover{color:var(--aq-blue);border-color:var(--aq-blue);background:var(--aq-blue-light);}
 
 /* ── Suppress LWC TradingView attribution watermark ─────── */
 .chart-panel a[href*="tradingview"],
