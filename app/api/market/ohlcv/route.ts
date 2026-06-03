@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const symbol    = searchParams.get('symbol') || 'BTCUSDT';
   const timeframe = searchParams.get('timeframe') || '15m';
-  const limit     = Math.min(parseInt(searchParams.get('limit') || '1000'), 5000);
+  const limit     = Math.min(parseInt(searchParams.get('limit') || '1000'), 10000);
 
   const isCrypto = /^[A-Z0-9]+(USDT|BTC|ETH|BNB)$/i.test(symbol);
 

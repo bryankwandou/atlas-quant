@@ -358,14 +358,14 @@ export default function RightPanel() {
     ? ((lastC.high - lastC.low) / (prevC.high - prevC.low) * 100 - 100)
     : null;
 
-  const VALID_TABS = ['signal', 'watchlist', 'ai', 'risk'];
+  const VALID_TABS = ['signal', 'watchlist', 'ai', 'risk', 'data', 'calendar', 'news', 'alerts', 'plan', 'objects', 'pine', 'keyboard', 'help'];
   const activeTab = VALID_TABS.includes(rightPanelTab) ? rightPanelTab : 'signal';
 
   const tabs = [
-    { id: 'signal',    label: 'Sinyal',   icon: null },
-    { id: 'watchlist', label: 'Pantauan', icon: null },
-    { id: 'ai',        label: 'AI',       icon: null },
-    { id: 'risk',      label: 'Risiko',   icon: null },
+    { id: 'signal',    label: 'Sinyal'   },
+    { id: 'watchlist', label: 'Pantauan' },
+    { id: 'ai',        label: 'AI'       },
+    { id: 'risk',      label: 'Risiko'   },
   ];
 
   // ── Risk param keys aligned to userStore ────────────────────────────────
@@ -739,6 +739,80 @@ export default function RightPanel() {
               <Power size={14} />
               <span>{killActive ? 'Deactivate Kill Switch' : 'Kill Switch (Stop All)'}</span>
             </button>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════════════════
+            DATA WINDOW TAB
+        ════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'data' && (
+          <div className="rp-data-window">
+            <div className="section-hdr">Data Window</div>
+            {lastC ? (
+              <div className="t1mo-table">
+                {[
+                  { label: 'Open',   val: lastC.open },
+                  { label: 'High',   val: lastC.high },
+                  { label: 'Low',    val: lastC.low  },
+                  { label: 'Close',  val: lastC.close },
+                  { label: 'Volume', val: lastC.volume },
+                ].map(({ label, val }) => (
+                  <div key={label} className="t1mo-row">
+                    <span className="t1mo-label">{label}</span>
+                    <span className="t1mo-col-l mono">{fmt(val, 4)}</span>
+                  </div>
+                ))}
+                {indValues && (
+                  <>
+                    <div className="t1mo-row"><span className="t1mo-label">RSI(14)</span><span className="t1mo-col-l mono">{fmt(indValues.rsi, 2)}</span></div>
+                    <div className="t1mo-row"><span className="t1mo-label">RSI(7)</span><span className="t1mo-col-l mono">{fmt(indValues.rsi7, 2)}</span></div>
+                    <div className="t1mo-row"><span className="t1mo-label">MACD</span><span className="t1mo-col-l mono">{fmt(indValues.macd, 4)}</span></div>
+                    <div className="t1mo-row"><span className="t1mo-label">ADX(14)</span><span className="t1mo-col-l mono">{fmt(indValues.adx, 2)}</span></div>
+                    <div className="t1mo-row"><span className="t1mo-label">ATR(14)</span><span className="t1mo-col-l mono">{fmt(indValues.atr, 4)}</span></div>
+                    <div className="t1mo-row"><span className="t1mo-label">VWAP</span><span className="t1mo-col-l mono">{fmt(indValues.vwap, 2)}</span></div>
+                    <div className="t1mo-row"><span className="t1mo-label">EMA(9)</span><span className="t1mo-col-l mono">{fmt(indValues.ema9, 2)}</span></div>
+                    <div className="t1mo-row"><span className="t1mo-label">EMA(21)</span><span className="t1mo-col-l mono">{fmt(indValues.ema21, 2)}</span></div>
+                    <div className="t1mo-row"><span className="t1mo-label">EMA(50)</span><span className="t1mo-col-l mono">{fmt(indValues.ema50, 2)}</span></div>
+                    <div className="t1mo-row"><span className="t1mo-label">BB Width</span><span className="t1mo-col-l mono">{fmt(indValues.bbBw, 4)}</span></div>
+                    <div className="t1mo-row"><span className="t1mo-label">VWAP Δ</span><span className={`t1mo-col-l mono ${indValues.vwapDelta >= 0 ? 'up' : 'down'}`}>{indValues.vwapDelta >= 0 ? '+' : ''}{fmt(indValues.vwapDelta, 2)}%</span></div>
+                    <div className="t1mo-row"><span className="t1mo-label">Vol Spike</span><span className={`t1mo-col-l mono ${indValues.volSpike ? 'up' : ''}`}>{indValues.volSpike ? 'YES' : 'no'}</span></div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="rp-no-data"><span>Tidak ada data candle</span></div>
+            )}
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════════════════
+            CALENDAR / NEWS / ALERTS / MISC TABS — functional stubs
+        ════════════════════════════════════════════════════════════════ */}
+        {['calendar', 'news', 'alerts', 'plan', 'objects', 'pine', 'keyboard', 'help'].includes(activeTab) && (
+          <div style={{ padding: '16px 12px' }}>
+            <div className="section-hdr" style={{ textTransform: 'capitalize' }}>{activeTab}</div>
+            <div style={{ color: 'var(--aq-text2)', fontSize: 11, lineHeight: 1.6, marginTop: 8 }}>
+              {activeTab === 'calendar' && 'Economic Calendar — data coming soon. Upcoming events: FOMC, CPI, NFP.'}
+              {activeTab === 'news'     && 'News Flow — live crypto news feed akan tersedia setelah integrasi API berita selesai.'}
+              {activeTab === 'alerts'   && 'Alerts — fitur price alert akan tersedia. Klik tombol Alert di TopBar untuk membuat alert baru.'}
+              {activeTab === 'plan'     && 'Trading Plan — buat dan simpan rencana trade Anda di sini (coming soon).'}
+              {activeTab === 'objects'  && 'Object Tree — daftar semua drawing objects di chart akan tampil di sini.'}
+              {activeTab === 'pine'     && 'Script Editor — Pine Script editor akan tersedia di versi berikutnya.'}
+              {activeTab === 'keyboard' && (
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 8 }}>Keyboard Shortcuts</div>
+                  {[['Alt+1', 'Candlestick'],['Alt+2', 'Bar Chart'],['Alt+3', 'Line'],['Alt+4', 'Area'],
+                    ['Ctrl+Z', 'Undo drawing'],['Esc', 'Cancel drawing'],['F', 'Fit content'],
+                    ['⚡', 'Super Refresh 1s'],].map(([k, v]) => (
+                    <div key={k} style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
+                      <kbd style={{ background: 'var(--aq-bg3)', padding: '1px 5px', borderRadius: 3, fontSize: 10, fontFamily: 'monospace' }}>{k}</kbd>
+                      <span>{v}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {activeTab === 'help'     && 'Dokumentasi ATLAS-QUANT tersedia di GitHub. Hubungi support untuk bantuan lebih lanjut.'}
+            </div>
           </div>
         )}
 

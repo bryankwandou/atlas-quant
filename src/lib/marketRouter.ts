@@ -47,30 +47,36 @@ export interface PriceData {
 /** Maps internal timeframe strings to Binance kline intervals */
 const BINANCE_INTERVAL_MAP: Record<string, string> = {
   '1s':  '1s',
-  '15s': '1s',
-  '30s': '1s',
-  '45s': '1s',
+  '5s':  '1s',   // fetch 1s, client aggregates to 5s
+  '10s': '1s',   // fetch 1s, client aggregates to 10s
+  '15s': '1s',   // fetch 1s, client aggregates to 15s
+  '30s': '1s',   // fetch 1s, client aggregates to 30s
+  '45s': '1m',   // closest native Binance interval
   '1m':  '1m',
+  '2m':  '1m',   // fetch 1m, aggregate to 2m
   '3m':  '3m',
   '5m':  '5m',
-  '10m': '15m',  // no 10m on Binance; closest is 15m
+  '10m': '5m',   // fetch 5m, aggregate to 10m
   '15m': '15m',
   '30m': '30m',
-  '45m': '30m',  // no 45m on Binance; closest is 30m
+  '45m': '30m',  // closest native Binance interval
   '1h':  '1h',
   '2h':  '2h',
-  '3h':  '2h',   // no 3h on Binance; closest is 2h
+  '3h':  '2h',   // closest native Binance interval
   '4h':  '4h',
   '6h':  '6h',
   '8h':  '8h',
   '12h': '12h',
+  '18h': '12h',  // closest native Binance interval
   '1d':  '1d',
   '2d':  '3d',
   '3d':  '3d',
+  '5d':  '3d',   // closest native Binance interval
   '1w':  '1w',
   '2w':  '1w',
+  '3w':  '1w',
   '1M':  '1M',
-  '3M':  '1M',   // aggregate monthly
+  '3M':  '1M',
   '6M':  '1M',
   '12M': '1M',
 };
@@ -247,7 +253,47 @@ const intervalMsMap: Record<string, number> = {
   '1d':86400000,'1w':604800000,'1M':2592000000,
 };
 
-// ─── Binance (with multi-endpoint fallback → OKX → CryptoCompare) ────────────
+// ─── Binance single-page fetch (internal helper) ─────────────────────────────
+
+async function fetchBinancePage(
+  pair: string,
+  binanceInterval: string,
+  pageLimit: number,
+  endTime?: number
+): Promise<any[][]> {
+  let urlSuffix = `klines?symbol=${pair.toUpperCase()}&interval=${binanceInterval}&limit=${pageLimit}`;
+  if (endTime) urlSuffix += `&endTime=${endTime}`;
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 4000);
+  try {
+    const raw = await Promise.any(
+      BINANCE_BASES.map(async base => {
+        const res = await fetch(`${base}/${urlSuffix}`, { cache: 'no-store', signal: ctrl.signal });
+        if (!res.ok) throw new Error('not ok');
+        const data: any[][] = await res.json();
+        if (!Array.isArray(data) || data.length === 0) throw new Error('empty');
+        return data;
+      })
+    );
+    clearTimeout(timer);
+    return raw;
+  } catch {
+    clearTimeout(timer);
+    return [];
+  }
+}
+
+function rawToCandle(k: any[], pair: string, interval: string): OHLCVCandle {
+  return {
+    symbol: pair.toUpperCase(), asset_class: 'crypto', timeframe: interval,
+    open_time: k[0], open: parseFloat(k[1]), high: parseFloat(k[2]),
+    low: parseFloat(k[3]), close: parseFloat(k[4]), volume: parseFloat(k[5]),
+    close_time: k[6], quote_volume: parseFloat(k[7]), trades_count: Number(k[8]),
+  };
+}
+
+// ─── Binance (with multi-endpoint fallback → CryptoCompare → OKX) ─────────────
 
 export async function getBinanceOHLCV(
   pair: string,
@@ -255,32 +301,41 @@ export async function getBinanceOHLCV(
   limit: number
 ): Promise<OHLCVCandle[]> {
   const binanceInterval = BINANCE_INTERVAL_MAP[interval] || '15m';
+  const BINANCE_MAX = 1000; // Binance hard limit per call
+  const MAX_PAGES   = 5;    // cap at 5 pages = 5000 bars to avoid Vercel timeouts
 
-  // Race all Binance endpoints simultaneously — 2s global timeout
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 2000);
+  // For sub-minute intervals, Binance 1s API only stores ~few hours of history.
+  // Don't paginate — just take what's available.
+  const subMinute = ['1s', '5s', '10s', '15s', '30s', '45s'].includes(interval);
+  const effectiveLimit = Math.min(limit, subMinute ? BINANCE_MAX : MAX_PAGES * BINANCE_MAX);
 
-  try {
-    const result = await Promise.any(
-      BINANCE_BASES.map(async base => {
-        const url = `${base}/klines?symbol=${pair.toUpperCase()}&interval=${binanceInterval}&limit=${limit}`;
-        const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
-        if (!res.ok) throw new Error('not ok');
-        const raw: any[][] = await res.json();
-        if (!Array.isArray(raw) || raw.length === 0) throw new Error('empty');
-        return raw.map((k) => ({
-          symbol: pair.toUpperCase(), asset_class: 'crypto', timeframe: interval,
-          open_time: k[0], open: parseFloat(k[1]), high: parseFloat(k[2]),
-          low: parseFloat(k[3]), close: parseFloat(k[4]), volume: parseFloat(k[5]),
-          close_time: k[6], quote_volume: parseFloat(k[7]), trades_count: Number(k[8]),
-        }));
-      })
-    );
-    clearTimeout(timer);
-    return result;
-  } catch { clearTimeout(timer); }
+  if (effectiveLimit <= BINANCE_MAX) {
+    // Single call path
+    const raw = await fetchBinancePage(pair, binanceInterval, effectiveLimit);
+    if (raw.length > 0) return raw.map(k => rawToCandle(k, pair, interval));
+  } else {
+    // Multi-page paginated fetch — pages backward from now to build full history
+    const allCandles: OHLCVCandle[] = [];
+    let endTime: number | undefined;
+    let remaining = effectiveLimit;
 
-  // All Binance endpoints failed/timed out → CryptoCompare (unlimited history) → OKX (300 max)
+    while (remaining > 0 && allCandles.length < effectiveLimit) {
+      const pageSize = Math.min(remaining, BINANCE_MAX);
+      const raw = await fetchBinancePage(pair, binanceInterval, pageSize, endTime);
+      if (raw.length === 0) break;
+
+      const batch = raw.map(k => rawToCandle(k, pair, interval));
+      allCandles.unshift(...batch);           // prepend older data to the front
+      endTime = raw[0][0] - 1;               // next page: end just before oldest bar
+      remaining -= batch.length;
+
+      if (batch.length < pageSize) break;    // no more historical data available
+    }
+
+    if (allCandles.length > 0) return allCandles.slice(-limit);
+  }
+
+  // All Binance endpoints failed → CryptoCompare (unlimited history) → OKX (300 max)
   const cc = await getCryptoCompareOHLCV(pair, interval, limit);
   if (cc.length > 0) return cc;
   return getOKXOHLCV(pair, interval, limit);

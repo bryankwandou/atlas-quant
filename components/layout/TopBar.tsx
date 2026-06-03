@@ -74,11 +74,19 @@ const IconKeyboard = ({ size = 15 }: { size?: number }) => (
 // ── Config matching ATLAS-QUANT DARURAT HUKUM dashboard-config.js ─────────────
 const QUICK_TFS = ['1s', '1m', '5m', '15m', '1h', '4h', '1d'];
 const TF_GROUPS = [
-  { g: 'seconds', tfs: ['1s', '15s', '30s', '45s'] },
-  { g: 'minutes', tfs: ['1m', '3m', '5m', '15m', '30m'] },
-  { g: 'hours',   tfs: ['1h', '2h', '4h', '12h'] },
-  { g: 'days',    tfs: ['1d', '1w'] },
+  { g: 'seconds', tfs: ['1s', '5s', '10s', '15s', '30s', '45s'] },
+  { g: 'minutes', tfs: ['1m', '2m', '3m', '5m', '10m', '15m', '30m', '45m'] },
+  { g: 'hours',   tfs: ['1h', '2h', '4h', '8h', '12h', '18h'] },
+  { g: 'days',    tfs: ['1d', '2d', '3d', '5d'] },
+  { g: 'weeks',   tfs: ['1w', '2w', '3w'] },
+  { g: 'months',  tfs: ['1M', '3M', '6M', '12M'] },
 ];
+
+const TZ_OPTIONS = [
+  { id: 'utc',    label: 'UTC +0' },
+  { id: 'gmt+7',  label: 'GMT+7 (WIB)' },
+  { id: 'local',  label: 'Local' },
+] as const;
 
 const WATCHLIST_DEFAULTS = [
   { symbol: 'BTCUSDT',  name: 'Bitcoin',  exchange: 'BINANCE' },
@@ -97,16 +105,19 @@ export default function TopBar() {
     symbol, timeframe, setSymbol, setTimeframe,
     activeIndicators, openIndicatorModal,
     superRefresh, toggleSuperRefresh,
+    timezone, setTimezone,
   } = useChartStore();
   const { priceData } = useMarketPrice(symbol);
 
   const [showSym, setShowSym]         = useState(false);
   const [showTF, setShowTF]           = useState(false);
+  const [showTZ, setShowTZ]           = useState(false);
   const [search, setSearch]           = useState('');
   const [searchResults, setResults]   = useState<any[]>(WATCHLIST_DEFAULTS);
   const searchRef  = useRef<HTMLInputElement>(null);
   const symRef     = useRef<HTMLDivElement>(null);
   const tfRef      = useRef<HTMLDivElement>(null);
+  const tzRef      = useRef<HTMLDivElement>(null);
 
   const price  = priceData?.price    ?? 0;
   const change = priceData?.change24h ?? 0;
@@ -146,6 +157,9 @@ export default function TopBar() {
       }
       if (tfRef.current && !tfRef.current.contains(e.target as Node)) {
         setShowTF(false);
+      }
+      if (tzRef.current && !tzRef.current.contains(e.target as Node)) {
+        setShowTZ(false);
       }
     };
     document.addEventListener('mousedown', h);
@@ -352,6 +366,45 @@ export default function TopBar() {
           <Zap size={14} />
           {superRefresh && <span className="tb-sr-label">1s</span>}
         </button>
+
+        {/* ── Timezone Selector ── */}
+        <div style={{ position: 'relative' }} ref={tzRef}>
+          <button
+            className="tb-lang-btn"
+            title="Timezone / UTC offset"
+            onClick={() => setShowTZ(v => !v)}
+            style={{ gap: 3, minWidth: 56 }}
+          >
+            <Globe size={11} />
+            <span style={{ fontSize: 10, fontWeight: 600 }}>
+              {TZ_OPTIONS.find(o => o.id === timezone)?.label ?? 'UTC +0'}
+            </span>
+          </button>
+          {showTZ && (
+            <div style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: 4,
+              background: 'var(--aq-bg2)', border: '1px solid var(--aq-border)',
+              borderRadius: 6, zIndex: 999, minWidth: 130, boxShadow: '0 4px 16px rgba(0,0,0,.4)',
+            }}>
+              {TZ_OPTIONS.map(opt => (
+                <div
+                  key={opt.id}
+                  onClick={() => { setTimezone(opt.id); setShowTZ(false); }}
+                  style={{
+                    padding: '7px 14px', fontSize: 11, cursor: 'pointer',
+                    color: timezone === opt.id ? 'var(--aq-accent)' : 'var(--aq-text)',
+                    fontWeight: timezone === opt.id ? 700 : 400,
+                    background: timezone === opt.id ? 'rgba(123,97,255,.1)' : 'transparent',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(123,97,255,.08)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = timezone === opt.id ? 'rgba(123,97,255,.1)' : 'transparent')}
+                >
+                  {opt.label}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="tv-sep" />
 

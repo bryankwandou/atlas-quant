@@ -35,13 +35,14 @@ export async function GET(req: NextRequest) {
     // Lean basket on cron schedule (full basket only on manual admin click)
     const symbols = [
       'BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT',
+      'ADAUSDT','DOGEUSDT','MATICUSDT','LTCUSDT','LINKUSDT',
       'AAPL','MSFT','TSLA','NVDA','SPY','QQQ',
       'EURUSD=X','^GSPC','^VIX','GC=F','CL=F',
     ];
     const result = await seedOhlcv({
       symbols,
-      timeframes: ['1h','4h','1d'],
-      perSymbolLimit: 200,
+      timeframes: ['15m','1h','4h','1d'],
+      perSymbolLimit: 5000,
     });
     return NextResponse.json({
       cron: 'auto-seed',

@@ -132,26 +132,49 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     });
   }, [panelPct]);
 
-  // Timezone offset in seconds for chart display
-  const tzOffsetSec = timezone === 'utc' ? 0 : timezone === 'gmt+7' ? 7 * 3600 : -(new Date().getTimezoneOffset() * 60);
+  // Timezone IANA name for Intl.DateTimeFormat
+  const tzName = timezone === 'utc' ? 'UTC' : timezone === 'gmt+7' ? 'Asia/Jakarta' : undefined;
 
-  const baseOpts = useCallback((el: HTMLDivElement) => ({
-    layout: { background: { type: ColorType.Solid, color: tk.bg }, textColor: tk.text2, fontFamily: 'Roboto Mono, monospace', fontSize: 10, attributionLogo: false },
-    grid:   { vertLines: { color: tk.grid, style: 1 }, horzLines: { color: tk.grid, style: 1 } },
-    crosshair: { mode: 1, vertLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true }, horzLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true } },
-    rightPriceScale: { borderColor: tk.border, textColor: tk.text2 },
-    timeScale: { borderColor: tk.border, textColor: tk.text2, timeVisible: !['1M','3M','6M','12M'].includes(timeframe), secondsVisible: ['1s','15s','30s','45s'].includes(timeframe), rightOffset: 10, lockVisibleTimeRangeOnResize: true },
-    localization: {
-      timeFormatter: (t: number) => {
-        const d = new Date((t + tzOffsetSec) * 1000);
-        const pad = (n: number) => String(n).padStart(2, '0');
-        return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  const baseOpts = useCallback((el: HTMLDivElement) => {
+    const showSecs = ['1s','5s','10s','15s','30s','45s'].includes(timeframe);
+    const showTime = !['1M','3M','6M','12M'].includes(timeframe);
+
+    const fmtTime = (t: number) => {
+      const d = new Date(t * 1000);
+      const opts: Intl.DateTimeFormatOptions = showSecs
+        ? { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: tzName }
+        : { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tzName };
+      return d.toLocaleTimeString('en-GB', opts);
+    };
+
+    const fmtDate = (t: number) => {
+      const d = new Date(t * 1000);
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: tzName });
+    };
+
+    return {
+      layout: { background: { type: ColorType.Solid, color: tk.bg }, textColor: tk.text2, fontFamily: 'Roboto Mono, monospace', fontSize: 10, attributionLogo: false },
+      grid:   { vertLines: { color: tk.grid, style: 1 }, horzLines: { color: tk.grid, style: 1 } },
+      crosshair: { mode: 1, vertLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true }, horzLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true } },
+      rightPriceScale: { borderColor: tk.border, textColor: tk.text2 },
+      timeScale: {
+        borderColor: tk.border, textColor: tk.text2,
+        timeVisible: showTime, secondsVisible: showSecs,
+        rightOffset: 10, lockVisibleTimeRangeOnResize: true,
+        tickMarkFormatter: (t: number, tickMarkType: number) => {
+          // TickMarkType: 0=Year, 1=Month, 2=Day, 3=Time, 4=TimeWithSeconds
+          if (tickMarkType <= 2) return fmtDate(t);
+          return fmtTime(t);
+        },
       },
-    },
-    handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
-    handleScale:  { mouseWheel: true, pinch: true, axisPressedMouseMove: { time: true, price: true } },
-    width: el.clientWidth || 800, height: el.clientHeight || 400,
-  }), [tk, timeframe, tzOffsetSec]);
+      localization: {
+        timeFormatter: (t: number) => `${fmtDate(t)}  ${fmtTime(t)}${tzName ? '  ' + timezone.toUpperCase() : '  Local'}`,
+      },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+      handleScale:  { mouseWheel: true, pinch: true, axisPressedMouseMove: { time: true, price: true } },
+      width: el.clientWidth || 800, height: el.clientHeight || 400,
+    };
+  }, [tk, timeframe, timezone, tzName]);
 
   const buildCharts = useCallback(() => {
     if (chartsRef.current._obs) chartsRef.current._obs.disconnect();
@@ -559,17 +582,18 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         addLevel(0, 'rgba(255,255,255,0.1)');
       }
 
-      // Sync timescales
+      // Sync timescales — logical range keeps all panels pixel-locked
       let syncing = false;
-      const sync = (src: any, targets: any[]) => src.timeScale().subscribeVisibleTimeRangeChange((range: any) => {
-        if (syncing || !range) return;
-        syncing = true;
-        targets.forEach(c => { try { c.timeScale().setVisibleRange(range); } catch {} });
-        setTimeout(() => { syncing = false; }, 10);
-      });
-      sync(main, [volChart, subChart]);
-      sync(volChart, [main, subChart]);
-      sync(subChart, [main, volChart]);
+      const syncLogical = (src: any, targets: any[]) =>
+        src.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
+          if (syncing || !range) return;
+          syncing = true;
+          targets.forEach(c => { try { c.timeScale().setVisibleLogicalRange(range); } catch {} });
+          setTimeout(() => { syncing = false; }, 16);
+        });
+      syncLogical(main, [volChart, subChart]);
+      syncLogical(volChart, [main, subChart]);
+      syncLogical(subChart, [main, volChart]);
     }
 
     // Crosshair legend

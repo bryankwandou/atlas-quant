@@ -16,14 +16,18 @@ const fetcher = (url: string) => fetch(url).then(r => {
 /** Returns a limit appropriate for the timeframe — enough history without waste. */
 function getLimit(tf: string): number {
   const map: Record<string, number> = {
-    '1s': 500, '15s': 500, '30s': 500, '45s': 500,
-    '1m': 1000, '3m': 1000, '5m': 1000,
-    '10m': 1000, '15m': 1000, '30m': 1000, '45m': 1000,
-    '1h': 1500, '2h': 1500, '3h': 1000, '4h': 2000,
-    '6h': 1000, '8h': 1000, '12h': 1000,
-    '1d': 3000, '2d': 1500, '3d': 1000,
-    '1w': 1000, '2w': 500,
-    '1M': 360, '3M': 120, '6M': 60, '12M': 30,
+    // sub-minute: Binance 1s API max is 1000 recent bars (limited history by design)
+    '1s': 1000, '5s': 1000, '10s': 1000, '15s': 1000, '30s': 1000, '45s': 1000,
+    // minutes: ~3.5 days on 1m, ~14 days on 5m, ~21 days on 15m
+    '1m': 2000, '2m': 2000, '3m': 2000, '5m': 2000,
+    '10m': 2000, '15m': 2000, '30m': 2000, '45m': 2000,
+    // hours: 5000 bars → ~208 days on 1h, ~833 days on 4h (~2017-now for 4h)
+    '1h': 5000, '2h': 5000, '3h': 5000, '4h': 5000,
+    '6h': 5000, '8h': 5000, '12h': 5000, '18h': 5000,
+    // days/weeks: 5000 daily bars covers 2010-now
+    '1d': 5000, '2d': 5000, '3d': 5000, '5d': 5000,
+    '1w': 1000, '2w': 1000, '3w': 1000,
+    '1M': 500, '3M': 200, '6M': 100, '12M': 50,
   };
   return map[tf] ?? 1000;
 }
