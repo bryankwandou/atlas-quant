@@ -1,0 +1,33 @@
+name: Sub-minute Collector (real 1s → Neon)
+
+# Vercel's datacenter is geo-blocked from Binance (HTTP 451), so sub-second
+# candles CANNOT be fetched from the app's serverless functions. GitHub's
+# runners are not blocked, so this workflow fetches real 1s data and writes it
+# (plus 5s/10s/15s/30s/45s aggregates) straight to Neon, which the app reads.
+#
+# SETUP (one time): repo → Settings → Secrets → Actions → New secret
+#   Name: ATLAS_DATABASE_URL   Value: the Neon DATABASE_URL (postgres://...neon.tech...)
+#
+# Every run pulls ~133 min of 1s with overlap; ON CONFLICT upsert means the 1s
+# history accumulates permanently and grows toward "berkali-kali lipat panjang".
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install @neondatabase/serverless --no-save
+      - name: Collect real sub-minute → Neon
+        env:
+          DATABASE_URL: ${{ secrets.ATLAS_DATABASE_URL }}
+          SYMBOLS: "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,ADAUSDT,DOGEUSDT"
+          PAGES: "8"
+        run: node scripts/collect-subminute.mjs

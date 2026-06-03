@@ -176,7 +176,13 @@ function ccEndpoint(interval: string): { endpoint: string; aggregate: number } {
   return m[interval] ?? { endpoint: 'histominute', aggregate: 15 };
 }
 
+// Sub-minute intervals only exist on Binance. CryptoCompare/OKX have no
+// sub-minute data and previously DEFAULTED to 15m — silently returning
+// 15-minute candles mislabeled as 1s/5s/15s/30s/45s. Return empty instead.
+const SUB_MINUTE = new Set(['1s', '5s', '10s', '15s', '30s', '45s']);
+
 async function getCryptoCompareOHLCV(pair: string, interval: string, limit: number): Promise<OHLCVCandle[]> {
+  if (SUB_MINUTE.has(interval)) return [];
   try {
     const fsym = pair.replace(/USDT$|BUSD$|USD$|BTC$|ETH$|BNB$/, '').toUpperCase() || 'BTC';
     const tsym = pair.endsWith('USDT') || pair.endsWith('BUSD') || pair.endsWith('USD') ? 'USDT' : 'BTC';
@@ -222,6 +228,7 @@ const OKX_BAR_MAP: Record<string, string> = {
 };
 
 async function getOKXOHLCV(pair: string, interval: string, limit: number): Promise<OHLCVCandle[]> {
+  if (SUB_MINUTE.has(interval)) return []; // OKX has no sub-minute candles
   try {
     const instId = pair.replace(/USDT$/i, '-USDT').replace(/BTC$/i, '-BTC');
     const bar = OKX_BAR_MAP[interval] || '15m';
