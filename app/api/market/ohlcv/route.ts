@@ -87,7 +87,10 @@ export async function GET(req: NextRequest) {
     const data = await routeOHLCV(symbol, timeframe, limit);
 
     if (data && data.length > 0) {
-      if (isCrypto) upsertOHLCV(data).catch(() => {});
+      // Await so the write actually completes before the serverless function
+      // freezes (fire-and-forget gets killed on Vercel). upsertOHLCV self-heals
+      // the schema; .catch keeps a DB hiccup from breaking the live response.
+      if (isCrypto) await upsertOHLCV(data).catch(() => {});
       // Detect if we fell back to daily (market closed for intraday request)
       const isIntradayRequest = !['1d','2d','3d','1w','2w','1M','3M','6M','12M'].includes(timeframe);
       const isFallbackDaily = isIntradayRequest && data[0]?.timeframe === '1d';
