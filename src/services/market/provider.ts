@@ -12,6 +12,7 @@
  * (digunakan oleh kode existing).
  */
 import { MarketScanData, OHLC } from '@/domain/signal';
+import { getBinanceOHLCV } from '@/src/lib/marketRouter';
 
 export interface Candle {
   time: number;
@@ -76,17 +77,18 @@ export async function fetchOhlcv(args: { symbol: string; timeframe: Timeframe; l
 }
 
 async function fetchBinance(symbol: string, tf: Timeframe, limit: number): Promise<Candle[]> {
-  const url = `${BINANCE}/klines?symbol=${symbol}&interval=${tf}&limit=${limit}`;
-  const r = await fetch(url, { next: { revalidate: 30 } });
-  if (!r.ok) throw new Error(`Binance ${r.status}`);
-  const raw = await r.json() as Array<Array<string | number>>;
-  return raw.map((k) => ({
-    time: Number(k[0]),
-    open: parseFloat(String(k[1])),
-    high: parseFloat(String(k[2])),
-    low: parseFloat(String(k[3])),
-    close: parseFloat(String(k[4])),
-    volume: parseFloat(String(k[5])),
+  // Delegate to the resilient router (Binance api1–4 → CryptoCompare → OKX).
+  // The naive single-endpoint api.binance.com call returns HTTP 451 from
+  // Vercel's US datacenter (geo-block), which silently killed T1MO/signals.
+  const candles = await getBinanceOHLCV(symbol, tf, limit);
+  if (!candles.length) throw new Error(`No crypto data for ${symbol} ${tf}`);
+  return candles.map((c) => ({
+    time: c.open_time,
+    open: c.open,
+    high: c.high,
+    low: c.low,
+    close: c.close,
+    volume: c.volume,
   }));
 }
 
