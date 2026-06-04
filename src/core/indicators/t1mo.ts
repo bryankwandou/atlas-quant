@@ -11,7 +11,9 @@
  * Semua parameter dapat di-override via UI param panel.
  */
 import type { IndicatorContext, IndicatorComputeResult, IndicatorDef } from '@/domain/indicator';
-import { ema } from './math';
+import { ema, trueRange } from './math';
+
+const logistic = (x: number) => 1 / (1 + Math.exp(-x));
 
 export const t1moDef: IndicatorDef = {
   code: 'T1MO_CORE',
@@ -88,25 +90,54 @@ export const t1moCompute = (
     btmBox.push(Math.min(...ctx.low.slice(start, i + 1)));
   }
 
-  // === HMF — momentum EMA dari close delta
-  const deltas = ctx.close.map((c, i) => (i === 0 ? 0 : c - ctx.close[i - 1]));
-  const hmf = ema(deltas, hmfLen);
+  // === ATR for volatility normalization (makes signals comparable across assets/TFs)
+  const tr = trueRange(ctx.high, ctx.low, ctx.close);
+  const atr = ema(tr, Math.max(hmfLen, 14));
+  const atrAt = (i: number) => {
+    const a = atr[i];
+    return Number.isFinite(a) && a > 0 ? a : (ctx.close[i] * 0.001 || 1);
+  };
 
-  // === Regime strength — color-coded histogram
+  // === HMF — ATR-normalized momentum (volatility-adjusted, then smoothed).
+  // v2: was raw EMA of price deltas (scale-dependent, noisy). Now momentum over
+  // hmfLen bars divided by ATR → unit-less, comparable, far less noise.
+  const momRaw = ctx.close.map((c, i) => (i >= hmfLen ? (c - ctx.close[i - hmfLen]) / atrAt(i) : 0));
+  const hmf = ema(momRaw, Math.max(2, Math.round(hmfLen / 2)));
+
+  // === Position within acceptance box (0=at bottom, 1=at top)
+  const positionPct: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const top = topBox[i] ?? ctx.close[i];
+    const btm = btmBox[i] ?? ctx.close[i];
+    const range = (top as number) - (btm as number);
+    positionPct.push(range > 0 ? Math.min(1, Math.max(0, (ctx.close[i] - (btm as number)) / range)) : 0.5);
+  }
+
+  // === AI-assisted regime model (logistic ensemble of normalized features).
+  // Same outputs/series as the original T1MO, but regimeStrength is now a
+  // continuous 0–10 conviction and each bar carries a bull-probability.
   const regimeStrengthRaw: number[] = [];
   const regimeColors: string[] = [];
+  const bullProb: number[] = [];
+  // Feature weights (logistic-regression style). Tuned for trend+momentum+location.
+  const W = { dist: 0.9, slope: 1.1, hmf: 1.3, pos: 1.0, struct: 0.7 };
   for (let i = 0; i < n; i++) {
     const c = ctx.close[i];
     const bb = backbone[i] ?? c;
+    const mg = magenta[i] ?? c;
+    const a = atrAt(i);
     const slopeIdx = Math.max(0, i - slopeWin);
-    const slope = (backbone[i] ?? c) - (backbone[slopeIdx] ?? c);
-    let color = colorNeutral;
-    let value = 5;
-    if (c > bb && slope > 0) { color = colorBull; value = 7; }
-    else if (c < bb && slope < 0) { color = colorBear; value = 7; }
-    else { color = colorNeutral; value = 4; }
-    regimeStrengthRaw.push(value);
-    regimeColors.push(color);
+    const dist = (c - bb) / a;                                   // price vs backbone, in ATRs
+    const slope = ((backbone[i] ?? c) - (backbone[slopeIdx] ?? c)) / a; // backbone slope in ATRs
+    const struct = (mg - bb) / a;                                // magenta vs backbone (micro-structure)
+    const z =
+      W.dist * dist + W.slope * slope + W.hmf * (hmf[i] ?? 0) +
+      W.pos * (positionPct[i] - 0.5) * 2 + W.struct * struct;
+    const prob = logistic(z);                                    // 0..1 bullish probability
+    bullProb.push(prob);
+    const conviction = Math.abs(prob - 0.5) * 20;                // 0..10
+    regimeStrengthRaw.push(conviction < 0.5 ? 0.5 : conviction);
+    regimeColors.push(prob > 0.55 ? colorBull : prob < 0.45 ? colorBear : colorNeutral);
   }
 
   // ---- Final snapshot for UI panel
@@ -117,6 +148,20 @@ export const t1moCompute = (
   const distPct = (distAbs / lastBackbone) * 100;
   const structurePct = ((lastMagenta - lastBackbone) / lastBackbone) * 100;
 
+  // ---- AI-assisted regime read (statistical context + conviction)
+  const lastProb = bullProb[last] ?? 0.5;
+  const aiConfidence = Math.round(Math.abs(lastProb - 0.5) * 200); // 0..100
+  const aiSignal: 'BUY' | 'SELL' | 'NEUTRAL' =
+    lastProb > 0.58 ? 'BUY' : lastProb < 0.42 ? 'SELL' : 'NEUTRAL';
+  // z-score of distance-from-backbone over a rolling window (statistical stretch)
+  const distWin = ctx.close.slice(Math.max(0, n - 50)).map((c, k) => {
+    const idx = Math.max(0, n - 50) + k;
+    return c - (backbone[idx] ?? c);
+  });
+  const dMean = distWin.reduce((s, v) => s + v, 0) / (distWin.length || 1);
+  const dStd = Math.sqrt(distWin.reduce((s, v) => s + (v - dMean) ** 2, 0) / (distWin.length || 1)) || 1;
+  const distZ = (distAbs - dMean) / dStd;
+
   return {
     series: {
       backbone: backbone.map((v) => (Number.isFinite(v) ? v : null)),
@@ -125,6 +170,8 @@ export const t1moCompute = (
       btmBox,
       hmf: hmf.map((v) => (Number.isFinite(v) ? v : null)),
       regimeStrength: regimeStrengthRaw,
+      bullProb: bullProb.map((v) => Math.round(v * 100)),
+      positionPct: positionPct.map((v) => Math.round(v * 100)),
     },
     levels: [
       { key: 'backbone_now', value: lastBackbone, label: `Backbone (${backboneLen}) ${lastBackbone.toFixed(2)}`, color: '#00bcd4' },
@@ -145,6 +192,13 @@ export const t1moCompute = (
       distPct,
       structurePct,
       regimeColors,
+      // ── AI-assisted read (v2) ──
+      aiBullProb: Math.round(lastProb * 100),   // 0..100 probability bullish regime
+      aiConfidence,                              // 0..100 conviction
+      aiSignal,                                  // BUY / SELL / NEUTRAL
+      positionPct: Math.round((positionPct[last] ?? 0.5) * 100),
+      distZ: Number(distZ.toFixed(2)),           // statistical stretch vs backbone
+      lastAtr: atrAt(last),
       params: { backboneLen, magentaLen, boxLb, boxMult, hmfLen, slopeWin },
     },
   };
