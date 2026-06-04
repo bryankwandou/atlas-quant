@@ -32,10 +32,15 @@ function getLimit(tf: string): number {
   return map[tf] ?? 1000;
 }
 
+const SUB_MIN_TFS = ['1s', '5s', '10s', '15s', '30s', '45s'];
+
 export function useMarketData(symbol: string, timeframe: string, limit?: number) {
   const superRefresh = useChartStore(s => s.superRefresh);
   const resolvedLimit = limit ?? getLimit(timeframe);
-  const refreshInterval = superRefresh ? 1000 : getRefreshInterval(timeframe);
+  const subMin = SUB_MIN_TFS.includes(timeframe);
+  // For sub-minute we DON'T refetch the full (up to 20k-bar) history every second —
+  // useLiveBars() handles per-second last-bar updates. History refreshes every 20s.
+  const refreshInterval = subMin ? 20_000 : (superRefresh ? 1000 : getRefreshInterval(timeframe));
   const { data, error, isLoading, mutate } = useSWR(
     symbol
       ? `/api/market/ohlcv?symbol=${symbol}&timeframe=${timeframe}&limit=${resolvedLimit}`
@@ -44,7 +49,8 @@ export function useMarketData(symbol: string, timeframe: string, limit?: number)
     {
       refreshInterval,
       revalidateOnFocus: false,
-      dedupingInterval: superRefresh ? 500 : 5000,
+      keepPreviousData: true,            // no flicker / empty-array between polls
+      dedupingInterval: subMin ? 10_000 : (superRefresh ? 500 : 5000),
     }
   );
 
@@ -57,6 +63,24 @@ export function useMarketData(symbol: string, timeframe: string, limit?: number)
     error,
     refresh: mutate,
   };
+}
+
+/**
+ * Lightweight live-tick hook (TradingView-style). Polls /api/market/last (just
+ * the last ~3 bars) every second for sub-minute / super-refresh, so the chart
+ * updates the latest candle via series.update() without refetching all history.
+ */
+export function useLiveBars(symbol: string, timeframe: string) {
+  const superRefresh = useChartStore(s => s.superRefresh);
+  const subMin = SUB_MIN_TFS.includes(timeframe);
+  const active = subMin || superRefresh;
+  const interval = subMin ? 1000 : (superRefresh ? 1000 : getRefreshInterval(timeframe));
+  const { data } = useSWR(
+    active && symbol ? `/api/market/last?symbol=${symbol}&timeframe=${timeframe}` : null,
+    fetcher,
+    { refreshInterval: interval, revalidateOnFocus: false, dedupingInterval: 500 },
+  );
+  return { liveBars: (data?.data as any[]) || [] };
 }
 
 export function useMarketPrice(symbol: string) {

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useCallback, useLayoutEffect, useMemo } from 'react';
 import { createChart, ColorType, CandlestickSeries, LineSeries, HistogramSeries, BarSeries, AreaSeries } from 'lightweight-charts';
 import { useTheme } from '@/hooks/useTheme';
-import { useMarketData } from '@/hooks/useMarketData';
+import { useMarketData, useLiveBars } from '@/hooks/useMarketData';
 import { useChartStore } from '@/store/chartStore';
 import { BarChart2, TrendingUp, Activity, Zap, Layers, Maximize2 } from 'lucide-react';
 import { computeIndicators } from '@/core/indicators/client';
@@ -49,6 +49,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
 
   const { theme }                        = useTheme();
   const { candles, isLoading, marketClosed } = useMarketData(symbol, timeframe);
+  const { liveBars } = useLiveBars(symbol, timeframe);
   const { activeIndicators, showSignals, chartType, setChartType, subPanel, setSubPanel, timezone } = useChartStore();
 
   // Stable ref for candles — prevents buildCharts from re-running on every SWR poll
@@ -741,6 +742,29 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     } catch { /* series removed during concurrent rebuild */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, chartType]);
+
+  // ── TradingView-style per-tick update ──────────────────────────────────────
+  // Update ONLY the latest candle via series.update() (no full refetch/redraw),
+  // driven by the lightweight /api/market/last poll. This is what makes 1s feel
+  // truly live without re-downloading 20k bars every second.
+  useEffect(() => {
+    if (!liveBars.length || !seriesRef.current.candle) return;
+    try {
+      for (const b of liveBars) {
+        const t = Math.floor(b.open_time / 1000) as any;
+        if (!t || !(+b.close > 0)) continue;
+        if (chartType === 'line' || chartType === 'area') {
+          seriesRef.current.candle.update({ time: t, value: +b.close });
+        } else {
+          seriesRef.current.candle.update({ time: t, open: +b.open, high: +b.high, low: +b.low, close: +b.close });
+        }
+        if (seriesRef.current.vol) {
+          seriesRef.current.vol.update({ time: t, value: +b.volume, color: +b.close >= +b.open ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)' });
+        }
+      }
+    } catch { /* update() rejects out-of-order times — safe to ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveBars, chartType]);
 
   const fmt = (v: number | null | undefined, d = 2) => v != null && !isNaN(v) && isFinite(v) ? Number(v).toFixed(d) : '';
   const isUp = legend ? legend.close >= legend.open : true;
