@@ -18,41 +18,57 @@ interface SymbolRow {
   score: number;
 }
 
-function PriceCell({ symbol }: { symbol: string }) {
-  const { data } = useSWR(`/api/market/price?symbol=${encodeURIComponent(symbol)}`, fetcher, {
-    refreshInterval: 15000,
-    revalidateOnFocus: false,
-  });
-  if (!data?.price) return <span className="text-muted">—</span>;
-  const isUp = (data.change24h || 0) >= 0;
-  return (
-    <span className={`mono ${isUp ? 'up' : 'down'}`}>
-      {Number(data.price).toLocaleString('en-US', { maximumFractionDigits: 4 })}
-    </span>
-  );
+const SIG_COLOR: Record<string, string> = { BUY: '#089981', SELL: '#f23645', NEUTRAL: '#ff9800' };
+
+/**
+ * Coherent signal derived from the REAL price change (no more random index data).
+ * score = momentum 0..100 centered at 50 (flat). Everything below is consistent:
+ *   green/BUY when score≥60, red/SELL when score≤40, orange/NEUTRAL otherwise,
+ *   and the score-bar color === the signal badge color. So a red −% row can never
+ *   read BUY.
+ */
+function deriveSignal(change: number | null | undefined) {
+  const has = Number.isFinite(change as number);
+  const c = has ? (change as number) : 0;
+  const score = Math.round(Math.max(0, Math.min(100, 50 + c * 6)));
+  const signal: 'BUY' | 'SELL' | 'NEUTRAL' = score >= 60 ? 'BUY' : score <= 40 ? 'SELL' : 'NEUTRAL';
+  const rsi = Math.round(Math.max(2, Math.min(98, 50 + c * 4)));
+  return { has, score, signal, rsi };
 }
 
-function ChangeCell({ symbol }: { symbol: string }) {
-  const { data } = useSWR(`/api/market/price?symbol=${encodeURIComponent(symbol)}`, fetcher, {
-    refreshInterval: 15000,
-    revalidateOnFocus: false,
-  });
-  if (data?.change24h == null) return <span className="text-muted">—</span>;
-  const c = Number(data.change24h);
-  return (
-    <span className={`mono ${c >= 0 ? 'up' : 'down'}`}>
-      {c >= 0 ? '+' : ''}{c.toFixed(2)}%
-    </span>
-  );
-}
+type RawRow = Omit<SymbolRow, 'rsi' | 'signal' | 'score'>;
 
-function enrich(rows: Omit<SymbolRow, 'rsi' | 'signal' | 'score'>[]): SymbolRow[] {
-  return rows.map((s, i) => {
-    const rsi = 30 + ((i * 17 + 7) % 50);
-    const signal: 'BUY' | 'SELL' | 'NEUTRAL' = rsi > 65 ? 'BUY' : rsi < 40 ? 'SELL' : 'NEUTRAL';
-    const score = 40 + ((i * 13 + 5) % 55);
-    return { ...s, rsi, signal, score };
-  });
+function ScreenerRow({ row, signalFilter, onSelect }: { row: RawRow; signalFilter: string; onSelect: () => void }) {
+  const needFetch = row.change24h == null || row.price == null;
+  const { data } = useSWR(
+    needFetch ? `/api/market/price?symbol=${encodeURIComponent(row.symbol)}` : null,
+    fetcher, { refreshInterval: 20000, revalidateOnFocus: false },
+  );
+  const price  = row.price    ?? data?.price    ?? null;
+  const change = row.change24h ?? data?.change24h ?? null;
+  const { has, score, signal, rsi } = deriveSignal(change);
+
+  // signal filter (now based on the REAL derived signal)
+  if (signalFilter !== 'all' && (!has || signal !== signalFilter)) return null;
+
+  const up = (change ?? 0) >= 0;
+  return (
+    <tr className="screener-row" onClick={onSelect}>
+      <td><span className="mono fw">{row.symbol}</span></td>
+      <td>{price != null ? <span className="mono">{price.toLocaleString('en-US', { maximumFractionDigits: 4 })}</span> : <span className="text-muted">—</span>}</td>
+      <td>{change != null ? <span className={`mono ${up ? 'up' : 'down'}`}>{up ? '+' : ''}{change.toFixed(2)}%</span> : <span className="text-muted">—</span>}</td>
+      <td className="mono text-muted">{row.volume24h != null && row.volume24h > 0 ? `${(row.volume24h / 1e9).toFixed(2)}B` : '—'}</td>
+      <td className={`mono ${rsi > 70 ? 'down' : rsi < 30 ? 'up' : ''}`}>{has ? rsi : '—'}</td>
+      <td className="mono text-muted">{price ? (price * 0.02).toFixed(2) : '—'}</td>
+      <td><span className={`signal-mini-badge ${signal.toLowerCase()}`}>{has ? signal : '—'}</span></td>
+      <td>
+        <div className="score-bar-wrap">
+          <div className="score-bar-fill" style={{ width: `${has ? score : 0}%`, background: SIG_COLOR[signal] }} />
+          <span className="score-bar-val">{has ? score : '—'}</span>
+        </div>
+      </td>
+    </tr>
+  );
 }
 
 export default function ScreenerPage() {
@@ -76,10 +92,8 @@ export default function ScreenerPage() {
     }).finally(() => setLoading(false));
   }, []);
 
-  const rows = enrich(rawRows);
-
-  const filtered = rows.filter(s => {
-    if (signalFilter !== 'all' && s.signal !== signalFilter) return false;
+  // Asset-class filter only (signal filter is applied per-row from the REAL signal)
+  const filtered = rawRows.filter(s => {
     if (assetFilter !== 'all') {
       if (assetFilter === 'stock') return s.assetClass?.startsWith('stock_') ?? false;
       if (s.assetClass !== assetFilter) return false;
@@ -149,36 +163,7 @@ export default function ScreenerPage() {
             ) : filtered.length === 0 ? (
               <tr><td colSpan={8} className="text-muted">No symbols found</td></tr>
             ) : filtered.map(s => (
-              <tr key={s.symbol} className="screener-row" onClick={() => setSymbol(s.symbol)}>
-                <td><span className="mono fw">{s.symbol}</span></td>
-                <td>
-                  {s.price != null
-                    ? <span className="mono">{s.price.toLocaleString('en-US', { maximumFractionDigits: 4 })}</span>
-                    : <PriceCell symbol={s.symbol} />
-                  }
-                </td>
-                <td>
-                  {s.change24h != null
-                    ? <span className={`mono ${s.change24h >= 0 ? 'up' : 'down'}`}>{s.change24h >= 0 ? '+' : ''}{Number(s.change24h).toFixed(2)}%</span>
-                    : <ChangeCell symbol={s.symbol} />
-                  }
-                </td>
-                <td className="mono text-muted">
-                  {s.volume24h != null && s.volume24h > 0 ? `${(s.volume24h / 1e9).toFixed(2)}B` : '—'}
-                </td>
-                <td className={`mono ${s.rsi > 70 ? 'down' : s.rsi < 30 ? 'up' : ''}`}>{s.rsi}</td>
-                <td className="mono text-muted">{s.price ? (s.price * 0.02).toFixed(2) : '—'}</td>
-                <td><span className={`signal-mini-badge ${s.signal.toLowerCase()}`}>{s.signal}</span></td>
-                <td>
-                  <div className="score-bar-wrap">
-                    <div
-                      className="score-bar-fill"
-                      style={{ width: `${s.score}%`, background: s.score > 65 ? '#089981' : s.score > 45 ? '#ff9800' : '#f23645' }}
-                    />
-                    <span className="score-bar-val">{s.score}</span>
-                  </div>
-                </td>
-              </tr>
+              <ScreenerRow key={s.symbol} row={s} signalFilter={signalFilter} onSelect={() => setSymbol(s.symbol)} />
             ))}
           </tbody>
         </table>
