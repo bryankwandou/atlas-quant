@@ -55,6 +55,22 @@ const pixelColor = (s: number) => (PIXEL_SCALE.find(b => s > b.min)?.c) || '#dd2
 
 const clampScore = (v: number) => Math.max(2, Math.min(98, v));
 
+/** Simple EMA smoothing of a numeric array — smooths the regime score so the
+ *  pixel strip flows in gradual hills (green→yellow→red) like the reference,
+ *  instead of flickering bar-to-bar on noisy intraday data. */
+function emaSmooth(vals: number[], period: number): number[] {
+  const k = 2 / (period + 1);
+  const out = new Array(vals.length).fill(NaN);
+  let prev = NaN;
+  for (let i = 0; i < vals.length; i++) {
+    const v = vals[i];
+    if (!Number.isFinite(v)) { out[i] = prev; continue; }
+    prev = Number.isFinite(prev) ? v * k + prev * (1 - k) : v;
+    out[i] = prev;
+  }
+  return out;
+}
+
 /**
  * Rolling percentile rank → 0–100. For each bar, where does its value fall
  * within the last `window` bars? This spreads scores across the FULL color
@@ -115,7 +131,12 @@ function computePixelScores(
   };
 
   const scores: Record<string, number[]> = {};
-  for (const k of PIXEL_ROWS) scores[k] = rollingPercentile(raw[k] ?? new Array(n).fill(0), win);
+  // Smooth the composite regime score first → gradual color "hills" like the
+  // reference, then percentile-rank for a full green→red spread.
+  for (const k of PIXEL_ROWS) {
+    const smoothed = emaSmooth(raw[k] ?? new Array(n).fill(0), 6);
+    scores[k] = rollingPercentile(smoothed, win);
+  }
 
   // ── Conviction gate → gaps ──────────────────────────────────────────────
   // Draw a column only when the regime has conviction. Prefer T1MO bullProb
@@ -487,9 +508,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           const s = (main as any).addSeries(LineSeries, { color: '#1976d2', lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: true, title: 'Backbone' });
           s.setData(times.map((t: number, i: number) => ({ time: t, value: (t1moBB as any[])[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
         }
-        // Magenta EMA — pink dotted
+        // Magenta EMA — pink dashed (match reference)
         if (t1moMG) {
-          const s = (main as any).addSeries(LineSeries, { color: '#e91e63', lineWidth: 1.5, lineStyle: 1, priceLineVisible: false, lastValueVisible: true, title: 'Magenta' });
+          const s = (main as any).addSeries(LineSeries, { color: '#e91e63', lineWidth: 1.5, lineStyle: 2, priceLineVisible: false, lastValueVisible: true, title: 'Magenta' });
           s.setData(times.map((t: number, i: number) => ({ time: t, value: (t1moMG as any[])[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
         }
         // Top Box — orange solid (Donchian upper — staircase)

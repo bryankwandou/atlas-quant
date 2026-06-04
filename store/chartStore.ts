@@ -2,8 +2,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-const DEFAULT_INDICATORS = ['EMA_9', 'EMA_21', 'VWAP', 'RSI_7', 'ATR', 'VOLUME'];
-const DEFAULT_INDICATORS_RESET = ['EMA_9', 'EMA_21', 'VWAP', 'RSI_7', 'ATR', 'VOLUME'];
+// Default view = T1MO reference only. The T1MO core lines (Backbone, Magenta,
+// TopBox, BtmBox) are ALWAYS drawn by ChartContainer, so the default top panel
+// shows exactly the 3 T1MO indicators. EMA_9/EMA_21/VWAP removed (VWAP floats
+// far from price on intraday — not part of the T1MO reference).
+const DEFAULT_INDICATORS = ['RSI_7', 'ATR', 'VOLUME'];
+const DEFAULT_INDICATORS_RESET = ['RSI_7', 'ATR', 'VOLUME'];
 
 /** Custom Fibonacci level definition — used by the Fib R:R tool. */
 export interface FibLevel {
@@ -163,7 +167,7 @@ export const useChartStore = create<ChartStore>()(
       closeIndicatorModal:  () => set({ showIndicatorModal: false }),
     }),
     {
-      name: 'atlas-chart-v2',
+      name: 'atlas-chart-v3',
       partialize: (s) => ({
         symbol: s.symbol,
         timeframe: s.timeframe,
