@@ -46,11 +46,32 @@ export async function GET(req: NextRequest) {
 
   const isCrypto = /^[A-Z0-9]+(USDT|BTC|ETH|BNB)$/i.test(symbol);
 
+  const isSubMinute = ['1s', '5s', '10s', '15s', '30s', '45s'].includes(timeframe);
+
   // Neon cache first (durable, never auto-pauses) — only for crypto/memecoin
   if (isCrypto && hasNeon()) {
     try {
       const cached = await readOHLCVNeon(symbol, timeframe, limit);
-      if (cached.length >= 50 && isCacheValid(cached, timeframe)) {
+
+      // Sub-minute: merge long Neon history with a FRESH live tail (now that
+      // data-api.binance.vision is reachable from Vercel) so the latest bar is
+      // up-to-the-current-second on every poll — true 1s refresh.
+      if (isSubMinute) {
+        let live: any[] = [];
+        try { live = await routeOHLCV(symbol, timeframe, 1000); } catch {}
+        if (live.length || cached.length) {
+          const map = new Map<number, any>();
+          for (const c of cached) map.set(c.open_time, c);
+          for (const c of live) map.set(c.open_time, c); // live overrides/extends
+          const merged = [...map.values()].sort((a, b) => a.open_time - b.open_time).slice(-limit);
+          if (merged.length >= 50) {
+            return NextResponse.json({
+              symbol, timeframe, data: merged,
+              source: live.length ? 'cache+live' : 'cache', backend: 'neon', count: merged.length,
+            });
+          }
+        }
+      } else if (cached.length >= 50 && isCacheValid(cached, timeframe)) {
         return NextResponse.json({
           symbol, timeframe, data: cached, source: 'cache', backend: 'neon', count: cached.length,
         });
