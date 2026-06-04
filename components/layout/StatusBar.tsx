@@ -114,7 +114,9 @@ export default function StatusBar() {
         <div className="sb-sep" />
         <span className="sb-text mono">{now}</span>
         <div className="sb-sep" />
-        <span className="sb-text">ATLAS-QUANT v2.12</span>
+        <span className="sb-text" title="Live deployed build commit">
+          ATLAS-QUANT v2.16 · {(process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || 'local').slice(0, 7)}
+        </span>
         <div className="sb-sep" />
         <span className="sb-warning">Manual execution only</span>
       </div>
