@@ -193,6 +193,15 @@ export default function RightPanel() {
   // Risk tab state
   const [killActive, setKillActive] = useState(false);
 
+  // News / Calendar / Alerts tab state
+  const [news, setNews] = useState<any[]>([]);
+  const [newsLoading, setNewsLoading] = useState(false);
+  const [calEvents, setCalEvents] = useState<any[]>([]);
+  const [calLoading, setCalLoading] = useState(false);
+  const [alerts, setAlerts] = useState<Array<{ id: string; symbol: string; price: number; dir: 'above' | 'below'; created: number }>>([]);
+  const [alertPrice, setAlertPrice] = useState('');
+  const [alertDir, setAlertDir] = useState<'above' | 'below'>('above');
+
   const fmt = (v: number | undefined | null, d = 2) =>
     v != null && !isNaN(v as number) ? Number(v).toFixed(d) : '—';
 
@@ -360,6 +369,37 @@ export default function RightPanel() {
 
   const VALID_TABS = ['signal', 'watchlist', 'ai', 'risk', 'data', 'calendar', 'news', 'alerts', 'plan', 'objects', 'pine', 'keyboard', 'help'];
   const activeTab = VALID_TABS.includes(rightPanelTab) ? rightPanelTab : 'signal';
+
+  // Load saved price alerts once
+  useEffect(() => {
+    try { const s = localStorage.getItem('atlas:alerts'); if (s) setAlerts(JSON.parse(s)); } catch {}
+  }, []);
+
+  // Fetch live news when the News tab opens
+  useEffect(() => {
+    if (activeTab !== 'news' || news.length || newsLoading) return;
+    setNewsLoading(true);
+    fetch('/api/market/news').then(r => r.json()).then(d => setNews(d.items || [])).catch(() => {}).finally(() => setNewsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  // Fetch economic calendar when the Calendar tab opens
+  useEffect(() => {
+    if (activeTab !== 'calendar' || calEvents.length || calLoading) return;
+    setCalLoading(true);
+    fetch('/api/macro/data').then(r => r.json()).then(d => {
+      const ev = [
+        ...(((d.calendar?.events) || []).map((e: any) => ({ title: e.event || e.title, date: e.date || e.time, country: e.country, impact: e.impact }))),
+        ...(((d.centralBank) || []).map((c: any) => ({ title: c.event || c.bank, date: c.date, country: c.bank, impact: 'high' }))),
+      ];
+      setCalEvents(ev);
+    }).catch(() => {}).finally(() => setCalLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  const saveAlerts = (a: typeof alerts) => { setAlerts(a); try { localStorage.setItem('atlas:alerts', JSON.stringify(a)); } catch {} };
+  const addAlert = () => { const p = parseFloat(alertPrice); if (!p) return; saveAlerts([{ id: Date.now().toString(), symbol, price: p, dir: alertDir, created: Date.now() }, ...alerts]); setAlertPrice(''); };
+  const delAlert = (id: string) => saveAlerts(alerts.filter(a => a.id !== id));
 
   const tabs = [
     { id: 'signal',    label: 'Sinyal'   },
@@ -787,13 +827,80 @@ export default function RightPanel() {
         {/* ════════════════════════════════════════════════════════════════
             CALENDAR / NEWS / ALERTS / MISC TABS — functional stubs
         ════════════════════════════════════════════════════════════════ */}
-        {['calendar', 'news', 'alerts', 'plan', 'objects', 'pine', 'keyboard', 'help'].includes(activeTab) && (
+        {/* ════ CALENDAR — live economic events ════ */}
+        {activeTab === 'calendar' && (
+          <div style={{ padding: '10px 12px' }}>
+            <div className="section-hdr">Economic Calendar</div>
+            {calLoading && <div className="rp-loading-row"><div className="rp-spinner" /><span>Memuat events…</span></div>}
+            {!calLoading && calEvents.length === 0 && <div className="rp-no-data"><span>Tidak ada event terjadwal</span></div>}
+            {calEvents.map((e, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '7px 0', borderBottom: '1px solid var(--aq-border)' }}>
+                <span style={{ width: 6, height: 6, borderRadius: 6, marginTop: 4, flexShrink: 0, background: e.impact === 'high' ? '#f23645' : e.impact === 'medium' ? '#ff9800' : '#089981' }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--aq-text)' }}>{e.title}</div>
+                  <div style={{ fontSize: 10, color: 'var(--aq-text2)' }}>{[e.country, e.date].filter(Boolean).join(' · ')}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ════ NEWS — live crypto news feed ════ */}
+        {activeTab === 'news' && (
+          <div style={{ padding: '10px 12px' }}>
+            <div className="section-hdr">News Flow</div>
+            {newsLoading && <div className="rp-loading-row"><div className="rp-spinner" /><span>Memuat berita…</span></div>}
+            {!newsLoading && news.length === 0 && <div className="rp-no-data"><span>Berita tidak tersedia</span></div>}
+            {news.map((n) => (
+              <a key={n.id} href={n.url} target="_blank" rel="noopener noreferrer"
+                 style={{ display: 'block', padding: '8px 0', borderBottom: '1px solid var(--aq-border)', textDecoration: 'none' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--aq-text)', lineHeight: 1.35 }}>{n.title}</div>
+                <div style={{ fontSize: 10, color: 'var(--aq-text2)', marginTop: 2 }}>
+                  {n.source} · {n.publishedAt ? new Date(n.publishedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
+
+        {/* ════ ALERTS — functional price alerts (localStorage) ════ */}
+        {activeTab === 'alerts' && (
+          <div style={{ padding: '10px 12px' }}>
+            <div className="section-hdr">Price Alerts</div>
+            <div style={{ display: 'flex', gap: 6, margin: '8px 0', alignItems: 'center' }}>
+              <select value={alertDir} onChange={e => setAlertDir(e.target.value as 'above' | 'below')}
+                      style={{ background: 'var(--aq-bg3)', color: 'var(--aq-text)', border: '1px solid var(--aq-border)', borderRadius: 4, fontSize: 11, padding: '4px 6px' }}>
+                <option value="above">Crosses ↑</option>
+                <option value="below">Crosses ↓</option>
+              </select>
+              <input value={alertPrice} onChange={e => setAlertPrice(e.target.value)} placeholder={`${symbol} price`} type="number"
+                     style={{ flex: 1, minWidth: 0, background: 'var(--aq-bg3)', color: 'var(--aq-text)', border: '1px solid var(--aq-border)', borderRadius: 4, fontSize: 11, padding: '4px 6px' }} />
+              <button type="button" onClick={addAlert}
+                      style={{ background: 'var(--aq-blue)', color: '#fff', border: 'none', borderRadius: 4, fontSize: 11, padding: '4px 10px', cursor: 'pointer' }}>Add</button>
+            </div>
+            {alerts.length === 0 && <div className="rp-no-data"><span>Belum ada alert</span></div>}
+            {alerts.map(a => {
+              const triggered = priceData?.price != null && (a.dir === 'above' ? priceData.price >= a.price : priceData.price <= a.price);
+              return (
+                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--aq-border)' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: 6, background: triggered ? '#089981' : '#ff9800', flexShrink: 0 }} />
+                  <div style={{ flex: 1, fontSize: 11, color: 'var(--aq-text)' }}>
+                    {a.symbol.replace('USDT', '')} {a.dir === 'above' ? '≥' : '≤'} <span className="mono">{a.price.toLocaleString()}</span>
+                    {triggered && <span style={{ color: '#089981', marginLeft: 6, fontSize: 10 }}>● triggered</span>}
+                  </div>
+                  <button type="button" onClick={() => delAlert(a.id)} title="Delete"
+                          style={{ background: 'none', border: 'none', color: 'var(--aq-text2)', cursor: 'pointer', fontSize: 13 }}>×</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ════ MISC informational tabs ════ */}
+        {['plan', 'objects', 'pine', 'keyboard', 'help'].includes(activeTab) && (
           <div style={{ padding: '16px 12px' }}>
             <div className="section-hdr" style={{ textTransform: 'capitalize' }}>{activeTab}</div>
             <div style={{ color: 'var(--aq-text2)', fontSize: 11, lineHeight: 1.6, marginTop: 8 }}>
-              {activeTab === 'calendar' && 'Economic Calendar — data coming soon. Upcoming events: FOMC, CPI, NFP.'}
-              {activeTab === 'news'     && 'News Flow — live crypto news feed akan tersedia setelah integrasi API berita selesai.'}
-              {activeTab === 'alerts'   && 'Alerts — fitur price alert akan tersedia. Klik tombol Alert di TopBar untuk membuat alert baru.'}
               {activeTab === 'plan'     && 'Trading Plan — buat dan simpan rencana trade Anda di sini (coming soon).'}
               {activeTab === 'objects'  && 'Object Tree — daftar semua drawing objects di chart akan tampil di sini.'}
               {activeTab === 'pine'     && 'Script Editor — Pine Script editor akan tersedia di versi berikutnya.'}
