@@ -37,6 +37,81 @@ const CHART_TYPES = [
   { id: 'area',        icon: Activity,              tip: 'Area'        },
 ];
 
+// ── T1MO Pixel — 14-indicator signal matrix (per T1MO Pixel Showcase reference) ──
+const PIXEL_ROWS = ['RSI7','RSI14','MACD','EMA9','EMA21','EMA50','VWAP','HMF','MFI','%R','BB','ADX','Box','ATLAS'] as const;
+
+// 7-level score→color scale (identical to reference SCORE_COLORS)
+const PIXEL_SCALE: Array<{ min: number; c: string }> = [
+  { min: 80, c: '#00c853' }, // strong bull
+  { min: 65, c: '#69f0ae' }, // bull
+  { min: 52, c: '#b9f6ca' }, // weak bull
+  { min: 48, c: '#ffd740' }, // neutral
+  { min: 35, c: '#ff6e40' }, // weak bear
+  { min: 20, c: '#ff3d00' }, // bear
+  { min: -1, c: '#dd2c00' }, // strong bear
+];
+const pixelColor = (s: number) => (PIXEL_SCALE.find(b => s > b.min)?.c) || '#dd2c00';
+
+function robustScale(vals: number[]): number {
+  const fin = vals.filter(v => Number.isFinite(v));
+  if (!fin.length) return 1;
+  const mean = fin.reduce((a, b) => a + b, 0) / fin.length;
+  const sd = Math.sqrt(fin.reduce((s, v) => s + (v - mean) ** 2, 0) / fin.length);
+  return sd > 0 ? sd : (Math.abs(mean) || 1);
+}
+const clampScore = (v: number) => Math.max(2, Math.min(98, v));
+
+/** Build 14 score arrays (0–100) — one per indicator row, length = bars. */
+function computePixelScores(
+  ind: any,
+  t1mo: any,
+  closes: number[], highs: number[], lows: number[], volumes: number[],
+): Record<string, number[]> {
+  const n = closes.length;
+  const rsi7   = ind.rsi(7);
+  const rsi14  = ind.rsi(14);
+  const macd   = ind.macd(12, 26, 9);
+  const ema9   = ind.ema(9);
+  const ema21  = ind.ema(21);
+  const ema50  = ind.ema(50);
+  const vwap   = ind.vwap();
+  const mfi    = ind.mfi(14);
+  const wr     = ind.williamsR(14);
+  const bb     = ind.bollingerBands(20, 2);
+  const adxObj = ind.adx(14);
+  const atr    = ind.atr(14);
+
+  const hmf       = (t1mo?.series?.hmf ?? []) as (number | null)[];
+  const posPct    = (t1mo?.series?.positionPct ?? []) as number[];   // already 0..100
+  const bullProb  = (t1mo?.series?.bullProb ?? []) as number[];      // already 0..100
+
+  const sMacd = robustScale(macd.histogram);
+  const sHmf  = robustScale(hmf.map(v => v ?? 0));
+
+  const out: Record<string, number[]> = {};
+  for (const k of PIXEL_ROWS) out[k] = new Array(n).fill(50);
+
+  for (let i = 0; i < n; i++) {
+    const a = Number.isFinite(atr[i]) && atr[i] > 0 ? atr[i] : (closes[i] * 0.005 || 1);
+    out['RSI7'][i]  = clampScore(Number.isFinite(rsi7[i])  ? rsi7[i]  : 50);
+    out['RSI14'][i] = clampScore(Number.isFinite(rsi14[i]) ? rsi14[i] : 50);
+    out['MACD'][i]  = clampScore(50 + ((macd.histogram[i] ?? 0) / sMacd) * 22);
+    out['EMA9'][i]  = clampScore(50 + ((closes[i] - (ema9[i]  ?? closes[i])) / a) * 16);
+    out['EMA21'][i] = clampScore(50 + ((closes[i] - (ema21[i] ?? closes[i])) / a) * 14);
+    out['EMA50'][i] = clampScore(50 + ((closes[i] - (ema50[i] ?? closes[i])) / a) * 12);
+    out['VWAP'][i]  = clampScore(50 + ((closes[i] - (vwap[i]  ?? closes[i])) / a) * 14);
+    out['HMF'][i]   = clampScore(50 + ((hmf[i] ?? 0) / sHmf) * 22);
+    out['MFI'][i]   = clampScore(Number.isFinite(mfi[i]) ? mfi[i] : 50);
+    out['%R'][i]    = clampScore((Number.isFinite(wr[i]) ? wr[i] : -50) + 100); // -100..0 → 0..100
+    out['BB'][i]    = clampScore(Number.isFinite(bb.percentB[i]) ? bb.percentB[i] : 50);
+    const di = (adxObj.plusDI[i] ?? 0) - (adxObj.minusDI[i] ?? 0);
+    out['ADX'][i]   = clampScore(50 + Math.max(-48, Math.min(48, di)));
+    out['Box'][i]   = clampScore(Number.isFinite(posPct[i]) ? posPct[i] : 50);
+    out['ATLAS'][i] = clampScore(Number.isFinite(bullProb[i]) ? bullProb[i] : 50);
+  }
+  return out;
+}
+
 interface Props { symbol: string; timeframe: string; }
 
 export default function ChartContainer({ symbol, timeframe }: Props) {
@@ -46,6 +121,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const subRef   = useRef<HTMLDivElement>(null);
   const chartsRef = useRef<Record<string, any>>({});
   const seriesRef = useRef<Record<string, any>>({});
+  const pixelCanvasRef = useRef<HTMLCanvasElement>(null);
+  const pixelRedrawRef = useRef<(() => void) | null>(null);
 
   const { theme }                        = useTheme();
   const { candles, isLoading, marketClosed } = useMarketData(symbol, timeframe);
@@ -131,6 +208,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       const el = k === 'main' ? mainRef.current : k === 'vol' ? volRef.current : subRef.current;
       if (el && c) try { c.applyOptions({ width: el.clientWidth, height: el.clientHeight }); } catch {}
     });
+    // Redraw the T1MO pixel canvas (CSS keeps it sized to the sub-chart area)
+    requestAnimationFrame(() => pixelRedrawRef.current?.());
   }, [panelPct]);
 
   // Timezone IANA name for Intl.DateTimeFormat
@@ -181,6 +260,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     if (chartsRef.current._obs) chartsRef.current._obs.disconnect();
     Object.entries(chartsRef.current).forEach(([k, c]) => { if (k !== '_obs') try { c.remove(); } catch {} });
     chartsRef.current = {}; seriesRef.current = {};
+    pixelRedrawRef.current = null;  // drop stale T1MO-pixel redraw closure
 
     const currentCandles = candlesRef.current;
     if (!mainRef.current || !volRef.current || !subRef.current || !currentCandles?.length) return;
@@ -485,108 +565,82 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       };
 
       if (subPanel === 'atlas') {
-        // ── T1MO Pixel Matrix — 3 equal rows, uniform-height pixel blocks ──
-        // Each row uses value=1 (fixed) so blocks are always the SAME HEIGHT.
-        // Information is encoded ONLY in bar color. This produces the pixel heatmap look.
+        // ── T1MO Pixel — 14-indicator signal matrix (canvas overlay) ──────────
+        // Reference: "T1MO Pixel Showcase.html". 14 indicator rows × N bar columns.
+        // Each cell colored by a 0–100 signal score (green=bull → red=bear).
+        // The lightweight-charts sub-chart keeps only a transparent anchor (for the
+        // time axis + crosshair sync); the heatmap itself is drawn on <canvas>,
+        // x-aligned to bars via subChart.timeScale().logicalToCoordinate().
         try {
+          // Hide the sub-chart right price axis for the pixel matrix (no price meaning)
+          try { (subChart as any).priceScale('right').applyOptions({ visible: false }); } catch {}
+
           const t1moSub = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes, open: closes, time: times } as any, {});
-          if (t1moSub.meta.ready) {
-            const hmfVals     = t1moSub.series.hmf as (number | null)[];
-            const regimeColors = (t1moSub.meta as any).regimeColors as string[];
-            const rs          = t1moSub.series.regimeStrength as number[];
-            const rsi7v       = ind.rsi(7);
-            const macdV       = ind.macd(12, 26, 9);
+          const scores = computePixelScores(ind, t1moSub.meta.ready ? t1moSub : null, closes, highs, lows, volumes);
+          const nBars  = formatted.length;
 
-            // ── Color helper: RSI(7) heatmap (7 intensity levels) ──
-            const rsi7Color = (rsi: number): string => {
-              if (rsi >= 75) return '#00e676';  // extreme bull
-              if (rsi >= 65) return '#69f0ae';  // strong bull
-              if (rsi >= 57) return '#b9f6ca';  // mild bull
-              if (rsi >= 43) return '#ffea00';  // neutral
-              if (rsi >= 35) return '#ffab40';  // mild bear
-              if (rsi >= 25) return '#ff6d00';  // strong bear
-              return '#ff1744';                  // extreme bear
-            };
+          const redraw = () => {
+            const canvas = pixelCanvasRef.current;
+            const sc = chartsRef.current.sub;
+            if (!canvas || !sc) return;
+            const W = canvas.clientWidth, H = canvas.clientHeight;
+            if (W < 2 || H < 2) return;
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = Math.round(W * dpr);
+            canvas.height = Math.round(H * dpr);
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, W, H);
 
-            // ── Color helper: MACD histogram (growing stronger vs weakening) ──
-            const macdColor = (i: number): string => {
-              const h  = macdV.histogram[i] ?? 0;
-              const ph = macdV.histogram[i - 1] ?? 0;
-              const growing = Math.abs(h) >= Math.abs(ph);
-              if (h > 0)  return growing ? '#00e676' : '#69f0ae';
-              if (h < 0)  return growing ? '#ff1744' : '#ff6d00';
-              return '#ffea00';
-            };
+            const ts = sc.timeScale();
+            const range = ts.getVisibleLogicalRange();
+            if (!range) return;
+            // Leave room at the bottom for the time axis so dates stay visible
+            const axisH = (() => { try { return ts.height() || 0; } catch { return 0; } })();
+            const drawH = Math.max(10, H - axisH);
+            // Opaque background only over the heatmap region (axis strip stays transparent)
+            ctx.fillStyle = isDark ? '#0d1218' : '#ffffff';
+            ctx.fillRect(0, 0, W, drawH);
 
-            // ── ROW 1 (top ~33%): Regime/HMF pixel — bull/bear/neutral ──
-            // regimeColors is already '#00e676' | '#ff1744' | '#ffea00' from t1moCompute
-            // Use regimeStrength (0–10, always positive) to tint: stronger = more saturated
-            const row1Color = (i: number): string => {
-              const base  = regimeColors[i] ?? '#ffea00';
-              const str   = Math.min(10, rs[i] ?? 0);
-              const alpha = 0.45 + str * 0.055;   // 0.45 → 1.0
-              // Darken/lighten the base color by mixing with bg
-              return base + Math.round(alpha * 255).toString(16).padStart(2, '0');
-            };
+            const nRows = PIXEL_ROWS.length;
+            const rowH  = drawH / nRows;
+            const from  = Math.max(0, Math.floor(range.from));
+            const to    = Math.min(nBars - 1, Math.ceil(range.to));
 
-            // ── PIXEL BARS (value=1, always fills its price-scale band) ──
-            const PIXEL = 1;
+            // Determine bar pixel width from two adjacent coordinates
+            for (let i = from; i <= to; i++) {
+              const xc = ts.logicalToCoordinate(i as any);
+              if (xc == null) continue;
+              const xn = ts.logicalToCoordinate((i + 1) as any);
+              const barW = Math.max(1, (xn != null ? Math.abs(xn - xc) : 6));
+              const x = xc - barW / 2;
+              for (let r = 0; r < nRows; r++) {
+                const key = PIXEL_ROWS[r];
+                const s = scores[key]?.[i] ?? 50;
+                ctx.fillStyle = pixelColor(s);
+                ctx.fillRect(x + 0.25, r * rowH + 0.5, barW - 0.5, rowH - 1);
+              }
+            }
 
-            // Row 1 — Regime (top third, scaleId 'px1')
-            const px1 = (subChart as any).addSeries(HistogramSeries, {
-              priceScaleId: 'px1', lastValueVisible: false, priceLineVisible: false, base: 0,
-            });
-            px1.setData(times.map((t: number, i: number) => ({
-              time: t, value: PIXEL, color: row1Color(i),
-            })));
-            try { (subChart as any).priceScale('px1').applyOptions({ scaleMargins: { top: 0.01, bottom: 0.68 }, visible: false, autoScale: true }); } catch {}
+            // Row labels — left gutter, with a subtle dark backing for legibility
+            ctx.font = 'bold 9px "Roboto Mono", monospace';
+            ctx.textBaseline = 'middle';
+            for (let r = 0; r < nRows; r++) {
+              const label = PIXEL_ROWS[r];
+              const ly = r * rowH + rowH / 2;
+              const tw = ctx.measureText(label).width;
+              ctx.fillStyle = 'rgba(0,0,0,0.55)';
+              ctx.fillRect(2, ly - rowH / 2 + 1, tw + 8, rowH - 2);
+              ctx.fillStyle = '#cdd4e1';
+              ctx.fillText(label, 6, ly + 0.5);
+            }
+          };
 
-            // Row 2 — RSI(7) heatmap (middle third, scaleId 'px2')
-            const px2 = (subChart as any).addSeries(HistogramSeries, {
-              priceScaleId: 'px2', lastValueVisible: false, priceLineVisible: false, base: 0,
-            });
-            px2.setData(times.map((t: number, i: number) => ({
-              time: t, value: PIXEL, color: rsi7Color(rsi7v[i] ?? 50),
-            })));
-            try { (subChart as any).priceScale('px2').applyOptions({ scaleMargins: { top: 0.345, bottom: 0.345 }, visible: false, autoScale: true }); } catch {}
-
-            // Row 3 — MACD momentum (bottom third, scaleId 'px3')
-            const px3 = (subChart as any).addSeries(HistogramSeries, {
-              priceScaleId: 'px3', lastValueVisible: false, priceLineVisible: false, base: 0,
-            });
-            px3.setData(times.map((t: number, i: number) => ({
-              time: t, value: PIXEL, color: macdColor(i),
-            })));
-            try { (subChart as any).priceScale('px3').applyOptions({ scaleMargins: { top: 0.69, bottom: 0.01 }, visible: false, autoScale: true }); } catch {}
-
-            // ── INVISIBLE LABEL SERIES (transparent line, shows actual values on right axis) ──
-            const lblCfg = { lineWidth: 1, lineStyle: 0, priceLineVisible: false, crosshairMarkerVisible: false };
-
-            // HMF label — top row
-            const lbl1 = (subChart as any).addSeries(LineSeries, {
-              ...lblCfg, priceScaleId: 'lbl1',
-              color: '#f59e0b', lastValueVisible: true, title: 'HMF',
-            });
-            lbl1.setData(times.map((t: number, i: number) => ({ time: t, value: hmfVals[i] ?? 0 })).filter((d: any) => isFinite(d.value)));
-            try { (subChart as any).priceScale('lbl1').applyOptions({ scaleMargins: { top: 0.01, bottom: 0.68 }, visible: true, autoScale: true, borderVisible: false }); } catch {}
-
-            // RSI7 label — middle row
-            const lbl2 = (subChart as any).addSeries(LineSeries, {
-              ...lblCfg, priceScaleId: 'lbl2',
-              color: '#7e57c2', lastValueVisible: true, title: 'RSI7',
-            });
-            lbl2.setData(times.map((t: number, i: number) => ({ time: t, value: rsi7v[i] ?? 50 })).filter((d: any) => !isNaN(d.value)));
-            try { (subChart as any).priceScale('lbl2').applyOptions({ scaleMargins: { top: 0.345, bottom: 0.345 }, visible: true, autoScale: true, borderVisible: false }); } catch {}
-
-            // MACD label — bottom row
-            const lbl3 = (subChart as any).addSeries(LineSeries, {
-              ...lblCfg, priceScaleId: 'lbl3',
-              color: '#2196f3', lastValueVisible: true, title: 'MACD',
-            });
-            lbl3.setData(times.map((t: number, i: number) => ({ time: t, value: macdV.histogram[i] ?? 0 })).filter((d: any) => !isNaN(d.value)));
-            try { (subChart as any).priceScale('lbl3').applyOptions({ scaleMargins: { top: 0.69, bottom: 0.01 }, visible: true, autoScale: true, borderVisible: false }); } catch {}
-          }
-        } catch { /* T1MO compute error — non-fatal */ }
+          pixelRedrawRef.current = redraw;
+          subChart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
+          requestAnimationFrame(() => { redraw(); requestAnimationFrame(redraw); });
+        } catch { /* T1MO pixel compute error — non-fatal */ }
       } else if (subPanel === 'rsi') {
         addSubLine(ind.rsi(7), '#7e57c2', 'RSI(7)');
         [[30, 'rgba(8,153,129,0.3)'], [50, 'rgba(255,255,255,0.08)'], [70, 'rgba(242,54,69,0.3)']].forEach(([v, c]) => addLevel(v as number, c as string));
@@ -710,6 +764,11 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       [[chartsRef.current.main, mainRef.current, h0], [chartsRef.current.vol, volRef.current, h1], [chartsRef.current.sub, subRef.current, h2]].forEach(([ch, el, h]) => {
         if (el && ch && (h as number) > 0) { try { ch.applyOptions({ width: (el as HTMLDivElement).clientWidth, height: h }); } catch {} }
       });
+      // Resize + redraw the T1MO pixel canvas
+      const pc = pixelCanvasRef.current;
+      const inner = subRef.current?.querySelector<HTMLDivElement>('.sub-chart-inner');
+      if (pc && inner) { pc.style.width = inner.clientWidth + 'px'; pc.style.height = inner.clientHeight + 'px'; }
+      requestAnimationFrame(() => pixelRedrawRef.current?.());
     });
     if (wrapRef.current) obs.observe(wrapRef.current);
     chartsRef.current._obs = obs;
@@ -868,6 +927,11 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             <div className="subchart-tabs-spacer"/>
           </div>
           <div className="sub-chart-inner"/>
+          <canvas
+            ref={pixelCanvasRef}
+            className="t1mo-pixel-canvas"
+            style={{ display: subPanel === 'atlas' ? 'block' : 'none' }}
+          />
         </div>
       </div>
 

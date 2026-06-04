@@ -293,6 +293,8 @@ select{cursor:pointer;}
 .subchart-tabs-spacer{flex:1;}
 .sub-chart-inner{flex:1;min-height:0;position:relative;}
 .subchart-label2{position:absolute;top:4px;left:6px;font-size:9px;color:var(--aq-text3);pointer-events:none;z-index:2;letter-spacing:.5px;}
+/* T1MO Pixel — canvas heatmap overlay covering the sub-chart area (below the 24px tab row) */
+.t1mo-pixel-canvas{position:absolute;top:24px;left:0;right:0;bottom:0;width:100%;height:calc(100% - 24px);pointer-events:none;z-index:3;}
 
 /* ── Range selector bar ──────────────────────────────────────── */
 .chart-range-bar{height:24px;flex-shrink:0;display:flex;align-items:center;gap:1px;padding:0 8px;background:var(--aq-bg2);border-top:1px solid var(--aq-border);overflow:hidden;}
