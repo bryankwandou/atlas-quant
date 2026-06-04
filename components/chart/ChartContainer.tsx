@@ -485,63 +485,108 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       };
 
       if (subPanel === 'atlas') {
-        // T1MO Regime Strength + HMF (DARURAT HUKUM ATLAS Matrix)
+        // ── T1MO Pixel Matrix — 3 equal rows, uniform-height pixel blocks ──
+        // Each row uses value=1 (fixed) so blocks are always the SAME HEIGHT.
+        // Information is encoded ONLY in bar color. This produces the pixel heatmap look.
         try {
           const t1moSub = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes, open: closes, time: times } as any, {});
           if (t1moSub.meta.ready) {
-            const rs = t1moSub.series.regimeStrength as number[];
-            const hmfVals = t1moSub.series.hmf as (number | null)[];
+            const hmfVals     = t1moSub.series.hmf as (number | null)[];
             const regimeColors = (t1moSub.meta as any).regimeColors as string[];
-            const ema9v = ind.ema(9);
-            const ema21v = ind.ema(21);
-            const rsi14v = ind.rsi(14);
+            const rs          = t1moSub.series.regimeStrength as number[];
+            const rsi7v       = ind.rsi(7);
+            const macdV       = ind.macd(12, 26, 9);
 
-            // ── T1MO Pixel — 3 BARS PER CANDLE, equal thirds of sub-panel ──
-            // Bukti hukum: 1 candle → 1 baris 3 bar T1MO (HMF | RSI7-50 | MACD hist)
-            const rsi7v  = ind.rsi(7);
-            const macdV  = ind.macd(12, 26, 9);
+            // ── Color helper: RSI(7) heatmap (7 intensity levels) ──
+            const rsi7Color = (rsi: number): string => {
+              if (rsi >= 75) return '#00e676';  // extreme bull
+              if (rsi >= 65) return '#69f0ae';  // strong bull
+              if (rsi >= 57) return '#b9f6ca';  // mild bull
+              if (rsi >= 43) return '#ffea00';  // neutral
+              if (rsi >= 35) return '#ffab40';  // mild bear
+              if (rsi >= 25) return '#ff6d00';  // strong bear
+              return '#ff1744';                  // extreme bear
+            };
 
-            // Bar 1 (top third): HMF colored by Regime (primary T1MO signal)
-            const bar1 = (subChart as any).addSeries(HistogramSeries, {
-              priceScaleId: 'right', lastValueVisible: true, priceLineVisible: false, title: 'HMF',
+            // ── Color helper: MACD histogram (growing stronger vs weakening) ──
+            const macdColor = (i: number): string => {
+              const h  = macdV.histogram[i] ?? 0;
+              const ph = macdV.histogram[i - 1] ?? 0;
+              const growing = Math.abs(h) >= Math.abs(ph);
+              if (h > 0)  return growing ? '#00e676' : '#69f0ae';
+              if (h < 0)  return growing ? '#ff1744' : '#ff6d00';
+              return '#ffea00';
+            };
+
+            // ── ROW 1 (top ~33%): Regime/HMF pixel — bull/bear/neutral ──
+            // regimeColors is already '#00e676' | '#ff1744' | '#ffea00' from t1moCompute
+            // Use regimeStrength (0–10, always positive) to tint: stronger = more saturated
+            const row1Color = (i: number): string => {
+              const base  = regimeColors[i] ?? '#ffea00';
+              const str   = Math.min(10, rs[i] ?? 0);
+              const alpha = 0.45 + str * 0.055;   // 0.45 → 1.0
+              // Darken/lighten the base color by mixing with bg
+              return base + Math.round(alpha * 255).toString(16).padStart(2, '0');
+            };
+
+            // ── PIXEL BARS (value=1, always fills its price-scale band) ──
+            const PIXEL = 1;
+
+            // Row 1 — Regime (top third, scaleId 'px1')
+            const px1 = (subChart as any).addSeries(HistogramSeries, {
+              priceScaleId: 'px1', lastValueVisible: false, priceLineVisible: false, base: 0,
             });
-            bar1.setData(times.map((t: number, i: number) => ({
-              time: t,
-              value: hmfVals[i] ?? 0,
-              color: regimeColors[i] ?? '#ffea00',
-            })).filter((d: any) => isFinite(d.value)));
-            try { (subChart as any).priceScale('right').applyOptions({ scaleMargins: { top: 0.02, bottom: 0.68 }, visible: true, autoScale: true }); } catch {}
+            px1.setData(times.map((t: number, i: number) => ({
+              time: t, value: PIXEL, color: row1Color(i),
+            })));
+            try { (subChart as any).priceScale('px1').applyOptions({ scaleMargins: { top: 0.01, bottom: 0.68 }, visible: false, autoScale: true }); } catch {}
 
-            // Bar 2 (middle third): RSI(7) - 50 deviation
-            const bar2 = (subChart as any).addSeries(HistogramSeries, {
-              priceScaleId: 'right2', lastValueVisible: true, priceLineVisible: false, title: 'RSI7Δ',
+            // Row 2 — RSI(7) heatmap (middle third, scaleId 'px2')
+            const px2 = (subChart as any).addSeries(HistogramSeries, {
+              priceScaleId: 'px2', lastValueVisible: false, priceLineVisible: false, base: 0,
             });
-            bar2.setData(times.map((t: number, i: number) => {
-              const v = (rsi7v[i] ?? 50) - 50;
-              return { time: t, value: v, color: v > 0 ? '#00e676' : v < -10 ? '#ff1744' : '#ffea00' };
-            }).filter((d: any) => !isNaN(d.value)));
-            try { (subChart as any).priceScale('right2').applyOptions({ scaleMargins: { top: 0.35, bottom: 0.35 }, visible: false, autoScale: true }); } catch {}
+            px2.setData(times.map((t: number, i: number) => ({
+              time: t, value: PIXEL, color: rsi7Color(rsi7v[i] ?? 50),
+            })));
+            try { (subChart as any).priceScale('px2').applyOptions({ scaleMargins: { top: 0.345, bottom: 0.345 }, visible: false, autoScale: true }); } catch {}
 
-            // Bar 3 (bottom third): MACD histogram
-            const bar3 = (subChart as any).addSeries(HistogramSeries, {
-              priceScaleId: 'right3', lastValueVisible: true, priceLineVisible: false, title: 'MACD',
+            // Row 3 — MACD momentum (bottom third, scaleId 'px3')
+            const px3 = (subChart as any).addSeries(HistogramSeries, {
+              priceScaleId: 'px3', lastValueVisible: false, priceLineVisible: false, base: 0,
             });
-            bar3.setData(times.map((t: number, i: number) => ({
-              time: t,
-              value: macdV.histogram[i] ?? 0,
-              color: (macdV.histogram[i] ?? 0) >= 0 ? '#00e676' : '#ff1744',
-            })).filter((d: any) => !isNaN(d.value)));
-            try { (subChart as any).priceScale('right3').applyOptions({ scaleMargins: { top: 0.68, bottom: 0.02 }, visible: false, autoScale: true }); } catch {}
+            px3.setData(times.map((t: number, i: number) => ({
+              time: t, value: PIXEL, color: macdColor(i),
+            })));
+            try { (subChart as any).priceScale('px3').applyOptions({ scaleMargins: { top: 0.69, bottom: 0.01 }, visible: false, autoScale: true }); } catch {}
 
-            // Zero baselines for each third
-            const bl1 = (subChart as any).addSeries(LineSeries, { priceScaleId: 'right',  color: 'rgba(255,255,255,0.1)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
-            bl1.setData(formatted.map((c: any) => ({ time: c.time, value: 0 })));
-            const bl2 = (subChart as any).addSeries(LineSeries, { priceScaleId: 'right2', color: 'rgba(255,255,255,0.1)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
-            bl2.setData(formatted.map((c: any) => ({ time: c.time, value: 0 })));
-            const bl3 = (subChart as any).addSeries(LineSeries, { priceScaleId: 'right3', color: 'rgba(255,255,255,0.1)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
-            bl3.setData(formatted.map((c: any) => ({ time: c.time, value: 0 })));
+            // ── INVISIBLE LABEL SERIES (transparent line, shows actual values on right axis) ──
+            const lblCfg = { lineWidth: 1, lineStyle: 0, priceLineVisible: false, crosshairMarkerVisible: false };
+
+            // HMF label — top row
+            const lbl1 = (subChart as any).addSeries(LineSeries, {
+              ...lblCfg, priceScaleId: 'lbl1',
+              color: '#f59e0b', lastValueVisible: true, title: 'HMF',
+            });
+            lbl1.setData(times.map((t: number, i: number) => ({ time: t, value: hmfVals[i] ?? 0 })).filter((d: any) => isFinite(d.value)));
+            try { (subChart as any).priceScale('lbl1').applyOptions({ scaleMargins: { top: 0.01, bottom: 0.68 }, visible: true, autoScale: true, borderVisible: false }); } catch {}
+
+            // RSI7 label — middle row
+            const lbl2 = (subChart as any).addSeries(LineSeries, {
+              ...lblCfg, priceScaleId: 'lbl2',
+              color: '#7e57c2', lastValueVisible: true, title: 'RSI7',
+            });
+            lbl2.setData(times.map((t: number, i: number) => ({ time: t, value: rsi7v[i] ?? 50 })).filter((d: any) => !isNaN(d.value)));
+            try { (subChart as any).priceScale('lbl2').applyOptions({ scaleMargins: { top: 0.345, bottom: 0.345 }, visible: true, autoScale: true, borderVisible: false }); } catch {}
+
+            // MACD label — bottom row
+            const lbl3 = (subChart as any).addSeries(LineSeries, {
+              ...lblCfg, priceScaleId: 'lbl3',
+              color: '#2196f3', lastValueVisible: true, title: 'MACD',
+            });
+            lbl3.setData(times.map((t: number, i: number) => ({ time: t, value: macdV.histogram[i] ?? 0 })).filter((d: any) => !isNaN(d.value)));
+            try { (subChart as any).priceScale('lbl3').applyOptions({ scaleMargins: { top: 0.69, bottom: 0.01 }, visible: true, autoScale: true, borderVisible: false }); } catch {}
           }
-        } catch {}
+        } catch { /* T1MO compute error — non-fatal */ }
       } else if (subPanel === 'rsi') {
         addSubLine(ind.rsi(7), '#7e57c2', 'RSI(7)');
         [[30, 'rgba(8,153,129,0.3)'], [50, 'rgba(255,255,255,0.08)'], [70, 'rgba(242,54,69,0.3)']].forEach(([v, c]) => addLevel(v as number, c as string));
