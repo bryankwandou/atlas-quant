@@ -38,7 +38,8 @@ const CHART_TYPES = [
 ];
 
 // ── T1MO Pixel — 4 core T1MO signal rows (HMF · RSI7 · MACD · ATLAS) ──────────
-const PIXEL_ROWS = ['HMF','RSI7','MACD','ATLAS'] as const;
+// Single T1MO regime strip — matches the user's reference (one heatmap row, not 4).
+const PIXEL_ROWS = ['T1MO'] as const;
 
 // 7-level score→color scale (identical to reference SCORE_COLORS)
 const PIXEL_SCALE: Array<{ min: number; c: string }> = [
@@ -100,12 +101,17 @@ function computePixelScores(
 
   const num = (arr: any[], i: number, d = 0) => Number.isFinite(arr?.[i]) ? arr[i] : d;
 
-  // "higher = more bullish" raw series → percentile-ranked for vivid spread
+  // Single composite T1MO regime score (blend of conviction + momentum + RSI7 + MACD),
+  // percentile-ranked for a vivid spread — one strip, exactly like the reference.
   const raw: Record<string, number[]> = {
-    HMF:   hmf.map(v => v ?? 0),
-    RSI7:  rsi7.map((v: number) => Number.isFinite(v) ? v : 50),
-    MACD:  macd.histogram.map((v: number) => Number.isFinite(v) ? v : 0),
-    ATLAS: closes.map((_, i) => num(bullProb, i, 50)),
+    T1MO: closes.map((_, i) => {
+      const p   = num(bullProb, i, 50);                                   // 0..100 T1MO conviction
+      const h   = Math.max(0, Math.min(100, 50 + num(hmf, i, 0) * 12));   // ATR-norm momentum → 0..100
+      const r7  = num(rsi7, i, 50);
+      const md  = macd.histogram[i];
+      const mdn = 50 + (Number.isFinite(md) ? Math.sign(md) * Math.min(50, Math.abs(md) * 4) : 0);
+      return 0.5 * p + 0.2 * h + 0.15 * r7 + 0.15 * mdn;
+    }),
   };
 
   const scores: Record<string, number[]> = {};
