@@ -37,8 +37,8 @@ const CHART_TYPES = [
   { id: 'area',        icon: Activity,              tip: 'Area'        },
 ];
 
-// ── T1MO Pixel — 14-indicator signal matrix (per T1MO Pixel Showcase reference) ──
-const PIXEL_ROWS = ['RSI7','RSI14','MACD','EMA9','EMA21','EMA50','VWAP','HMF','MFI','%R','BB','ADX','Box','ATLAS'] as const;
+// ── T1MO Pixel — 4 core T1MO signal rows (HMF · RSI7 · MACD · ATLAS) ──────────
+const PIXEL_ROWS = ['HMF','RSI7','MACD','ATLAS'] as const;
 
 // 7-level score→color scale (identical to reference SCORE_COLORS)
 const PIXEL_SCALE: Array<{ min: number; c: string }> = [
@@ -52,64 +52,79 @@ const PIXEL_SCALE: Array<{ min: number; c: string }> = [
 ];
 const pixelColor = (s: number) => (PIXEL_SCALE.find(b => s > b.min)?.c) || '#dd2c00';
 
-function robustScale(vals: number[]): number {
-  const fin = vals.filter(v => Number.isFinite(v));
-  if (!fin.length) return 1;
-  const mean = fin.reduce((a, b) => a + b, 0) / fin.length;
-  const sd = Math.sqrt(fin.reduce((s, v) => s + (v - mean) ** 2, 0) / fin.length);
-  return sd > 0 ? sd : (Math.abs(mean) || 1);
-}
 const clampScore = (v: number) => Math.max(2, Math.min(98, v));
 
-/** Build 14 score arrays (0–100) — one per indicator row, length = bars. */
+/**
+ * Rolling percentile rank → 0–100. For each bar, where does its value fall
+ * within the last `window` bars? This spreads scores across the FULL color
+ * range so the heatmap stays vivid/varied even inside a strong trend (matches
+ * the T1MO Pixel reference look — not a one-color wall).
+ */
+function rollingPercentile(vals: number[], window = 120): number[] {
+  const n = vals.length;
+  const out = new Array(n).fill(50);
+  for (let i = 0; i < n; i++) {
+    const cur = vals[i];
+    if (!Number.isFinite(cur)) { out[i] = 50; continue; }
+    const start = Math.max(0, i - window + 1);
+    let below = 0, equal = 0, count = 0;
+    for (let j = start; j <= i; j++) {
+      const v = vals[j];
+      if (!Number.isFinite(v)) continue;
+      count++;
+      if (v < cur) below++; else if (v === cur) equal++;
+    }
+    // mid-rank percentile (Hazen) — avoids 0/100 saturation at the extremes
+    out[i] = count > 0 ? clampScore(((below + equal / 2) / count) * 100) : 50;
+  }
+  return out;
+}
+
+/** Build the 4 T1MO pixel rows (0–100 score each, rolling-percentile normalized)
+ *  plus a per-bar `active` gate: a column is only drawn when the T1MO regime has
+ *  real conviction, leaving genuine GAPS during low-signal / ranging periods —
+ *  matching the clustered-with-gaps look of the reference. */
 function computePixelScores(
   ind: any,
   t1mo: any,
-  closes: number[], highs: number[], lows: number[], volumes: number[],
-): Record<string, number[]> {
+  closes: number[],
+): { scores: Record<string, number[]>; active: boolean[] } {
   const n = closes.length;
-  const rsi7   = ind.rsi(7);
-  const rsi14  = ind.rsi(14);
-  const macd   = ind.macd(12, 26, 9);
-  const ema9   = ind.ema(9);
-  const ema21  = ind.ema(21);
-  const ema50  = ind.ema(50);
-  const vwap   = ind.vwap();
-  const mfi    = ind.mfi(14);
-  const wr     = ind.williamsR(14);
-  const bb     = ind.bollingerBands(20, 2);
-  const adxObj = ind.adx(14);
-  const atr    = ind.atr(14);
+  const win = Math.max(40, Math.min(150, Math.floor(n / 3))); // adaptive window
 
-  const hmf       = (t1mo?.series?.hmf ?? []) as (number | null)[];
-  const posPct    = (t1mo?.series?.positionPct ?? []) as number[];   // already 0..100
-  const bullProb  = (t1mo?.series?.bullProb ?? []) as number[];      // already 0..100
+  const rsi7 = ind.rsi(7);
+  const macd = ind.macd(12, 26, 9);
 
-  const sMacd = robustScale(macd.histogram);
-  const sHmf  = robustScale(hmf.map(v => v ?? 0));
+  const hmf      = (t1mo?.series?.hmf ?? []) as (number | null)[];
+  const bullProb = (t1mo?.series?.bullProb ?? []) as number[]; // 0..100 conviction prob
 
-  const out: Record<string, number[]> = {};
-  for (const k of PIXEL_ROWS) out[k] = new Array(n).fill(50);
+  const num = (arr: any[], i: number, d = 0) => Number.isFinite(arr?.[i]) ? arr[i] : d;
 
+  // "higher = more bullish" raw series → percentile-ranked for vivid spread
+  const raw: Record<string, number[]> = {
+    HMF:   hmf.map(v => v ?? 0),
+    RSI7:  rsi7.map((v: number) => Number.isFinite(v) ? v : 50),
+    MACD:  macd.histogram.map((v: number) => Number.isFinite(v) ? v : 0),
+    ATLAS: closes.map((_, i) => num(bullProb, i, 50)),
+  };
+
+  const scores: Record<string, number[]> = {};
+  for (const k of PIXEL_ROWS) scores[k] = rollingPercentile(raw[k] ?? new Array(n).fill(0), win);
+
+  // ── Conviction gate → gaps ──────────────────────────────────────────────
+  // Draw a column only when the regime has conviction. Prefer T1MO bullProb
+  // (distance from 50); fall back to combined RSI7 + MACD strength.
+  const GATE = 8; // |prob-50| ≥ 8  →  roughly the BUY/SELL threshold band
+  const active: boolean[] = new Array(n).fill(false);
+  const macdAbs = macd.histogram.map((v: number) => Math.abs(Number.isFinite(v) ? v : 0));
+  const macdPct = rollingPercentile(macdAbs, win); // 0..100 relative magnitude
   for (let i = 0; i < n; i++) {
-    const a = Number.isFinite(atr[i]) && atr[i] > 0 ? atr[i] : (closes[i] * 0.005 || 1);
-    out['RSI7'][i]  = clampScore(Number.isFinite(rsi7[i])  ? rsi7[i]  : 50);
-    out['RSI14'][i] = clampScore(Number.isFinite(rsi14[i]) ? rsi14[i] : 50);
-    out['MACD'][i]  = clampScore(50 + ((macd.histogram[i] ?? 0) / sMacd) * 22);
-    out['EMA9'][i]  = clampScore(50 + ((closes[i] - (ema9[i]  ?? closes[i])) / a) * 16);
-    out['EMA21'][i] = clampScore(50 + ((closes[i] - (ema21[i] ?? closes[i])) / a) * 14);
-    out['EMA50'][i] = clampScore(50 + ((closes[i] - (ema50[i] ?? closes[i])) / a) * 12);
-    out['VWAP'][i]  = clampScore(50 + ((closes[i] - (vwap[i]  ?? closes[i])) / a) * 14);
-    out['HMF'][i]   = clampScore(50 + ((hmf[i] ?? 0) / sHmf) * 22);
-    out['MFI'][i]   = clampScore(Number.isFinite(mfi[i]) ? mfi[i] : 50);
-    out['%R'][i]    = clampScore((Number.isFinite(wr[i]) ? wr[i] : -50) + 100); // -100..0 → 0..100
-    out['BB'][i]    = clampScore(Number.isFinite(bb.percentB[i]) ? bb.percentB[i] : 50);
-    const di = (adxObj.plusDI[i] ?? 0) - (adxObj.minusDI[i] ?? 0);
-    out['ADX'][i]   = clampScore(50 + Math.max(-48, Math.min(48, di)));
-    out['Box'][i]   = clampScore(Number.isFinite(posPct[i]) ? posPct[i] : 50);
-    out['ATLAS'][i] = clampScore(Number.isFinite(bullProb[i]) ? bullProb[i] : 50);
+    const prob = num(bullProb, i, 50);
+    const convT1mo = Math.abs(prob - 50);
+    const convRsi  = Math.abs((Number.isFinite(rsi7[i]) ? rsi7[i] : 50) - 50);
+    active[i] = convT1mo >= GATE || convRsi >= 18 || macdPct[i] >= 70;
   }
-  return out;
+  return { scores, active };
 }
 
 interface Props { symbol: string; timeframe: string; }
@@ -565,18 +580,19 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       };
 
       if (subPanel === 'atlas') {
-        // ── T1MO Pixel — 14-indicator signal matrix (canvas overlay) ──────────
-        // Reference: "T1MO Pixel Showcase.html". 14 indicator rows × N bar columns.
-        // Each cell colored by a 0–100 signal score (green=bull → red=bear).
-        // The lightweight-charts sub-chart keeps only a transparent anchor (for the
-        // time axis + crosshair sync); the heatmap itself is drawn on <canvas>,
+        // ── T1MO Pixel — 4-row signal matrix (canvas overlay) ─────────────────
+        // Rows: HMF · RSI7 · MACD · ATLAS. Each cell colored by a 0–100 score
+        // (green=bull → red=bear). Columns are GAPPED — only drawn when the T1MO
+        // regime has conviction (clustered look, matches the reference).
+        // The lightweight-charts sub-chart keeps only a transparent anchor (for
+        // the time axis + crosshair sync); the heatmap is drawn on <canvas>,
         // x-aligned to bars via subChart.timeScale().logicalToCoordinate().
         try {
           // Hide the sub-chart right price axis for the pixel matrix (no price meaning)
           try { (subChart as any).priceScale('right').applyOptions({ visible: false }); } catch {}
 
           const t1moSub = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes, open: closes, time: times } as any, {});
-          const scores = computePixelScores(ind, t1moSub.meta.ready ? t1moSub : null, closes, highs, lows, volumes);
+          const { scores, active } = computePixelScores(ind, t1moSub.meta.ready ? t1moSub : null, closes);
           const nBars  = formatted.length;
 
           const redraw = () => {
@@ -604,36 +620,38 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             ctx.fillRect(0, 0, W, drawH);
 
             const nRows = PIXEL_ROWS.length;
+            const rowGap = 1.5;                       // small gap between rows
             const rowH  = drawH / nRows;
             const from  = Math.max(0, Math.floor(range.from));
             const to    = Math.min(nBars - 1, Math.ceil(range.to));
 
-            // Determine bar pixel width from two adjacent coordinates
             for (let i = from; i <= to; i++) {
+              if (!active[i]) continue;              // GAP: skip low-conviction columns
               const xc = ts.logicalToCoordinate(i as any);
               if (xc == null) continue;
               const xn = ts.logicalToCoordinate((i + 1) as any);
               const barW = Math.max(1, (xn != null ? Math.abs(xn - xc) : 6));
+              const cellW = Math.max(1, barW - 1);   // 1px horizontal gap → mosaic look
               const x = xc - barW / 2;
               for (let r = 0; r < nRows; r++) {
                 const key = PIXEL_ROWS[r];
                 const s = scores[key]?.[i] ?? 50;
                 ctx.fillStyle = pixelColor(s);
-                ctx.fillRect(x + 0.25, r * rowH + 0.5, barW - 0.5, rowH - 1);
+                ctx.fillRect(x + 0.5, r * rowH + rowGap / 2, cellW, rowH - rowGap);
               }
             }
 
             // Row labels — left gutter, with a subtle dark backing for legibility
-            ctx.font = 'bold 9px "Roboto Mono", monospace';
+            ctx.font = 'bold 10px "Roboto Mono", monospace';
             ctx.textBaseline = 'middle';
             for (let r = 0; r < nRows; r++) {
               const label = PIXEL_ROWS[r];
               const ly = r * rowH + rowH / 2;
               const tw = ctx.measureText(label).width;
-              ctx.fillStyle = 'rgba(0,0,0,0.55)';
-              ctx.fillRect(2, ly - rowH / 2 + 1, tw + 8, rowH - 2);
-              ctx.fillStyle = '#cdd4e1';
-              ctx.fillText(label, 6, ly + 0.5);
+              ctx.fillStyle = 'rgba(0,0,0,0.6)';
+              ctx.fillRect(2, ly - 8, tw + 10, 16);
+              ctx.fillStyle = '#e6ebf2';
+              ctx.fillText(label, 7, ly + 0.5);
             }
           };
 

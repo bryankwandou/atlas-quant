@@ -416,7 +416,6 @@ export default function RightPanel() {
             className={`rp-tab${activeTab === tab.id ? ' active' : ''}`}
             onClick={() => setRightPanelTab(tab.id)}
           >
-            <span className="rp-tab-icon">{tab.icon}</span>
             <span>{tab.label}</span>
           </button>
         ))}
