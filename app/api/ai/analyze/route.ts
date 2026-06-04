@@ -12,23 +12,17 @@ export async function POST(req: NextRequest) {
     }, { status: 503 });
   }
 
-  // Use candles from request body first (sent by RightPanel), fall back to Supabase
+  // Use candles from request body first (sent by RightPanel); else fetch live via
+  // the resilient router (binance.vision) — NOT the paused Supabase.
   let candles = clientCandles;
 
   if (!candles || candles.length < 5) {
     try {
-      const { getSupabaseAdmin } = await import('@/src/services/supabase');
-      const sb = getSupabaseAdmin();
-      const { data } = await sb
-        .from('market_ohlcv')
-        .select('open,high,low,close,volume,open_time')
-        .eq('symbol', symbol)
-        .eq('timeframe', timeframe)
-        .order('open_time', { ascending: false })
-        .limit(20);
-      if (data && data.length >= 5) candles = data.reverse();
+      const { routeOHLCV } = await import('@/src/lib/marketRouter');
+      const data = await routeOHLCV(symbol, timeframe, 120);
+      if (data && data.length >= 5) candles = data;
     } catch {
-      // Supabase not configured — use whatever candles we have
+      // ignore — handled below
     }
   }
 

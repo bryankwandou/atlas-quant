@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runBacktest } from '@/src/core/quant/backtest-engine';
-import { supabaseAdmin } from '@/src/services/supabase';
+import { routeOHLCV } from '@/src/lib/marketRouter';
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -14,16 +14,12 @@ export async function POST(req: NextRequest) {
     startIndex = 50,
   } = body;
 
-  const { data: rawCandles } = await supabaseAdmin
-    .from('market_ohlcv')
-    .select('*')
-    .eq('symbol', symbol)
-    .eq('timeframe', timeframe)
-    .order('open_time', { ascending: true })
-    .limit(1000);
+  // Fetch via the resilient router (binance.vision → CryptoCompare/OKX), NOT the
+  // paused Supabase. This is the same source the live chart uses.
+  const rawCandles = await routeOHLCV(symbol, timeframe, 2000).catch(() => []);
 
   if (!rawCandles || rawCandles.length < 100) {
-    return NextResponse.json({ error: 'Insufficient data for backtest (need 100+ candles)' }, { status: 400 });
+    return NextResponse.json({ error: `Insufficient data for backtest — got ${rawCandles?.length ?? 0} candles for ${symbol} ${timeframe} (need 100+)` }, { status: 400 });
   }
 
   const candles = rawCandles.map((c: any) => ({
