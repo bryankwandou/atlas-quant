@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BINANCE_BASE = process.env.BINANCE_BASE_URL || 'https://api.binance.com/api/v3';
+// data-api.binance.vision is NOT geo-blocked from Vercel (api.binance.com → 451)
+const BINANCE_BASE = process.env.BINANCE_BASE_URL || 'https://data-api.binance.vision/api/v3';
 
 /** Crypto/memecoin lists sourced from Binance */
 const MEMECOIN_SYMBOLS = [
@@ -231,7 +232,25 @@ const STATIC_CATALOG: Record<string, { symbol: string; name: string; exchange: s
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const assetClass = searchParams.get('assetClass') || 'crypto';
-  const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 500);
+  const limit = Math.min(parseInt(searchParams.get('limit') || '700'), 2000);
+
+  // Aggregate ALL asset classes (crypto + stocks + forex + commodity + index + ...)
+  if (assetClass === 'all') {
+    const staticAll = Object.values(STATIC_CATALOG).flat();
+    let crypto: any[] = [];
+    try {
+      const res = await fetch(`${BINANCE_BASE}/ticker/24hr`, { next: { revalidate: 60 } });
+      if (res.ok) {
+        const tickers = await res.json();
+        crypto = tickers
+          .filter((t: any) => t.symbol.endsWith('USDT') && parseFloat(t.quoteVolume) > 50_000)
+          .sort((a: any, b: any) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
+          .map((t: any) => ({ symbol: t.symbol, name: t.symbol.replace('USDT', ''), exchange: 'BINANCE', assetClass: 'crypto' }));
+      }
+    } catch {}
+    const all = [...crypto, ...staticAll];
+    return NextResponse.json({ symbols: all.slice(0, limit), count: all.length, assetClass: 'all', source: 'aggregate' });
+  }
 
   // Non-crypto: return from static catalog
   if (assetClass !== 'crypto' && assetClass !== 'memecoin') {
@@ -279,7 +298,7 @@ export async function GET(req: NextRequest) {
 
     const tickers = await res.json();
     const symbols = tickers
-      .filter((t: any) => t.symbol.endsWith('USDT') && parseFloat(t.quoteVolume) > 500_000)
+      .filter((t: any) => t.symbol.endsWith('USDT') && parseFloat(t.quoteVolume) > 50_000)
       .sort((a: any, b: any) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
       .slice(0, limit)
       .map((t: any) => ({
