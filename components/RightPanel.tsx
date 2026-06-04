@@ -387,13 +387,10 @@ export default function RightPanel() {
   useEffect(() => {
     if (activeTab !== 'calendar' || calEvents.length || calLoading) return;
     setCalLoading(true);
-    fetch('/api/macro/data').then(r => r.json()).then(d => {
-      const ev = [
-        ...(((d.calendar?.events) || []).map((e: any) => ({ title: e.event || e.title, date: e.date || e.time, country: e.country, impact: e.impact }))),
-        ...(((d.centralBank) || []).map((c: any) => ({ title: c.event || c.bank, date: c.date, country: c.bank, impact: 'high' }))),
-      ];
-      setCalEvents(ev);
-    }).catch(() => {}).finally(() => setCalLoading(false));
+    fetch('/api/market/calendar', { signal: AbortSignal.timeout(8000) })
+      .then(r => r.json())
+      .then(d => setCalEvents(d.events || []))
+      .catch(() => {}).finally(() => setCalLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
