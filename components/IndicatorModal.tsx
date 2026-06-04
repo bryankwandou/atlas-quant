@@ -173,6 +173,25 @@ interface ExtendedCategory {
   source: 'legacy' | 'library';
 }
 
+const PALETTE: Record<string, string> = {
+  'Moving Average':        '#2962ff',
+  'Momentum':              '#089981',
+  'Volatility':            '#ff9800',
+  'Volume':                '#00bcd4',
+  'Trend':                 '#1e88e5',
+  'Oscillator':            '#43a047',
+  'Support & Resistance':  '#8e24aa',
+  'Smart Money':           '#f23645',
+  'Bill Williams':         '#e91e63',
+  'Adaptive':              '#3f51b5',
+  'Statistical':           '#5d6d7e',
+  'Composite':             '#9c27b0',
+  'External Factor':       '#ff6f00',
+  'Microstructure':        '#26a69a',
+  'Sentiment':             '#d81b60',
+  'On-Chain':              '#00897b',
+};
+
 function buildExtendedCategories(): ExtendedCategory[] {
   const legacy: ExtendedCategory[] = LEGACY_CATEGORIES.map((c) => ({ ...c, source: 'legacy' as const }));
 
@@ -271,6 +290,43 @@ function scoreItem(item: FlatItem, qLow: string): number {
   return score;
 }
 
+/** Score a raw registry preset (search across the FULL 16k catalog, TradingView-style). */
+function scorePreset(p: IndicatorPreset, qLow: string): number {
+  if (!qLow) return 0;
+  const id = p.id.toLowerCase();
+  const name = p.name.toLowerCase();
+  const short = (p.short || '').toLowerCase();
+  const desc = (p.description || '').toLowerCase();
+  let score = 0;
+  if (id === qLow) score += 1000;
+  if (short === qLow) score += 900;
+  if (name === qLow) score += 800;
+  if (id.startsWith(qLow)) score += 500;
+  if (name.startsWith(qLow)) score += 400;
+  if (short.startsWith(qLow)) score += 350;
+  if (id.includes(qLow)) score += 200;
+  if (name.includes(qLow)) score += 180;
+  if ((p.author || '').toLowerCase().includes(qLow)) score += 120;
+  if (desc.includes(qLow)) score += 80;
+  if (p.keywords?.some((k) => k.toLowerCase() === qLow)) score += 150;
+  if (p.keywords?.some((k) => k.toLowerCase().includes(qLow))) score += 60;
+  return score;
+}
+
+function presetToFlat(p: IndicatorPreset): FlatItem {
+  return {
+    id: p.id,
+    name: p.name,
+    desc: `${p.description ?? ''} · ${p.author}`,
+    catId: `lib:${p.category}`,
+    catColor: PALETTE[p.category] ?? '#546e7a',
+    catLabel: p.category,
+    keywords: p.keywords,
+    short: p.short,
+    author: p.author,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
@@ -290,18 +346,31 @@ export default function IndicatorModal() {
 
   const allFlat = useMemo(() => flattenAll(), []);
 
+  // Search the FULL 16k registry (not just the ~250/category browse slices).
+  const searchResults: FlatItem[] | null = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return null;
+    // Legacy items first (they actually render on the chart), then the full library.
+    const legacyHits = allFlat
+      .map((i) => ({ item: i, score: scoreItem(i, q) }))
+      .filter(({ score }) => score > 0);
+    const legacyIds = new Set(legacyHits.map((h) => h.item.id));
+    const libHits: { item: FlatItem; score: number }[] = [];
+    for (const p of INDICATOR_REGISTRY) {
+      if (legacyIds.has(p.id)) continue;
+      const score = scorePreset(p, q);
+      if (score > 0) libHits.push({ item: presetToFlat(p), score });
+    }
+    return [...legacyHits, ...libHits]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 300)
+      .map(({ item }) => item);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
   if (!showIndicatorModal) return null;
 
   const isActive = (id: string) => activeIndicators.includes(id);
-
-  const searchResults: FlatItem[] | null = search.trim().length > 0
-    ? allFlat
-        .map((i) => ({ item: i, score: scoreItem(i, search.toLowerCase().trim()) }))
-        .filter(({ score }) => score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 100)
-        .map(({ item }) => item)
-    : null;
 
   const currentCat  = CATEGORIES.find(c => c.id === activeCat);
   const displayList = (searchResults ?? (currentCat?.items ?? [])) as Array<IndicatorItem & Partial<FlatItem>>;

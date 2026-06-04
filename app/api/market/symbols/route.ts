@@ -243,9 +243,9 @@ export async function GET(req: NextRequest) {
       if (res.ok) {
         const tickers = await res.json();
         crypto = tickers
-          .filter((t: any) => t.symbol.endsWith('USDT') && parseFloat(t.quoteVolume) > 50_000)
+          .filter((t: any) => /(?:USDT|FDUSD|USDC|TUSD|BTC|ETH|BNB)$/.test(t.symbol) && parseFloat(t.quoteVolume) > 0)
           .sort((a: any, b: any) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
-          .map((t: any) => ({ symbol: t.symbol, name: t.symbol.replace('USDT', ''), exchange: 'BINANCE', assetClass: 'crypto' }));
+          .map((t: any) => ({ symbol: t.symbol, name: t.symbol.replace(/(USDT|FDUSD|USDC|TUSD|BTC|ETH|BNB)$/, ''), exchange: 'BINANCE', assetClass: 'crypto' }));
       }
     } catch {}
     const all = [...crypto, ...staticAll];
