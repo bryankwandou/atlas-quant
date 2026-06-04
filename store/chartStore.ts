@@ -179,6 +179,19 @@ export const useChartStore = create<ChartStore>()(
         subPanel: s.subPanel,
         fibConfig: s.fibConfig,
       }),
+      // Bulletproof: on hydration, ALWAYS strip the non-T1MO main-chart overlays
+      // (EMA9/EMA21/VWAP) so the top panel shows only the 3 T1MO indicators —
+      // regardless of any stale localStorage. Users can still re-add via the
+      // indicator modal afterwards.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<ChartStore>;
+        const merged = { ...current, ...p } as ChartStore;
+        const STRIP = ['EMA_9', 'EMA_21', 'VWAP'];
+        if (Array.isArray(merged.activeIndicators)) {
+          merged.activeIndicators = merged.activeIndicators.filter(id => !STRIP.includes(id));
+        }
+        return merged;
+      },
     }
   )
 );
