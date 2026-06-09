@@ -5,6 +5,7 @@ import { useChartStore } from '@/store/chartStore';
 import { useUserStore } from '@/store/userStore';
 import { useMarketData, useMarketPrice } from '@/hooks/useMarketData';
 import { computeIndicators } from '@/core/indicators/client';
+import { t1moCompute } from '@/src/core/indicators/t1mo';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -46,6 +47,20 @@ interface IndValues {
   bbBw:     number;
   volSpike: boolean;
   vwapDelta: number;
+}
+
+interface T1MOValues {
+  hmf:        number;
+  backbone:   number;
+  magenta:    number;
+  topBox:     number;
+  btmBox:     number;
+  positionPct:number;
+  ps:         number; // Price Score — rolling %ile of close
+  pd:         number; // Price Deviation — (close − backbone) / ATR
+  bullProb:   number; // 0–100
+  aiSignal:   'BUY' | 'SELL' | 'NEUTRAL';
+  distPct:    number;
 }
 
 interface AiScores {
@@ -183,6 +198,7 @@ export default function RightPanel() {
   const [regime,    setRegime]    = useState<RegimeResult | null>(null);
   const [srData,    setSrData]    = useState<SRData | null>(null);
   const [indValues, setIndValues] = useState<IndValues | null>(null);
+  const [t1moVals,  setT1moVals]  = useState<T1MOValues | null>(null);
   const [aiScores,  setAiScores]  = useState<AiScores | null>(null);
   const [countdown, setCountdown] = useState(60);
 
@@ -213,9 +229,42 @@ export default function RightPanel() {
     const highs   = candles.map((c: any) => c.high   as number);
     const lows    = candles.map((c: any) => c.low    as number);
     const volumes = candles.map((c: any) => c.volume as number);
+    const opens   = candles.map((c: any) => c.open   as number);
+    const times   = candles.map((c: any) => Math.floor((c.open_time ?? 0) / 1000) as number);
     const last    = closes.length - 1;
 
-    const ind = computeIndicators(closes, highs, lows, volumes);
+    const ind = computeIndicators(closes, highs, lows, volumes, opens);
+
+    // ── T1MO real values ────────────────────────────────────────────────────
+    try {
+      const t1r = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes, open: opens, time: times } as any, {});
+      if (t1r.meta.ready) {
+        const m = t1r.meta as any;
+        const atr14 = ind.atr(14);
+        const atrLast = atr14[last] || (closes[last] * 0.01) || 1;
+        // PS: rolling percentile rank of close in last 100 bars (0–100)
+        const win = Math.min(100, closes.length);
+        const slice = closes.slice(closes.length - win);
+        const sorted = [...slice].sort((a, b) => a - b);
+        const rank = sorted.findIndex(v => v >= closes[last]);
+        const ps = (rank >= 0 ? rank / (win - 1) : 0.5) * 100;
+        // PD: (close − backbone) / ATR14
+        const pd = (closes[last] - (m.lastBackbone ?? closes[last])) / atrLast;
+        setT1moVals({
+          hmf:        +(m.lastHmf ?? 0).toFixed(3),
+          backbone:   m.lastBackbone  ?? closes[last],
+          magenta:    m.lastMagenta   ?? closes[last],
+          topBox:     (m.lastTopBox   ?? closes[last] * 1.05) as number,
+          btmBox:     (m.lastBtmBox   ?? closes[last] * 0.95) as number,
+          positionPct:m.positionPct   ?? 50,
+          ps:         +ps.toFixed(2),
+          pd:         +pd.toFixed(2),
+          bullProb:   m.aiBullProb    ?? 50,
+          aiSignal:   m.aiSignal      ?? 'NEUTRAL',
+          distPct:    +(m.distPct     ?? 0).toFixed(2),
+        });
+      }
+    } catch { /* t1mo compute error — non-fatal */ }
 
     // Signal
     const sig = ind.latestSignal() as SignalResult;
@@ -488,6 +537,30 @@ export default function RightPanel() {
               <span className="rp-countdown"><RefreshCw size={8} />{countdown}s</span>
             </div>
 
+            {/* T1MO Signal Badge — Hawk1 / Green Bull / Break Top Box / Spec Buy */}
+            {t1moVals && (
+              <div className="t1mo-signal-detect">
+                {(() => {
+                  const bp = t1moVals.bullProb;
+                  const pos = t1moVals.positionPct;
+                  let badge = 'NEUTRAL'; let cls = 'neutral';
+                  if (bp >= 72) { badge = 'Hawk1 Detected'; cls = 'hawk1'; }
+                  else if (bp >= 58) { badge = 'Green Bull'; cls = 'greenbull'; }
+                  else if (bp <= 30 && pos >= 70) { badge = 'Break Top Box'; cls = 'breaktop'; }
+                  else if (bp <= 42 && pos <= 30) { badge = 'Spec Buy'; cls = 'specbuy'; }
+                  else if (bp <= 42) { badge = 'Short Setup'; cls = 'shortsetup'; }
+                  else if (bp >= 52) { badge = 'Weak Bull'; cls = 'weakbull'; }
+                  return (
+                    <div className={`t1mo-detect-badge ${cls}`}>
+                      <span className="t1mo-detect-dot" />
+                      {badge}
+                      <span className="t1mo-detect-conf">{bp}%</span>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
             {/* T1MO LAST / PREV two-column OHLCV — folder (4) exact */}
             <div className="t1mo-table">
               <div className="t1mo-row t1mo-header">
@@ -586,27 +659,27 @@ export default function RightPanel() {
               </div>
             )}
 
-            {/* Indicators — folder (4) exact: HMF · Top Box · Btm Box · Magenta · Lautan · EMA 21 · VWAP · RSI(7) · ATR(14) · ATLAS */}
-            {indValues && (
+            {/* Indicators — T1MO reference: HMF · Top Box · Btm Box · Magenta · Backbone · PS · PD · VWAP · RSI(7) · ATR(14) */}
+            {(t1moVals || indValues) && (
               <div className="t1mo-ind-section">
                 <div className="t1mo-ind-title">INDIKATOR</div>
                 {(() => {
-                  const price  = lastC?.close || rpPrice || 1;
-                  const topBox = srData?.resistances?.[0]?.price ?? price * 1.064;
-                  const btmBox = srData?.supports?.[0]?.price   ?? price * 1.029;
-                  const pct    = (v: number) => (v - price) / price * 100;
-                  const pf     = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+                  const price = lastC?.close || rpPrice || 1;
+                  const pct   = (v: number) => (v - price) / price * 100;
+                  const pf    = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+                  const tv = t1moVals;
+                  const iv = indValues;
                   return ([
-                    { label: 'HMF',     val: fmt(indValues.macd, 2),   pct: '',                  color: '#f59e0b', col: '' },
-                    { label: 'Top Box', val: fmt(topBox, 2),            pct: pf(pct(topBox)),      color: '#ff6f00', col: pct(topBox) >= 0 ? 'down' : 'up' },
-                    { label: 'Btm Box', val: fmt(btmBox, 2),             pct: pf(pct(btmBox)),      color: '#9e9e9e', col: pct(btmBox) >= 0 ? 'down' : 'up' },
-                    { label: 'Magenta', val: fmt(indValues.ema21, 2),    pct: pf(pct(indValues.ema21)),  color: '#e91e63', col: pct(indValues.ema21) >= 0 ? 'down' : 'up' },
-                    { label: 'Lautan',  val: fmt(indValues.ema50, 2),    pct: pf(pct(indValues.ema50)),  color: '#42a5f5', col: pct(indValues.ema50) >= 0 ? 'down' : 'up' },
-                    { label: 'EMA 21',  val: fmt(indValues.ema21, 2),    pct: pf(pct(indValues.ema21)),  color: '#7b61ff', col: pct(indValues.ema21) >= 0 ? 'down' : 'up' },
-                    { label: 'VWAP',    val: fmt(indValues.vwap, 2),     pct: pf(pct(indValues.vwap)),   color: '#00bcd4', col: pct(indValues.vwap) >= 0 ? 'down' : 'up' },
-                    { label: 'RSI(7)',  val: fmt(indValues.rsi7, 1),    pct: '',                  color: '#7e57c2', col: '' },
-                    { label: 'ATR(14)', val: fmt(indValues.atr, 4),     pct: '',                  color: '#90a4ae', col: '' },
-                    { label: 'ATLAS',   val: `${signal?.confidence ?? 50}`, pct: '',              color: '#22c55e', col: '' },
+                    { label: 'HMF',     val: tv ? fmt(tv.hmf, 3)         : '—',  pct: '',                                       color: '#f59e0b', col: '' },
+                    { label: 'Top Box', val: tv ? fmt(tv.topBox, 2)       : '—',  pct: tv ? pf(pct(tv.topBox))    : '',           color: '#ff6f00', col: tv ? (pct(tv.topBox) >= 0 ? 'down' : 'up') : '' },
+                    { label: 'Btm Box', val: tv ? fmt(tv.btmBox, 2)       : '—',  pct: tv ? pf(pct(tv.btmBox))    : '',           color: '#795548', col: tv ? (pct(tv.btmBox) >= 0 ? 'down' : 'up') : '' },
+                    { label: 'Magenta', val: tv ? fmt(tv.magenta, 2)      : '—',  pct: tv ? pf(pct(tv.magenta))   : '',           color: '#e91e63', col: tv ? (pct(tv.magenta) >= 0 ? 'down' : 'up') : '' },
+                    { label: 'Lautar',  val: tv ? fmt(tv.backbone, 2)     : '—',  pct: tv ? pf(pct(tv.backbone))  : '',           color: '#1976d2', col: tv ? (pct(tv.backbone) >= 0 ? 'down' : 'up') : '' },
+                    { label: 'PS',      val: tv ? `${tv.ps}`              : '—',  pct: tv ? pf(tv.distPct)        : '',           color: '#26a69a', col: tv ? (tv.distPct >= 0 ? 'up' : 'down') : '' },
+                    { label: 'PD',      val: tv ? fmt(tv.pd, 2)           : '—',  pct: '',                                       color: '#ab47bc', col: '' },
+                    { label: 'VWAP',    val: iv  ? fmt(iv.vwap, 2)        : '—',  pct: iv ? pf(pct(iv.vwap))      : '',           color: '#00bcd4', col: iv ? (pct(iv.vwap) >= 0 ? 'down' : 'up') : '' },
+                    { label: 'RSI(7)',  val: iv  ? fmt(iv.rsi7, 1)        : '—',  pct: '',                                       color: '#7e57c2', col: '' },
+                    { label: 'ATR(14)', val: iv  ? fmt(iv.atr, 4)         : '—',  pct: '',                                       color: '#90a4ae', col: '' },
                   ] as Array<{ label: string; val: string; pct: string; color: string; col: string }>).map(({ label, val, pct: p, color, col }) => (
                     <div key={label} className="t1mo-ind-row">
                       <span className="t1mo-ind-label" style={{'--ind-c': color} as React.CSSProperties}>{label}</span>

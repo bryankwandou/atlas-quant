@@ -397,6 +397,26 @@ select{cursor:pointer;}
 .t1mo-sr-sup-hdr{color:var(--aq-up);font-weight:700;}
 .t1mo-sr-res-hdr{color:var(--aq-down);font-weight:700;}
 
+/* ── T1MO Signal Detection badge ────────────────────────── */
+.t1mo-signal-detect{padding:4px 6px 2px;}
+.t1mo-detect-badge{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:.3px;border:1px solid;width:fit-content;}
+.t1mo-detect-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.t1mo-detect-conf{margin-left:auto;font-size:9px;font-weight:400;opacity:.75;padding-left:8px;}
+.t1mo-detect-badge.hawk1{background:rgba(0,200,83,.15);color:#00c853;border-color:rgba(0,200,83,.35);}
+.t1mo-detect-badge.hawk1 .t1mo-detect-dot{background:#00c853;}
+.t1mo-detect-badge.greenbull{background:rgba(8,153,129,.12);color:#089981;border-color:rgba(8,153,129,.3);}
+.t1mo-detect-badge.greenbull .t1mo-detect-dot{background:#089981;}
+.t1mo-detect-badge.weakbull{background:rgba(105,240,174,.1);color:#69f0ae;border-color:rgba(105,240,174,.25);}
+.t1mo-detect-badge.weakbull .t1mo-detect-dot{background:#69f0ae;}
+.t1mo-detect-badge.breaktop{background:rgba(242,54,69,.12);color:#f23645;border-color:rgba(242,54,69,.3);}
+.t1mo-detect-badge.breaktop .t1mo-detect-dot{background:#f23645;}
+.t1mo-detect-badge.shortsetup{background:rgba(233,30,99,.12);color:#e91e63;border-color:rgba(233,30,99,.3);}
+.t1mo-detect-badge.shortsetup .t1mo-detect-dot{background:#e91e63;}
+.t1mo-detect-badge.specbuy{background:rgba(255,152,0,.12);color:#ff9800;border-color:rgba(255,152,0,.3);}
+.t1mo-detect-badge.specbuy .t1mo-detect-dot{background:#ff9800;}
+.t1mo-detect-badge.neutral{background:var(--aq-bg3);color:var(--aq-text2);border-color:var(--aq-border);}
+.t1mo-detect-badge.neutral .t1mo-detect-dot{background:var(--aq-text3);}
+
 /* ── T1MO Indicators section ─────────────────────────────── */
 .t1mo-ind-section{background:var(--aq-bg);border:1px solid var(--aq-border);border-radius:3px;padding:5px 8px;}
 .t1mo-ind-title{font-size:9px;font-weight:700;color:var(--aq-text2);text-transform:uppercase;letter-spacing:.5px;padding-bottom:5px;border-bottom:1px solid var(--aq-border);margin-bottom:4px;text-align:center;}
