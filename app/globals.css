@@ -524,6 +524,9 @@ select{cursor:pointer;}
 .indmod-item-name{font-size:12px;font-weight:500;}
 .indmod-item-id{font-size:9px;color:var(--aq-text3);margin-top:1px;font-family:'Roboto Mono',monospace;}
 .indmod-default-badge{background:var(--aq-bg3);color:var(--aq-text2);padding:2px 6px;border-radius:3px;font-size:9px;}
+.indmod-soon-badge{background:rgba(255,152,0,0.15);color:#ff9800;border:1px solid rgba(255,152,0,0.3);}
+.indmod-panel-badge{background:rgba(41,98,255,0.12);color:#5c7cfa;border:1px solid rgba(41,98,255,0.25);padding:2px 6px;border-radius:3px;font-size:9px;white-space:nowrap;}
+.sub-panel-item .indmod-item-check{background:rgba(41,98,255,0.06)!important;border-color:rgba(41,98,255,0.25)!important;}
 .indmod-empty{text-align:center;color:var(--aq-text2);padding:30px;font-size:12px;}
 .indmod-footer,.ind-modal-footer{display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--aq-border);flex-shrink:0;}
 .indmod-footer-gap{justify-content:space-between;}

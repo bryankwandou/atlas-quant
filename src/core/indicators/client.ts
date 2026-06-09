@@ -566,6 +566,78 @@ function _pvo(volumes: number[], fast = 12, slow = 26, sig = 9) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// BANDARMOLOGI (smart-money / big-player flow) — OHLCV-proxy variants.
+// No true order-flow feed needed: buy/sell pressure is inferred from each candle's
+// body direction, close position within range, and volume. Good for retail use.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** CVD proxy — Cumulative Volume Delta. Per-bar delta = volume × signed body
+ *  fraction (green bar = net taker-buy, red = net taker-sell). Cumulative sum is
+ *  the "smart-money flow" line; rising = net accumulation. */
+function _cvd(opens: number[], highs: number[], lows: number[], closes: number[], volumes: number[]) {
+  const cvd: number[] = []; const delta: number[] = [];
+  let cum = 0;
+  for (let i = 0; i < closes.length; i++) {
+    const range = (highs[i] - lows[i]) || 1e-9;
+    // blend candle-body direction with close-in-range position for a stable proxy
+    const body = (closes[i] - opens[i]) / range;                       // -1..1
+    const clv  = ((closes[i] - lows[i]) - (highs[i] - closes[i])) / range; // -1..1
+    const d = (0.6 * body + 0.4 * clv) * (volumes[i] || 0);
+    delta.push(d); cum += d; cvd.push(cum);
+  }
+  return { cvd, delta };
+}
+
+/** Bandar Accumulation/Distribution — A/D line + how far it sits above/below its
+ *  own EMA (accumulation osc). Positive hist = bandar accumulating, negative =
+ *  distributing. */
+function _bandarAD(highs: number[], lows: number[], closes: number[], volumes: number[], period = 21) {
+  const ad = _accumDist(highs, lows, closes, volumes);
+  const sig = _ema(ad, period);
+  const hist = ad.map((v, i) => Number.isFinite(sig[i]) ? v - sig[i] : 0);
+  return { ad, signal: sig, histogram: hist };
+}
+
+/** Bandar Detector — composite 0–100 accumulation score + Wyckoff-style phase.
+ *  Blends the slopes of CVD / A/D / OBV with CMF and MFI, normalized by their own
+ *  rolling magnitude so the score stays vivid. >55 accumulation, <45 distribution. */
+function _bandarDetector(opens: number[], highs: number[], lows: number[], closes: number[], volumes: number[], look = 8) {
+  const n = closes.length;
+  const { cvd } = _cvd(opens, highs, lows, closes, volumes);
+  const ad  = _accumDist(highs, lows, closes, volumes);
+  const obv = _obv(closes, volumes);
+  const cmf = _cmf(highs, lows, closes, volumes, 20);
+  const mfi = _mfi(highs, lows, closes, volumes, 14);
+
+  // rolling-normalized slope of a cumulative series → -1..1
+  const normSlope = (arr: number[]) => {
+    const sl = arr.map((_, i) => i >= look ? arr[i] - arr[i - look] : 0);
+    const out = new Array(n).fill(0);
+    const win = 50;
+    for (let i = 0; i < n; i++) {
+      let mag = 0, c = 0;
+      for (let j = Math.max(0, i - win + 1); j <= i; j++) { mag += Math.abs(sl[j]); c++; }
+      const avg = c ? mag / c : 0;
+      out[i] = avg > 0 ? Math.max(-1, Math.min(1, sl[i] / (avg * 1.5))) : 0;
+    }
+    return out;
+  };
+
+  const sCvd = normSlope(cvd), sAd = normSlope(ad), sObv = normSlope(obv);
+  const score: number[] = [], phase: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const cmfN = Math.max(-1, Math.min(1, (cmf[i] || 0) * 4));         // ~-1..1
+    const mfiN = Math.max(-1, Math.min(1, ((mfi[i] || 50) - 50) / 50)); // -1..1
+    const blend = 0.3 * sCvd[i] + 0.25 * sAd[i] + 0.15 * sObv[i] + 0.15 * cmfN + 0.15 * mfiN;
+    const sc = Math.max(0, Math.min(100, 50 + blend * 50));
+    score.push(sc);
+    const up = closes[i] >= (closes[Math.max(0, i - look)] ?? closes[i]);
+    phase.push(sc >= 55 ? (up ? 'MARKUP' : 'AKUMULASI') : sc <= 45 ? (up ? 'DISTRIBUSI' : 'MARKDOWN') : 'NETRAL');
+  }
+  return { score, phase, signal: _ema(score, 9) };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SUPPORT / RESISTANCE / PIVOTS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1327,6 +1399,15 @@ export function computeIndicators(
     kvo:  (fast = 34, slow = 55, sig = 13) => _kvo(_highs, _lows, _closes, _volumes, fast, slow, sig),
     pvi:  () => _pvi(_closes, _volumes),
     nvi:  () => _nvi(_closes, _volumes),
+
+    // Bandarmologi — smart-money / big-player flow proxies (OHLCV-based)
+    cvd:            () => _cvd(_opens, _highs, _lows, _closes, _volumes),
+    bandarAD:       (period = 21) => _bandarAD(_highs, _lows, _closes, _volumes, period),
+    bandarDetector: (look = 8)   => _bandarDetector(_opens, _highs, _lows, _closes, _volumes, look),
+    volumeAnomaly:  (period = 20) => {
+      const vsma = _sma(_volumes, period);
+      return _volumes.map((v, i) => !isNaN(vsma[i]) && vsma[i] > 0 ? v / vsma[i] : 1);
+    },
 
     // Additional
     bop:          (smooth = 14)  => _bop(_opens, _highs, _lows, _closes, smooth),

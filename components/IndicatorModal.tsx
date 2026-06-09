@@ -2,6 +2,27 @@
 import { useMemo, useState } from 'react';
 import { X, Search, Layers, Check, Library, Settings } from 'lucide-react';
 import { useChartStore } from '@/store/chartStore';
+
+// Map indicator IDs that act as sub-panel selectors → sub-panel ID
+const SUB_PANEL_MAP: Record<string, string> = {
+  RSI_PANEL:         'rsi',
+  MACD_PANEL:        'macd',
+  WILLIAMS_PANEL:    'williams',
+  STOCHRSI_PANEL:    'stochrsi',
+  MFI_PANEL:         'mfi',
+  CCI_PANEL:         'cci',
+  ADX_PANEL:         'adx',
+  OBV_PANEL:         'obv',
+  ATR_PANEL:         'atr',
+  CMF_PANEL:         'cmf',
+  AROON:             'aroon',
+  ELDER_RAY:         'elder',
+  CVD_PANEL:         'cvd',
+  BANDAR_PANEL:      'bandar',
+  BANDAR_AD_PANEL:   'bandar_ad',
+  VOL_DELTA_PANEL:   'vol_delta',
+  BANDAR_SUITE_PANEL:'bandar_suite',
+};
 import { INDICATOR_REGISTRY, type IndicatorPreset } from '@/core/indicators/registry';
 import IndicatorParamModal from './IndicatorParamModal';
 
@@ -157,6 +178,19 @@ const LEGACY_CATEGORIES: Category[] = [
       { id: 'AC_PANEL',   name: 'Accelerator Osc',      desc: 'AO minus 5-SMA of AO — acceleration of momentum' },
       { id: 'GATOR_PANEL',name: 'Gator Oscillator',     desc: 'Alligator jaw-teeth-lips divergence histogram' },
       { id: 'BWMFI_PANEL',name: 'Market Facilitation',  desc: 'BW MFI — tick volume facilitation index' },
+    ],
+  },
+  {
+    id: 'Bandarmologi', label: 'Bandarmologi', color: '#e91e63',
+    items: [
+      { id: 'BANDAR_SUITE_PANEL', name: 'Bandar Suite (Multi)',  desc: 'All-in-one: Bandar Score + CVD% + MFI + CMF% + OBV% — 6 indicators normalized 0–100 in one panel' },
+      { id: 'BANDAR_PANEL',       name: 'Bandar Detector',      desc: 'Composite 0–100 smart-money accumulation score — blends CVD, A/D, OBV, CMF, MFI slopes. >55 = akumulasi, <45 = distribusi' },
+      { id: 'CVD_PANEL',          name: 'CVD — Cumul Vol Delta', desc: 'Cumulative Volume Delta: per-bar buy/sell pressure from candle body+close position. Rising = net accumulation' },
+      { id: 'BANDAR_AD_PANEL',    name: 'Bandar A/D Line',      desc: 'Accumulation/Distribution + EMA signal + oscillator histogram. Shows where big money is quietly entering/exiting' },
+      { id: 'VOL_DELTA_PANEL',    name: 'Volume Delta (Buy/Sell)',desc: 'Buy-vol (green) vs Sell-vol (red) bars with Delta EMA trend line. Visual of net order flow per candle' },
+      { id: 'OBV_PANEL',          name: 'On Balance Volume',     desc: 'Cumulative volume pressure — classic Bandar tracking indicator' },
+      { id: 'CMF_PANEL',          name: 'Chaikin Money Flow',    desc: 'Rolling money flow oscillator −1→+1. Positive = bandar accumulating' },
+      { id: 'MFI_PANEL',          name: 'Money Flow Index',      desc: 'RSI of money flow using volume-weighted prices. OB/OS zones detect bandar overextension' },
     ],
   },
 ];
@@ -337,7 +371,19 @@ export default function IndicatorModal() {
     resetIndicators,
     closeIndicatorModal,
     showIndicatorModal,
+    setSubPanel,
   } = useChartStore();
+
+  const handleItemClick = (item: IndicatorItem) => {
+    if (item.disabled) return;
+    const panelId = SUB_PANEL_MAP[item.id];
+    if (panelId) {
+      setSubPanel(panelId);
+      closeIndicatorModal();
+    } else {
+      toggleIndicator(item.id);
+    }
+  };
 
   const [search, setSearch]   = useState('');
   const [activeCat, setActiveCat] = useState('Trend');
@@ -453,8 +499,8 @@ export default function IndicatorModal() {
             {displayList.map(item => (
               <div
                 key={item.id}
-                className={`indmod-item ind-list-item${isActive(item.id) ? ' active' : ''}${item.disabled ? ' disabled' : ''}`}
-                onClick={() => { if (!item.disabled) toggleIndicator(item.id); }}
+                className={`indmod-item ind-list-item${isActive(item.id) ? ' active' : ''}${item.disabled ? ' disabled' : ''}${SUB_PANEL_MAP[item.id] ? ' sub-panel-item' : ''}`}
+                onClick={() => handleItemClick(item)}
                 title={item.desc}
                 onMouseEnter={() => setTooltip(item.desc)}
                 onMouseLeave={() => setTooltip(null)}
@@ -485,7 +531,10 @@ export default function IndicatorModal() {
                       Soon
                     </span>
                   )}
-                  {!item.disabled && (
+                  {!item.disabled && SUB_PANEL_MAP[item.id] && (
+                    <span className="indmod-panel-badge">Panel</span>
+                  )}
+                  {!item.disabled && !SUB_PANEL_MAP[item.id] && (
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setParamFor(item.id); }}

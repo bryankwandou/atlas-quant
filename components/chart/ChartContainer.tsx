@@ -15,19 +15,25 @@ const CandlestickChartIcon = ({ size = 14 }: { size?: number }) => (
 );
 
 const SUB_PANELS = [
-  { id: 'atlas',    label: 'T1MO Pixel' },
-  { id: 'rsi',      label: 'RSI(7)'       },
-  { id: 'macd',     label: 'MACD'         },
-  { id: 'williams', label: '%R(14)'       },
-  { id: 'stochrsi', label: 'StochRSI'    },
-  { id: 'mfi',      label: 'MFI(14)'     },
-  { id: 'cci',      label: 'CCI'          },
-  { id: 'adx',      label: 'ADX'          },
-  { id: 'obv',      label: 'OBV'          },
-  { id: 'aroon',    label: 'Aroon'        },
-  { id: 'cmf',      label: 'CMF'          },
-  { id: 'atr',      label: 'ATR'          },
-  { id: 'elder',    label: 'Elder'        },
+  { id: 'atlas',        label: 'T1MO Pixel'   },
+  { id: 'rsi',          label: 'RSI(7)'       },
+  { id: 'macd',         label: 'MACD'         },
+  { id: 'williams',     label: '%R(14)'       },
+  { id: 'stochrsi',     label: 'StochRSI'    },
+  { id: 'mfi',          label: 'MFI(14)'     },
+  { id: 'cci',          label: 'CCI'          },
+  { id: 'adx',          label: 'ADX'          },
+  { id: 'obv',          label: 'OBV'          },
+  { id: 'aroon',        label: 'Aroon'        },
+  { id: 'cmf',          label: 'CMF'          },
+  { id: 'atr',          label: 'ATR'          },
+  { id: 'elder',        label: 'Elder'        },
+  // Bandarmologi group
+  { id: 'cvd',          label: 'CVD'          },
+  { id: 'bandar',       label: 'Bandar'       },
+  { id: 'bandar_ad',    label: 'Bandar A/D'   },
+  { id: 'vol_delta',    label: 'Vol Delta'    },
+  { id: 'bandar_suite', label: 'Bandar Suite' },
 ];
 
 const CHART_TYPES = [
@@ -326,8 +332,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     const highs   = formatted.map((c: any) => c.high);
     const lows    = formatted.map((c: any) => c.low);
     const volumes = formatted.map((c: any) => c.volume);
+    const opens   = formatted.map((c: any) => c.open);
     const times   = formatted.map((c: any) => c.time);
-    const ind = computeIndicators(closes, highs, lows, volumes);
+    const ind = computeIndicators(closes, highs, lows, volumes, opens);
 
     // ── MAIN CHART ──────────────────────────────────────────────
     const main = createChart(mainRef.current, baseOpts(mainRef.current) as any);
@@ -744,6 +751,91 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         const bearPow = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
         bearPow.setData(times.map((t: number, i: number) => ({ time: t, value: er.bearPower[i], color: 'rgba(242,54,69,0.7)' })).filter((d: any) => !isNaN(d.value)));
         addLevel(0, 'rgba(255,255,255,0.1)');
+
+      // ── BANDARMOLOGI panels ──────────────────────────────────────────────────
+
+      } else if (subPanel === 'cvd') {
+        // Cumulative Volume Delta: delta histogram + CVD cumulative line
+        const cvdResult = ind.cvd();
+        const deltaHist = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'cvd_delta' });
+        deltaHist.setData(times.map((t: number, i: number) => ({
+          time: t, value: cvdResult.delta[i],
+          color: cvdResult.delta[i] >= 0 ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)',
+        })).filter((d: any) => !isNaN(d.value) && isFinite(d.value)));
+        try { (subChart as any).priceScale('cvd_delta').applyOptions({ visible: false, scaleMargins: { top: 0.55, bottom: 0 } }); } catch {}
+        addSubLine(cvdResult.cvd, '#00bcd4', 'CVD', 2);
+        addLevel(0, 'rgba(255,255,255,0.1)');
+
+      } else if (subPanel === 'bandar') {
+        // Bandar Detector: composite 0–100 smart-money score + signal + phase zones
+        const bnd = ind.bandarDetector(8);
+        addSubLine(bnd.score,  '#e91e63', 'Bandar', 2);
+        addSubLine(bnd.signal, '#ff9800', 'Signal', 1.5);
+        [[55, 'rgba(8,153,129,0.18)'], [50, 'rgba(255,255,255,0.07)'], [45, 'rgba(242,54,69,0.18)']].forEach(([v, c]) => addLevel(v as number, c as string));
+
+      } else if (subPanel === 'bandar_ad') {
+        // Bandar Accumulation/Distribution: A/D cumulative + EMA signal + oscillator histogram
+        const bad = ind.bandarAD(21);
+        const adHist = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'bad_hist' });
+        adHist.setData(times.map((t: number, i: number) => ({
+          time: t, value: bad.histogram[i],
+          color: (bad.histogram[i] || 0) >= 0 ? 'rgba(8,153,129,0.65)' : 'rgba(242,54,69,0.65)',
+        })).filter((d: any) => !isNaN(d.value) && isFinite(d.value)));
+        try { (subChart as any).priceScale('bad_hist').applyOptions({ visible: false, scaleMargins: { top: 0.5, bottom: 0 } }); } catch {}
+        addSubLine(bad.ad,     '#26c6da', 'A/D',    1.5);
+        addSubLine(bad.signal, '#ff9800', 'Sig(21)', 1);
+        addLevel(0, 'rgba(255,255,255,0.1)');
+
+      } else if (subPanel === 'vol_delta') {
+        // Volume Delta: classified buy-vol (green above 0) and sell-vol (red below 0)
+        const cvdData = ind.cvd();
+        const buyHist  = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
+        buyHist.setData(times.map((t: number, i: number) => ({
+          time: t, value: Math.max(0, cvdData.delta[i]), color: 'rgba(8,153,129,0.7)',
+        })).filter((d: any) => d.value > 0));
+        const sellHist = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
+        sellHist.setData(times.map((t: number, i: number) => ({
+          time: t, value: Math.min(0, cvdData.delta[i]), color: 'rgba(242,54,69,0.7)',
+        })).filter((d: any) => d.value < 0));
+        // Net delta EMA (trend of net buy/sell pressure)
+        const deltaEma = ind.ema(9).map((_: number, i: number) => cvdData.delta[i]);
+        const emaLine  = ind.ema(9); // use as smoothing reference below
+        // Smooth delta with a simple EMA-9 proxy via the existing ema() of delta values
+        const netEma   = (closes as number[]).map((_: number, i: number) => {
+          const k = 2 / 10; let prev = cvdData.delta[0] || 0;
+          for (let j = 1; j <= i; j++) prev = cvdData.delta[j] * k + prev * (1 - k);
+          return prev;
+        });
+        addSubLine(netEma, '#f7a600', 'Delta EMA', 1.5);
+        addLevel(0, 'rgba(255,255,255,0.12)');
+        void deltaEma; void emaLine; // suppress unused warnings
+
+      } else if (subPanel === 'bandar_suite') {
+        // Multi-indicator Bandar Suite: all key bandarmologi lines on the same 0–100 scale.
+        // CVD delta and CMF are percentile-normalized to 0–100 so they overlay cleanly.
+        const bnd      = ind.bandarDetector(8);
+        const cvdData  = ind.cvd();
+        const mfiData  = ind.mfi(14);
+        const cmfRaw   = ind.cmf(20);
+        const obvData  = ind.obv();
+        // Normalize CVD delta → 0–100 rolling percentile
+        const cvdNorm  = rollingPercentile(cvdData.delta, 100);
+        // Normalize CMF (-1..1) → 0–100
+        const cmfNorm  = cmfRaw.map((v: number) => isNaN(v) ? 50 : Math.max(0, Math.min(100, (v + 1) / 2 * 100)));
+        // Normalize OBV slope → 0–100 rolling percentile on 8-bar change
+        const obvSlope = obvData.map((v: number, i: number) => i >= 8 ? v - obvData[i - 8] : 0);
+        const obvNorm  = rollingPercentile(obvSlope, 100);
+
+        addSubLine(bnd.score,  '#e91e63', 'Bandar',   2.5);
+        addSubLine(bnd.signal, '#ff9800', 'Signal',   1.5);
+        addSubLine(cvdNorm,    '#00bcd4', 'CVD%',     1.2);
+        addSubLine(mfiData,    '#7e57c2', 'MFI(14)',  1.2);
+        addSubLine(cmfNorm,    '#26a69a', 'CMF%',     1);
+        addSubLine(obvNorm,    '#ab47bc', 'OBV%',     1);
+
+        [[70, 'rgba(8,153,129,0.15)'], [55, 'rgba(8,153,129,0.08)'],
+         [50, 'rgba(255,255,255,0.07)'],
+         [45, 'rgba(242,54,69,0.08)'], [30, 'rgba(242,54,69,0.15)']].forEach(([v, c]) => addLevel(v as number, c as string));
       }
 
       // Sync timescales — logical range keeps all panels pixel-locked
