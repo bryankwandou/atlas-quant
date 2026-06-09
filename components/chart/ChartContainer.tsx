@@ -37,9 +37,13 @@ const CHART_TYPES = [
   { id: 'area',        icon: Activity,              tip: 'Area'        },
 ];
 
-// ── T1MO Pixel — 4 core T1MO signal rows (HMF · RSI7 · MACD · ATLAS) ──────────
-// Single T1MO regime strip — matches the user's reference (one heatmap row, not 4).
-const PIXEL_ROWS = ['T1MO'] as const;
+// ── T1MO Pixel — 14-indicator signal matrix ──────────────────────────────────
+// AUTHORITATIVE REFERENCE: "T1MO Pixel Showcase.html" → 14 rows, full mosaic (NO
+// gaps). Each column is one OHLCV bar, each row one indicator. The red/yellow/green
+// "blobs" emerge naturally because neighbouring bars share a regime → like colors
+// cluster. Do NOT reduce row count or gate columns — that breaks the reference look.
+const PIXEL_ROWS = ['RSI7','RSI14','MACD','EMA9','EMA21','EMA50','VWAP','HMF','MFI','%R','BB','ADX','Box','ATLAS'] as const;
+const PIXEL_GUTTER = 50; // left label gutter (matches reference HEADER_W)
 
 // 7-level score→color scale (identical to reference SCORE_COLORS)
 const PIXEL_SCALE: Array<{ min: number; c: string }> = [
@@ -52,6 +56,8 @@ const PIXEL_SCALE: Array<{ min: number; c: string }> = [
   { min: -1, c: '#dd2c00' }, // strong bear
 ];
 const pixelColor = (s: number) => (PIXEL_SCALE.find(b => s > b.min)?.c) || '#dd2c00';
+// Hairline inter-row gap, scaled to row height (tiny rows → no gap, taller rows → 1px).
+const rowHeightGap = (rowH: number) => (rowH < 6 ? 0 : rowH < 12 ? 0.5 : 1);
 
 const clampScore = (v: number) => Math.max(2, Math.min(98, v));
 
@@ -97,10 +103,10 @@ function rollingPercentile(vals: number[], window = 120): number[] {
   return out;
 }
 
-/** Build the 4 T1MO pixel rows (0–100 score each, rolling-percentile normalized)
- *  plus a per-bar `active` gate: a column is only drawn when the T1MO regime has
- *  real conviction, leaving genuine GAPS during low-signal / ranging periods —
- *  matching the clustered-with-gaps look of the reference. */
+/** Build all 14 T1MO pixel rows (0–100 bull-score each, rolling-percentile
+ *  normalized so every row stays vivid/varied). NO conviction gate — the
+ *  reference is a FULL mosaic; clustering comes from regime persistence, not
+ *  blank columns. `active` is kept (all true) for call-site compatibility. */
 function computePixelScores(
   ind: any,
   t1mo: any,
@@ -108,50 +114,52 @@ function computePixelScores(
 ): { scores: Record<string, number[]>; active: boolean[] } {
   const n = closes.length;
   const win = Math.max(40, Math.min(150, Math.floor(n / 3))); // adaptive window
-
-  const rsi7 = ind.rsi(7);
-  const macd = ind.macd(12, 26, 9);
-
-  const hmf      = (t1mo?.series?.hmf ?? []) as (number | null)[];
-  const bullProb = (t1mo?.series?.bullProb ?? []) as number[]; // 0..100 conviction prob
-
   const num = (arr: any[], i: number, d = 0) => Number.isFinite(arr?.[i]) ? arr[i] : d;
 
-  // Single composite T1MO regime score (blend of conviction + momentum + RSI7 + MACD),
-  // percentile-ranked for a vivid spread — one strip, exactly like the reference.
+  // ── Raw per-indicator bull-ness (higher = more bullish); normalized below ──
+  const rsi7  = ind.rsi(7);
+  const rsi14 = ind.rsi(14);
+  const macd  = ind.macd(12, 26, 9);
+  const ema9  = ind.ema(9);
+  const ema21 = ind.ema(21);
+  const ema50 = ind.ema(50);
+  const vwap  = ind.vwap().vwap;
+  const mfi   = ind.mfi(14);
+  const wr    = ind.williamsR(14);          // -100..0
+  const bb    = ind.bollingerBands(20, 2);  // percentB ~0..1
+  const adx   = ind.adx(14);                // { adx, plusDI, minusDI }
+  const don   = ind.donchian(20);           // { upper, lower, middle }
+  const hmf      = (t1mo?.series?.hmf ?? []) as (number | null)[];
+  const bullProb = (t1mo?.series?.bullProb ?? []) as number[]; // 0..100 T1MO conviction
+
   const raw: Record<string, number[]> = {
-    T1MO: closes.map((_, i) => {
-      const p   = num(bullProb, i, 50);                                   // 0..100 T1MO conviction
-      const h   = Math.max(0, Math.min(100, 50 + num(hmf, i, 0) * 12));   // ATR-norm momentum → 0..100
-      const r7  = num(rsi7, i, 50);
-      const md  = macd.histogram[i];
-      const mdn = 50 + (Number.isFinite(md) ? Math.sign(md) * Math.min(50, Math.abs(md) * 4) : 0);
-      return 0.5 * p + 0.2 * h + 0.15 * r7 + 0.15 * mdn;
+    RSI7:  closes.map((_, i) => num(rsi7, i, 50)),
+    RSI14: closes.map((_, i) => num(rsi14, i, 50)),
+    MACD:  closes.map((_, i) => num(macd.histogram, i, 0)),
+    EMA9:  closes.map((c, i) => c - num(ema9, i, c)),
+    EMA21: closes.map((c, i) => c - num(ema21, i, c)),
+    EMA50: closes.map((c, i) => c - num(ema50, i, c)),
+    VWAP:  closes.map((c, i) => c - num(vwap, i, c)),
+    HMF:   closes.map((_, i) => num(hmf as any, i, 0)),
+    MFI:   closes.map((_, i) => num(mfi, i, 50)),
+    '%R':  closes.map((_, i) => 100 + num(wr, i, -50)),          // → 0..100
+    BB:    closes.map((_, i) => num(bb.percentB, i, 0.5) * 100), // → 0..100
+    ADX:   closes.map((_, i) => num(adx.plusDI, i, 0) - num(adx.minusDI, i, 0)),
+    Box:   closes.map((c, i) => {
+      const u = num(don.upper, i, c), l = num(don.lower, i, c);
+      return u > l ? ((c - l) / (u - l)) * 100 : 50;
     }),
+    ATLAS: closes.map((_, i) => num(bullProb, i, 50)),
   };
 
   const scores: Record<string, number[]> = {};
-  // Smooth the composite regime score first → gradual color "hills" like the
-  // reference, then percentile-rank for a full green→red spread.
+  // Smooth each row → gradual color "hills", then percentile-rank for a full
+  // green→red spread (matches the reference's vivid, varied matrix).
   for (const k of PIXEL_ROWS) {
-    const smoothed = emaSmooth(raw[k] ?? new Array(n).fill(0), 6);
+    const smoothed = emaSmooth(raw[k] ?? new Array(n).fill(50), 5);
     scores[k] = rollingPercentile(smoothed, win);
   }
-
-  // ── Conviction gate → gaps ──────────────────────────────────────────────
-  // Draw a column only when the regime has conviction. Prefer T1MO bullProb
-  // (distance from 50); fall back to combined RSI7 + MACD strength.
-  const GATE = 8; // |prob-50| ≥ 8  →  roughly the BUY/SELL threshold band
-  const active: boolean[] = new Array(n).fill(false);
-  const macdAbs = macd.histogram.map((v: number) => Math.abs(Number.isFinite(v) ? v : 0));
-  const macdPct = rollingPercentile(macdAbs, win); // 0..100 relative magnitude
-  for (let i = 0; i < n; i++) {
-    const prob = num(bullProb, i, 50);
-    const convT1mo = Math.abs(prob - 50);
-    const convRsi  = Math.abs((Number.isFinite(rsi7[i]) ? rsi7[i] : 50) - 50);
-    active[i] = convT1mo >= GATE || convRsi >= 18 || macdPct[i] >= 70;
-  }
-  return { scores, active };
+  return { scores, active: new Array(n).fill(true) };
 }
 
 interface Props { symbol: string; timeframe: string; }
@@ -499,30 +507,26 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     }
 
     // ── T1MO Core — permanent overlay per DARURAT HUKUM design requirement ──
+    // lastValueVisible:false — the four box/EMA lines sit close together, so their
+    // axis price-labels clamp and overlap into an unreadable cluster (esp. when the
+    // last value sits outside the visible window). Values are shown in the floating
+    // legend on crosshair instead (reference shows them in a side table, not on-axis).
+    // Series are stored in seriesRef so the live-tick effect can move their last point
+    // in lock-step with the candle (otherwise the candle ticks up while the lines
+    // stay at the build-time snapshot → the "deviating line" defect).
     try {
       const t1moResult = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes, open: closes, time: times } as any, {});
       if (t1moResult.meta.ready) {
         const { backbone: t1moBB, magenta: t1moMG, topBox: t1moTop, btmBox: t1moBtm } = t1moResult.series;
-        // Backbone EMA — blue (match reference design)
-        if (t1moBB) {
-          const s = (main as any).addSeries(LineSeries, { color: '#1976d2', lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: true, title: 'Backbone' });
-          s.setData(times.map((t: number, i: number) => ({ time: t, value: (t1moBB as any[])[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
-        }
-        // Magenta EMA — pink dashed (match reference)
-        if (t1moMG) {
-          const s = (main as any).addSeries(LineSeries, { color: '#e91e63', lineWidth: 1.5, lineStyle: 2, priceLineVisible: false, lastValueVisible: true, title: 'Magenta' });
-          s.setData(times.map((t: number, i: number) => ({ time: t, value: (t1moMG as any[])[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
-        }
-        // Top Box — orange solid (Donchian upper — staircase)
-        if (t1moTop) {
-          const s = (main as any).addSeries(LineSeries, { color: '#ff6f00', lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: true, title: 'TopBox' });
-          s.setData(times.map((t: number, i: number) => ({ time: t, value: (t1moTop as any[])[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
-        }
-        // Bottom Box — gray (Donchian lower — staircase)
-        if (t1moBtm) {
-          const s = (main as any).addSeries(LineSeries, { color: '#757575', lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: true, title: 'BtmBox' });
-          s.setData(times.map((t: number, i: number) => ({ time: t, value: (t1moBtm as any[])[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
-        }
+        const addOverlay = (vals: any[], opts: any, key: string) => {
+          const s = (main as any).addSeries(LineSeries, { priceLineVisible: false, lastValueVisible: false, ...opts });
+          s.setData(times.map((t: number, i: number) => ({ time: t, value: vals?.[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
+          seriesRef.current[key] = s;
+        };
+        if (t1moBB)  addOverlay(t1moBB as any[],  { color: '#1976d2', lineWidth: 2,   lineStyle: 0, title: 'Backbone' }, 't1moBB');
+        if (t1moMG)  addOverlay(t1moMG as any[],  { color: '#e91e63', lineWidth: 1.5, lineStyle: 2, title: 'Magenta'  }, 't1moMG');
+        if (t1moTop) addOverlay(t1moTop as any[], { color: '#ff6f00', lineWidth: 2,   lineStyle: 0, title: 'TopBox'   }, 't1moTop');
+        if (t1moBtm) addOverlay(t1moBtm as any[], { color: '#757575', lineWidth: 2,   lineStyle: 0, title: 'BtmBox'   }, 't1moBtm');
       }
     } catch { /* T1MO compute error — non-fatal */ }
 
@@ -647,38 +651,41 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             ctx.fillRect(0, 0, W, drawH);
 
             const nRows = PIXEL_ROWS.length;
-            const rowGap = 1.5;                       // small gap between rows
+            const rowGap = rowHeightGap(drawH / nRows); // hairline gap, scaled to row size
             const rowH  = drawH / nRows;
             const from  = Math.max(0, Math.floor(range.from));
             const to    = Math.min(nBars - 1, Math.ceil(range.to));
 
+            // FULL MOSAIC — every column drawn (no conviction gaps). Reference look.
             for (let i = from; i <= to; i++) {
-              if (!active[i]) continue;              // GAP: skip low-conviction columns
               const xc = ts.logicalToCoordinate(i as any);
               if (xc == null) continue;
               const xn = ts.logicalToCoordinate((i + 1) as any);
               const barW = Math.max(1, (xn != null ? Math.abs(xn - xc) : 6));
-              const cellW = Math.max(1, barW - 1);   // 1px horizontal gap → mosaic look
+              const cellW = Math.max(1, barW - 0.5);   // hairline horizontal gap → mosaic
               const x = xc - barW / 2;
               for (let r = 0; r < nRows; r++) {
                 const key = PIXEL_ROWS[r];
                 const s = scores[key]?.[i] ?? 50;
                 ctx.fillStyle = pixelColor(s);
-                ctx.fillRect(x + 0.5, r * rowH + rowGap / 2, cellW, rowH - rowGap);
+                ctx.fillRect(x + 0.25, r * rowH + rowGap / 2, cellW, rowH - rowGap);
               }
             }
 
-            // Row labels — left gutter, with a subtle dark backing for legibility
-            ctx.font = 'bold 10px "Roboto Mono", monospace';
+            // Left gutter — opaque strip so labels sit cleanly over the first bars
+            // (matches reference HEADER_W). Bars underneath stay hidden.
+            ctx.fillStyle = isDark ? '#0d1218' : '#ffffff';
+            ctx.fillRect(0, 0, PIXEL_GUTTER, drawH);
+            ctx.strokeStyle = isDark ? '#222a36' : '#e0e3eb';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(PIXEL_GUTTER, 0); ctx.lineTo(PIXEL_GUTTER, drawH); ctx.stroke();
+
+            // Row labels — inside the gutter
+            ctx.font = 'bold 9px "Roboto Mono", monospace';
             ctx.textBaseline = 'middle';
+            ctx.fillStyle = isDark ? '#7a8294' : '#5a6273';
             for (let r = 0; r < nRows; r++) {
-              const label = PIXEL_ROWS[r];
-              const ly = r * rowH + rowH / 2;
-              const tw = ctx.measureText(label).width;
-              ctx.fillStyle = 'rgba(0,0,0,0.6)';
-              ctx.fillRect(2, ly - 8, tw + 10, 16);
-              ctx.fillStyle = '#e6ebf2';
-              ctx.fillText(label, 7, ly + 0.5);
+              ctx.fillText(PIXEL_ROWS[r], 5, r * rowH + rowH / 2);
             }
           };
 
@@ -873,6 +880,22 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       if (seriesRef.current.vol) {
         seriesRef.current.vol.setData(formatted.map((c: any) => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)' })));
       }
+      // Recompute + re-feed the T1MO overlay lines so they track new candles on each
+      // SWR poll (otherwise they keep the previous build's data → drift from price).
+      if (seriesRef.current.t1moBB || seriesRef.current.t1moTop) {
+        try {
+          const mc = formatted.map((c: any) => c.close), mh = formatted.map((c: any) => c.high), ml = formatted.map((c: any) => c.low), mv = formatted.map((c: any) => c.volume), mt = formatted.map((c: any) => c.time);
+          const r = t1moCompute({ close: mc, high: mh, low: ml, volume: mv, open: mc, time: mt } as any, {});
+          if (r.meta.ready) {
+            const feed = (key: string, arr: any[]) => {
+              const s = seriesRef.current[key];
+              if (s && arr) s.setData(mt.map((t: number, i: number) => ({ time: t, value: arr[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
+            };
+            feed('t1moBB', r.series.backbone as any); feed('t1moMG', r.series.magenta as any);
+            feed('t1moTop', r.series.topBox as any);  feed('t1moBtm', r.series.btmBox as any);
+          }
+        } catch {}
+      }
       // Apply default zoom once after first successful data update
       if (!defaultZoomedRef.current && chartsRef.current.main && formatted.length > 0) {
         defaultZoomedRef.current = true;
@@ -909,6 +932,30 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         }
         if (seriesRef.current.vol) {
           seriesRef.current.vol.update({ time: t, value: +b.volume, color: +b.close >= +b.open ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)' });
+        }
+      }
+
+      // Move the T1MO overlay lines in lock-step with the live candle so they never
+      // detach (the "deviating line" defect). Recompute on the live-merged tail and
+      // update only each line's last point — cheap O(n) array math, once per poll.
+      if (seriesRef.current.t1moBB || seriesRef.current.t1moTop) {
+        const base = candlesRef.current || [];
+        if (base.length) {
+          const byTime = new Map<number, any>();
+          for (const c of base) byTime.set(+c.open_time, c);
+          for (const b of liveBars) if (+b.open_time > 0 && +b.close > 0) byTime.set(+b.open_time, b);
+          const merged = [...byTime.values()].sort((a, b) => +a.open_time - +b.open_time);
+          const mc = merged.map(c => +c.close), mh = merged.map(c => +c.high), ml = merged.map(c => +c.low), mv = merged.map(c => +c.volume), mt = merged.map(c => Math.floor(+c.open_time / 1000));
+          const r = t1moCompute({ close: mc, high: mh, low: ml, volume: mv, open: mc, time: mt } as any, {});
+          if (r.meta.ready) {
+            const li = mc.length - 1, lt = mt[li] as any;
+            const upd = (key: string, arr: any[]) => {
+              const s = seriesRef.current[key]; const v = arr?.[li];
+              if (s && v != null && isFinite(v)) { try { s.update({ time: lt, value: v }); } catch {} }
+            };
+            upd('t1moBB', r.series.backbone as any); upd('t1moMG', r.series.magenta as any);
+            upd('t1moTop', r.series.topBox as any);  upd('t1moBtm', r.series.btmBox as any);
+          }
         }
       }
     } catch { /* update() rejects out-of-order times — safe to ignore */ }

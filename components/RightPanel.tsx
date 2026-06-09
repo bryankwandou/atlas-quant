@@ -353,9 +353,6 @@ export default function RightPanel() {
   }, [symbol, timeframe, candles]);
 
   const sigType = signal?.type ?? 'NEUTRAL';
-  const rpPrice  = priceData?.price    ?? 0;
-  const rpChange = priceData?.change24h ?? 0;
-  const rpIsUp   = rpChange >= 0;
 
   // T1MO OHLCV rows — last candle vs prev candle
   const lastC = candles?.length ? candles[candles.length - 1] : null;
@@ -363,6 +360,13 @@ export default function RightPanel() {
   const midPrc = lastC ? (lastC.high + lastC.low) / 2 : null;
   const prevMid = prevC ? (prevC.high + prevC.low) / 2 : null;
   const cpPct = lastC && prevC ? ((lastC.close - prevC.close) / prevC.close * 100) : null;
+
+  // SINGLE SOURCE OF TRUTH for displayed price = last (chart) candle's close, so
+  // the hero price, the OHLC table, and the chart's last-value label always agree.
+  // (The live ticker /api/market/price can lag/diverge from the cached OHLCV feed.)
+  const rpPrice  = lastC?.close ?? priceData?.price ?? 0;
+  const rpChange = cpPct ?? priceData?.change24h ?? 0;
+  const rpIsUp   = rpChange >= 0;
   const rangePct = lastC && prevC && prevC.high !== prevC.low
     ? ((lastC.high - lastC.low) / (prevC.high - prevC.low) * 100 - 100)
     : null;

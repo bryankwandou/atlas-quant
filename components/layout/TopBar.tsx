@@ -4,7 +4,7 @@ import { ChevronDown, Search, X, Layers, Bell, Camera, Sun, Moon, Globe, Setting
 import { useTheme } from '@/hooks/useTheme';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useChartStore } from '@/store/chartStore';
-import { useMarketPrice } from '@/hooks/useMarketData';
+import { useMarketPrice, useMarketData } from '@/hooks/useMarketData';
 import { clearSession } from '@/lib/atlas-auth';
 
 // ── Inline SVG icons matching ATLAS-QUANT DARURAT HUKUM icon set ──────────────
@@ -108,6 +108,9 @@ export default function TopBar() {
     timezone, setTimezone,
   } = useChartStore();
   const { priceData } = useMarketPrice(symbol);
+  // SINGLE SOURCE OF TRUTH: header price = last chart candle's close (same feed as
+  // the chart + right panel), so the three never disagree. Ticker is only a fallback.
+  const { candles } = useMarketData(symbol, timeframe);
 
   const [showSym, setShowSym]         = useState(false);
   const [showTF, setShowTF]           = useState(false);
@@ -119,8 +122,11 @@ export default function TopBar() {
   const tfRef      = useRef<HTMLDivElement>(null);
   const tzRef      = useRef<HTMLDivElement>(null);
 
-  const price  = priceData?.price    ?? 0;
-  const change = priceData?.change24h ?? 0;
+  const lastC  = candles?.length ? candles[candles.length - 1] : null;
+  const prevC  = candles?.length > 1 ? candles[candles.length - 2] : null;
+  const barChg = lastC && prevC && prevC.close ? ((lastC.close - prevC.close) / prevC.close) * 100 : null;
+  const price  = lastC?.close ?? priceData?.price ?? 0;
+  const change = barChg ?? priceData?.change24h ?? 0;
   const isUp   = change >= 0;
 
   // Auto-focus search input when panel opens
