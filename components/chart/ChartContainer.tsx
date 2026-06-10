@@ -634,10 +634,10 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           s.setData(times.map((t: number, i: number) => ({ time: t, value: vals?.[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
           seriesRef.current[key] = s;
         };
-        if (t1moBB)  addOverlay(t1moBB as any[],  { color: '#1976d2', lineWidth: 2,   lineStyle: 0, title: 'Backbone' }, 't1moBB');
-        if (t1moMG)  addOverlay(t1moMG as any[],  { color: '#e91e63', lineWidth: 1.5, lineStyle: 2, title: 'Magenta'  }, 't1moMG');
-        if (t1moTop) addOverlay(t1moTop as any[], { color: '#ff6f00', lineWidth: 2,   lineStyle: 0, title: 'TopBox'   }, 't1moTop');
-        if (t1moBtm) addOverlay(t1moBtm as any[], { color: '#757575', lineWidth: 2,   lineStyle: 0, title: 'BtmBox'   }, 't1moBtm');
+        if (t1moBB)  addOverlay(t1moBB as any[],  { color: '#00bcd4', lineWidth: 2.5, lineStyle: 0, title: 'Backbone', lastValueVisible: true }, 't1moBB');
+        if (t1moMG)  addOverlay(t1moMG as any[],  { color: '#e91e63', lineWidth: 1.5, lineStyle: 1, title: 'Magenta',  lastValueVisible: true }, 't1moMG');
+        if (t1moTop) addOverlay(t1moTop as any[], { color: '#ff9800', lineWidth: 3,   lineStyle: 0, title: 'TopBox',   lastValueVisible: true }, 't1moTop');
+        if (t1moBtm) addOverlay(t1moBtm as any[], { color: '#795548', lineWidth: 3,   lineStyle: 0, title: 'BtmBox',   lastValueVisible: true }, 't1moBtm');
       }
     } catch { /* T1MO compute error — non-fatal */ }
 
