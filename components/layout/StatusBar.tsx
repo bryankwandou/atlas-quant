@@ -7,29 +7,20 @@ type TZ = 'local' | 'utc' | 'gmt+7';
 const TZ_LABELS: Record<TZ, string> = { local: 'Local', utc: 'UTC', 'gmt+7': 'GMT+7' };
 const TZ_ORDER: TZ[] = ['utc', 'gmt+7', 'local'];
 
-const REGIME_COLORS: Record<string, string> = {
-  STRONG_TREND_UP:   '#089981',
-  WEAK_TREND_UP:     '#26a69a',
-  RANGING:           '#ff9800',
-  WEAK_TREND_DOWN:   '#ef5350',
-  STRONG_TREND_DOWN: '#f23645',
-};
-
 export default function StatusBar() {
   const { symbol, timeframe, timezone, setTimezone } = useChartStore();
   const { lang } = useLanguage();
-  const [latency, setLatency]   = useState<number | null>(null);
-  const [now, setNow]           = useState('');
-  const [regime, setRegime]     = useState<string>('RANGING');
+  const [now, setNow] = useState('');
+  const [regime, setRegime] = useState<string>('RANGING');
+  const [isOnline, setIsOnline] = useState(true);
 
   useEffect(() => {
     const ping = async () => {
-      const t = Date.now();
       try {
         await fetch('/api/market/price?symbol=' + symbol);
-        setLatency(Date.now() - t);
+        setIsOnline(true);
       } catch {
-        setLatency(null);
+        setIsOnline(false);
       }
     };
     ping();
@@ -41,10 +32,10 @@ export default function StatusBar() {
     const tick = () => {
       const d = new Date();
       if (timezone === 'utc') {
-        setNow(d.toISOString().substring(11, 19) + ' UTC');
+        setNow(d.toISOString().substring(11, 19));
       } else if (timezone === 'gmt+7') {
         const gmt7 = new Date(d.getTime() + 7 * 3600000);
-        setNow(gmt7.toISOString().substring(11, 19) + ' GMT+7');
+        setNow(gmt7.toISOString().substring(11, 19));
       } else {
         setNow(d.toLocaleTimeString('en-US', { hour12: false }));
       }
@@ -65,7 +56,6 @@ export default function StatusBar() {
     fetchRegime();
   }, [symbol, timeframe]);
 
-  const isOnline = latency !== null && latency < 2000;
   const regimeLabel = regime.replace(/_/g, ' ');
   const regimeCls = regime.includes('UP') ? 'up' : regime.includes('DOWN') ? 'down' : 'neutral';
 
@@ -78,26 +68,21 @@ export default function StatusBar() {
           {isOnline ? (lang === 'id' ? 'Terhubung' : 'Connected') : 'Offline'} · Binance
         </span>
         <div className="sb-sep" />
-        <span className="sb-text mono">
-          {latency != null ? `${latency}ms` : '—'}
-        </span>
-        <div className="sb-sep" />
         <span className="sb-text">{symbol} · {timeframe}</span>
         <div className="sb-sep" />
         <span className={`sb-regime-dot ${regimeCls}`} />
         <span className={`sb-regime-label ${regimeCls}`}>{regimeLabel}</span>
       </div>
 
-      {/* Center: version info */}
+      {/* Center */}
       <div className="sb-center">
-        <span className="sb-text">ATLAS-QUANT</span>
-        <div className="sb-sep" />
-        <span className="sb-text sb-text-dim">T1MO Core · Live</span>
+        <span className="sb-text sb-text-dim">ATLAS-QUANT · T1MO Core</span>
       </div>
 
       {/* Right */}
       <div className="sb-right">
         <button
+          type="button"
           className="sb-tz-btn"
           title="Click to cycle timezone: UTC → GMT+7 → Local"
           onClick={() => {
@@ -110,12 +95,6 @@ export default function StatusBar() {
         </button>
         <div className="sb-sep" />
         <span className="sb-text mono">{now}</span>
-        <div className="sb-sep" />
-        <span className="sb-text" title="Live deployed build commit">
-          ATLAS-QUANT v2.16 · {(process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || 'local').slice(0, 7)}
-        </span>
-        <div className="sb-sep" />
-        <span className="sb-warning">Manual execution only</span>
       </div>
     </div>
   );
