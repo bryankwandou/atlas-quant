@@ -182,6 +182,10 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const pixelRedrawRef = useRef<(() => void) | null>(null);
   // Stores latest T1MO pixel scores so they update on each SWR candle poll
   const pixelScoresRef = useRef<{ scores: Record<string, number[]>; nBars: number } | null>(null);
+  // SMC Lux Algo overlay — canvas on top of main chart
+  const smcCanvasRef  = useRef<HTMLCanvasElement>(null);
+  const smcRedrawRef  = useRef<(() => void) | null>(null);
+  const smcDataRef    = useRef<{ orderBlocks: any[]; fvg: any[]; bos: any[] } | null>(null);
 
   const { theme }                        = useTheme();
   const { candles, isLoading, marketClosed } = useMarketData(symbol, timeframe);
@@ -327,6 +331,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     Object.entries(chartsRef.current).forEach(([k, c]) => { if (k !== '_obs') try { c.remove(); } catch {} });
     chartsRef.current = {}; seriesRef.current = {};
     pixelRedrawRef.current = null;  // drop stale T1MO-pixel redraw closure
+    smcRedrawRef.current   = null;  // drop stale SMC canvas closure
 
     const currentCandles = candlesRef.current;
     if (!mainRef.current || !volRef.current || !currentCandles?.length) return;
@@ -511,16 +516,105 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       });
     }
 
-    // SMC Order Blocks
-    if (activeIndicators.includes('SMC_OB')) {
-      const smc = ind.detectSMC();
-      smc.orderBlocks?.slice(-5).forEach((ob: any) => {
-        const color = ob.type === 'bullish' ? 'rgba(8,153,129,0.5)' : 'rgba(242,54,69,0.5)';
-        try {
-          candleSeries.createPriceLine({ price: ob.high, color, lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title: `OB ${ob.type === 'bullish' ? '▲' : '▼'}` });
-          candleSeries.createPriceLine({ price: ob.low,  color, lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title: '' });
-        } catch {}
-      });
+    // ── SMC Overlay (Lux Algo style) — canvas-based OB boxes / FVG / BOS ──────
+    {
+      const smcInit = ind.detectSMC();
+      smcDataRef.current = smcInit;
+
+      const drawSMC = () => {
+        const canvas = smcCanvasRef.current;
+        const mainChart = chartsRef.current.main;
+        const cs = seriesRef.current.candle;
+        if (!canvas || !mainChart || !cs) return;
+        const W = canvas.clientWidth, H = canvas.clientHeight;
+        if (W < 2 || H < 2) return;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width  = Math.round(W * dpr);
+        canvas.height = Math.round(H * dpr);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, W, H);
+        if (!activeIndicators.includes('SMC_OB')) return;
+
+        const latest = smcDataRef.current;
+        if (!latest) return;
+        const ts = mainChart.timeScale();
+        const p2y = (price: number) => { try { return cs.priceToCoordinate(price); } catch { return null; } };
+
+        // ── Order Blocks ─────────────────────────────────────
+        for (const ob of latest.orderBlocks) {
+          const x1 = ts.logicalToCoordinate(ob.idx as any);
+          if (x1 == null || x1 > W) continue;
+          const y1 = p2y(ob.high), y2 = p2y(ob.low);
+          if (y1 == null || y2 == null) continue;
+          const top = Math.min(y1, y2), bot = Math.max(y1, y2), ht = Math.max(2, bot - top);
+          const isBull = ob.type === 'bullish';
+          const col = isBull ? '#089981' : '#f23645';
+          // Filled body
+          ctx.fillStyle = isBull ? 'rgba(8,153,129,0.13)' : 'rgba(242,54,69,0.13)';
+          ctx.fillRect(Math.max(0, x1), top, W - Math.max(0, x1), ht);
+          // Gradient left stripe
+          const grad = ctx.createLinearGradient(Math.max(0, x1), 0, Math.max(0, x1) + 4, 0);
+          grad.addColorStop(0, isBull ? 'rgba(8,153,129,0.7)' : 'rgba(242,54,69,0.7)');
+          grad.addColorStop(1, 'transparent');
+          ctx.fillStyle = grad;
+          ctx.fillRect(Math.max(0, x1), top, 4, ht);
+          // Top & bottom border
+          ctx.strokeStyle = col; ctx.lineWidth = 1.2; ctx.setLineDash([]);
+          ctx.beginPath(); ctx.moveTo(Math.max(0, x1), top); ctx.lineTo(W, top); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(Math.max(0, x1), bot); ctx.lineTo(W, bot); ctx.stroke();
+          // Label
+          ctx.fillStyle = col;
+          ctx.font = 'bold 9px "Roboto Mono",monospace';
+          ctx.fillText(isBull ? 'Bull OB' : 'Bear OB', Math.max(0, x1) + 6, top + Math.min(ht * 0.65, 11));
+        }
+
+        // ── Fair Value Gaps ───────────────────────────────────
+        ctx.font = '8px "Roboto Mono",monospace';
+        for (const gap of latest.fvg) {
+          const x1 = ts.logicalToCoordinate(gap.idx as any);
+          if (x1 == null || x1 > W) continue;
+          const y1 = p2y(gap.top), y2 = p2y(gap.bottom);
+          if (y1 == null || y2 == null) continue;
+          const top = Math.min(y1, y2), bot = Math.max(y1, y2), ht = Math.max(1, bot - top);
+          const isBull = gap.type === 'bullish';
+          const r = isBull ? 8 : 242, g = isBull ? 153 : 54, b = isBull ? 129 : 69;
+          ctx.fillStyle = `rgba(${r},${g},${b},0.09)`;
+          ctx.fillRect(Math.max(0, x1), top, W - Math.max(0, x1), ht);
+          ctx.strokeStyle = `rgba(${r},${g},${b},0.45)`;
+          ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+          ctx.strokeRect(Math.max(0, x1), top, W - Math.max(0, x1), ht);
+          ctx.setLineDash([]);
+          ctx.fillStyle = `rgba(${r},${g},${b},0.8)`;
+          ctx.fillText(isBull ? 'FVG+' : 'FVG−', Math.max(0, x1) + 3, top + Math.min(ht * 0.8, 9));
+        }
+
+        // ── BOS / CHoCH ───────────────────────────────────────
+        ctx.font = 'bold 9px "Roboto Mono",monospace';
+        for (const b of latest.bos) {
+          const x = ts.logicalToCoordinate(b.idx as any);
+          if (x == null || x > W) continue;
+          const y = p2y(b.level);
+          if (y == null) continue;
+          const isBull = b.type === 'bullish';
+          const col = isBull ? '#089981' : '#f23645';
+          ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.setLineDash([5, 3]);
+          ctx.beginPath(); ctx.moveTo(Math.max(0, x), y); ctx.lineTo(W, y); ctx.stroke();
+          ctx.setLineDash([]);
+          // Arrow + label
+          ctx.fillStyle = isDark ? (isBull ? '#131722' : '#131722') : '#ffffff';
+          const lbl = isBull ? '▲ BOS' : '▼ BOS';
+          const tw = ctx.measureText(lbl).width + 8;
+          ctx.fillRect(W - tw - 4, y - 10, tw + 4, 13);
+          ctx.fillStyle = col;
+          ctx.fillText(lbl, W - tw, y);
+        }
+      };
+
+      smcRedrawRef.current = drawSMC;
+      main.timeScale().subscribeVisibleLogicalRangeChange(drawSMC);
+      requestAnimationFrame(() => { drawSMC(); requestAnimationFrame(drawSMC); });
     }
 
     // ── T1MO Core — permanent overlay per DARURAT HUKUM design requirement ──
@@ -958,6 +1052,19 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           }
         } catch {}
       }
+      // Refresh SMC data so canvas boxes track new candles
+      if (smcDataRef.current) {
+        try {
+          const mc2 = formatted.map((c: any) => c.close);
+          const mh2 = formatted.map((c: any) => c.high);
+          const ml2 = formatted.map((c: any) => c.low);
+          const mv2 = formatted.map((c: any) => c.volume);
+          const ind4 = computeIndicators(mc2, mh2, ml2, mv2, mc2);
+          smcDataRef.current = ind4.detectSMC();
+          requestAnimationFrame(() => smcRedrawRef.current?.());
+        } catch {}
+      }
+
       // Recompute T1MO pixel scores so canvas heatmap tracks new candles
       if (pixelScoresRef.current) {
         try {
@@ -1087,7 +1194,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       {/* Panels */}
       <div ref={wrapRef} className="chart-panels">
         {isLoading && <div className="chart-loading"><div className="spinner"/><span>Loading {symbol}...</span></div>}
-        <div ref={mainRef} className="chart-panel chart-panel-main"/>
+        <div ref={mainRef} className="chart-panel chart-panel-main">
+          <canvas ref={smcCanvasRef} className="smc-overlay-canvas"/>
+        </div>
         <div ref={spl1Ref} className={`chart-splitter${dragging===0?' dragging':''}`} onMouseDown={e=>startDrag(0,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
         <div ref={volRef} className="chart-panel chart-panel-vol"><div className="subchart-label2">VOL</div></div>
         <div ref={spl2Ref} className={`chart-splitter${dragging===1?' dragging':''}`} onMouseDown={e=>startDrag(1,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
