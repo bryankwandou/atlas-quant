@@ -174,16 +174,17 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const wrapRef  = useRef<HTMLDivElement>(null);
   const mainRef  = useRef<HTMLDivElement>(null);
   const volRef   = useRef<HTMLDivElement>(null);
-  const subRef   = useRef<HTMLDivElement>(null);
   const chartsRef = useRef<Record<string, any>>({});
   const seriesRef = useRef<Record<string, any>>({});
+  // Multi sub-panel: keyed by panelId
+  const subPanelDivs = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const pixelCanvasRef = useRef<HTMLCanvasElement>(null);
   const pixelRedrawRef = useRef<(() => void) | null>(null);
 
   const { theme }                        = useTheme();
   const { candles, isLoading, marketClosed } = useMarketData(symbol, timeframe);
   const { liveBars } = useLiveBars(symbol, timeframe);
-  const { activeIndicators, showSignals, chartType, setChartType, subPanel, setSubPanel, timezone } = useChartStore();
+  const { activeIndicators, showSignals, chartType, setChartType, subPanels, setSubPanel, removeSubPanel, timezone } = useChartStore();
 
   // Stable ref for candles — prevents buildCharts from re-running on every SWR poll
   // (SWR creates a new array reference on each successful fetch even with same data)
@@ -252,21 +253,28 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     const h0 = Math.floor(th * panelPct[0] / 100);
     const h1 = Math.floor(th * panelPct[1] / 100);
     const h2 = th - h0 - h1;
+    const nSub = subPanelDivs.current.size || 1;
+    const perSub = Math.floor(h2 / nSub);
     // Absolute positioning: each panel has top+height
     if (mainRef.current) { mainRef.current.style.top = '0px'; mainRef.current.style.height = h0 + 'px'; }
     if (volRef.current)  { volRef.current.style.top  = h0 + 'px'; volRef.current.style.height = h1 + 'px'; }
-    if (subRef.current)  { subRef.current.style.top  = (h0 + h1) + 'px'; subRef.current.style.height = h2 + 'px'; }
-    // Splitters positioned at panel boundaries
     if (spl1Ref.current) spl1Ref.current.style.top = h0 + 'px';
     if (spl2Ref.current) spl2Ref.current.style.top = (h0 + h1) + 'px';
-    Object.entries(chartsRef.current).forEach(([k, c]) => {
-      if (k === '_obs') return;
-      const el = k === 'main' ? mainRef.current : k === 'vol' ? volRef.current : subRef.current;
-      if (el && c) try { c.applyOptions({ width: el.clientWidth, height: el.clientHeight }); } catch {}
+    // Position each stacked sub-panel
+    let subTop = h0 + h1;
+    Array.from(subPanelDivs.current.entries()).forEach(([id, el], idx) => {
+      if (!el) return;
+      const h = idx === nSub - 1 ? (h2 - perSub * (nSub - 1)) : perSub;
+      el.style.top    = subTop + 'px';
+      el.style.height = h + 'px';
+      subTop += h;
+      const subChart = chartsRef.current[`sub_${id}`];
+      if (subChart) try { subChart.applyOptions({ width: el.clientWidth, height: h }); } catch {}
     });
-    // Redraw the T1MO pixel canvas (CSS keeps it sized to the sub-chart area)
+    if (mainRef.current && chartsRef.current.main) try { chartsRef.current.main.applyOptions({ width: mainRef.current.clientWidth, height: h0 }); } catch {}
+    if (volRef.current  && chartsRef.current.vol)  try { chartsRef.current.vol.applyOptions({ width: volRef.current.clientWidth, height: h1 }); } catch {}
     requestAnimationFrame(() => pixelRedrawRef.current?.());
-  }, [panelPct]);
+  }, [panelPct, subPanels]);
 
   // Timezone IANA name for Intl.DateTimeFormat
   const tzName = timezone === 'utc' ? 'UTC' : timezone === 'gmt+7' ? 'Asia/Jakarta' : undefined;
@@ -319,7 +327,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     pixelRedrawRef.current = null;  // drop stale T1MO-pixel redraw closure
 
     const currentCandles = candlesRef.current;
-    if (!mainRef.current || !volRef.current || !subRef.current || !currentCandles?.length) return;
+    if (!mainRef.current || !volRef.current || !currentCandles?.length) return;
 
     const formatted = currentCandles
       .map((c: any) => ({ time: Math.floor(c.open_time / 1000) as any, open: +c.open, high: +c.high, low: +c.low, close: +c.close, volume: +c.volume }))
@@ -589,21 +597,18 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       vs.setData(times.map((t: number, i: number) => ({ time: t, value: vsma[i] })).filter((d: any) => !isNaN(d.value)));
     }
 
-    // ── SUB CHART ─────────────────────────────────────────────
-    let subAnchorSeries: any = null;
-    const subChartEl = subRef.current!.querySelector<HTMLDivElement>('.sub-chart-inner');
-    if (subChartEl) {
-      const subChart = createChart(subChartEl, baseOpts(subChartEl) as any);
-      chartsRef.current.sub = subChart;
+    // ── SUB CHARTS (multi-panel, TradingView-style stacked) ──────────────────
+    // Build one lightweight-charts instance per active sub-panel, keyed sub_${id}.
+    const allSubCharts: Array<{ chart: any; anchor: any }> = [];
 
-      // Invisible anchor on its OWN price scale so cross-panel crosshair can be
-      // positioned in the sub panel without distorting the real indicator scale.
+    const buildSubPanel = (panelId: string, subChart: any) => {
+      let anchorSeries: any = null;
       try {
-        subAnchorSeries = (subChart as any).addSeries(LineSeries, {
+        anchorSeries = (subChart as any).addSeries(LineSeries, {
           priceScaleId: 'xhair', color: 'rgba(0,0,0,0)', lineWidth: 1,
           priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
         });
-        subAnchorSeries.setData(times.map((t: number) => ({ time: t, value: 0 })));
+        anchorSeries.setData(times.map((t: number) => ({ time: t, value: 0 })));
         (subChart as any).priceScale('xhair').applyOptions({ visible: false, autoScale: true });
       } catch {}
 
@@ -617,243 +622,189 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         s.setData(times.map((t: number) => ({ time: t, value: val })));
       };
 
-      if (subPanel === 'atlas') {
-        // ── T1MO Pixel — 4-row signal matrix (canvas overlay) ─────────────────
-        // Rows: HMF · RSI7 · MACD · ATLAS. Each cell colored by a 0–100 score
-        // (green=bull → red=bear). Columns are GAPPED — only drawn when the T1MO
-        // regime has conviction (clustered look, matches the reference).
-        // The lightweight-charts sub-chart keeps only a transparent anchor (for
-        // the time axis + crosshair sync); the heatmap is drawn on <canvas>,
-        // x-aligned to bars via subChart.timeScale().logicalToCoordinate().
+      if (panelId === 'atlas') {
         try {
-          // Hide the sub-chart right price axis for the pixel matrix (no price meaning)
           try { (subChart as any).priceScale('right').applyOptions({ visible: false }); } catch {}
-
           const t1moSub = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes, open: closes, time: times } as any, {});
-          const { scores, active } = computePixelScores(ind, t1moSub.meta.ready ? t1moSub : null, closes);
-          const nBars  = formatted.length;
-
+          const { scores } = computePixelScores(ind, t1moSub.meta.ready ? t1moSub : null, closes);
+          const nBars = formatted.length;
           const redraw = () => {
             const canvas = pixelCanvasRef.current;
-            const sc = chartsRef.current.sub;
+            const sc = chartsRef.current['sub_atlas'];
             if (!canvas || !sc) return;
             const W = canvas.clientWidth, H = canvas.clientHeight;
             if (W < 2 || H < 2) return;
             const dpr = window.devicePixelRatio || 1;
-            canvas.width = Math.round(W * dpr);
-            canvas.height = Math.round(H * dpr);
+            canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctx.clearRect(0, 0, W, H);
-
             const ts = sc.timeScale();
             const range = ts.getVisibleLogicalRange();
             if (!range) return;
-            // Leave room at the bottom for the time axis so dates stay visible
             const axisH = (() => { try { return ts.height() || 0; } catch { return 0; } })();
             const drawH = Math.max(10, H - axisH);
-            // Opaque background only over the heatmap region (axis strip stays transparent)
             ctx.fillStyle = isDark ? '#0d1218' : '#ffffff';
             ctx.fillRect(0, 0, W, drawH);
-
             const nRows = PIXEL_ROWS.length;
-            const rowGap = rowHeightGap(drawH / nRows); // hairline gap, scaled to row size
-            const rowH  = drawH / nRows;
-            const from  = Math.max(0, Math.floor(range.from));
-            const to    = Math.min(nBars - 1, Math.ceil(range.to));
-
-            // FULL MOSAIC — every column drawn (no conviction gaps). Reference look.
+            const rowGap = rowHeightGap(drawH / nRows);
+            const rowH = drawH / nRows;
+            const from = Math.max(0, Math.floor(range.from));
+            const to   = Math.min(nBars - 1, Math.ceil(range.to));
             for (let i = from; i <= to; i++) {
-              const xc = ts.logicalToCoordinate(i as any);
-              if (xc == null) continue;
+              const xc = ts.logicalToCoordinate(i as any); if (xc == null) continue;
               const xn = ts.logicalToCoordinate((i + 1) as any);
-              const barW = Math.max(1, (xn != null ? Math.abs(xn - xc) : 6));
-              const cellW = Math.max(1, barW - 0.5);   // hairline horizontal gap → mosaic
+              const barW = Math.max(1, xn != null ? Math.abs(xn - xc) : 6);
+              const cellW = Math.max(1, barW - 0.5);
               const x = xc - barW / 2;
               for (let r = 0; r < nRows; r++) {
-                const key = PIXEL_ROWS[r];
-                const s = scores[key]?.[i] ?? 50;
+                const s = scores[PIXEL_ROWS[r]]?.[i] ?? 50;
                 ctx.fillStyle = pixelColor(s);
                 ctx.fillRect(x + 0.25, r * rowH + rowGap / 2, cellW, rowH - rowGap);
               }
             }
-
-            // Left gutter — opaque strip so labels sit cleanly over the first bars
-            // (matches reference HEADER_W). Bars underneath stay hidden.
             ctx.fillStyle = isDark ? '#0d1218' : '#ffffff';
             ctx.fillRect(0, 0, PIXEL_GUTTER, drawH);
-            ctx.strokeStyle = isDark ? '#222a36' : '#e0e3eb';
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = isDark ? '#222a36' : '#e0e3eb'; ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(PIXEL_GUTTER, 0); ctx.lineTo(PIXEL_GUTTER, drawH); ctx.stroke();
-
-            // Row labels — inside the gutter
-            ctx.font = 'bold 9px "Roboto Mono", monospace';
-            ctx.textBaseline = 'middle';
+            ctx.font = 'bold 9px "Roboto Mono", monospace'; ctx.textBaseline = 'middle';
             ctx.fillStyle = isDark ? '#7a8294' : '#5a6273';
-            for (let r = 0; r < nRows; r++) {
-              ctx.fillText(PIXEL_ROWS[r], 5, r * rowH + rowH / 2);
-            }
+            for (let r = 0; r < nRows; r++) ctx.fillText(PIXEL_ROWS[r], 5, r * rowH + rowH / 2);
           };
-
           pixelRedrawRef.current = redraw;
           subChart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
           requestAnimationFrame(() => { redraw(); requestAnimationFrame(redraw); });
-        } catch { /* T1MO pixel compute error — non-fatal */ }
-      } else if (subPanel === 'rsi') {
+        } catch {}
+      } else if (panelId === 'rsi') {
         addSubLine(ind.rsi(7), '#7e57c2', 'RSI(7)');
         [[30, 'rgba(8,153,129,0.3)'], [50, 'rgba(255,255,255,0.08)'], [70, 'rgba(242,54,69,0.3)']].forEach(([v, c]) => addLevel(v as number, c as string));
-      } else if (subPanel === 'macd') {
+      } else if (panelId === 'macd') {
         const md = ind.macd(12, 26, 9);
         const hs = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
         hs.setData(times.map((t: number, i: number) => ({ time: t, value: md.histogram[i], color: md.histogram[i] >= 0 ? 'rgba(8,153,129,0.6)' : 'rgba(242,54,69,0.6)' })).filter((d: any) => !isNaN(d.value)));
         addSubLine(md.macd, '#2962ff', 'MACD', 1.2);
         addSubLine(md.signal, '#ff9800', 'Signal', 1.2);
-      } else if (subPanel === 'williams') {
+      } else if (panelId === 'williams') {
         addSubLine(ind.williamsR(14), '#26c6da', '%R(14)');
         [[-20, 'rgba(242,54,69,0.3)'], [-80, 'rgba(8,153,129,0.3)']].forEach(([v, c]) => addLevel(v as number, c as string));
-      } else if (subPanel === 'stochrsi') {
+      } else if (panelId === 'stochrsi') {
         const sr = ind.stochRsi(14, 14, 3, 3);
         addSubLine(sr.k, '#2962ff', 'K', 1.2);
         addSubLine(sr.d, '#ff9800', 'D', 1.2);
         [[20, 'rgba(8,153,129,0.2)'], [80, 'rgba(242,54,69,0.2)']].forEach(([v, c]) => addLevel(v as number, c as string));
-      } else if (subPanel === 'mfi') {
+      } else if (panelId === 'mfi') {
         addSubLine(ind.mfi(14), '#26a69a', 'MFI(14)');
         [[20, 'rgba(8,153,129,0.3)'], [80, 'rgba(242,54,69,0.3)']].forEach(([v, c]) => addLevel(v as number, c as string));
-      } else if (subPanel === 'cci') {
+      } else if (panelId === 'cci') {
         addSubLine(ind.cci(14), '#ff9800', 'CCI(14)');
         [[-100, 'rgba(8,153,129,0.3)'], [0, 'rgba(255,255,255,0.08)'], [100, 'rgba(242,54,69,0.3)']].forEach(([v, c]) => addLevel(v as number, c as string));
-      } else if (subPanel === 'adx') {
+      } else if (panelId === 'adx') {
         const adxV = ind.adx(14);
         addSubLine(adxV.adx, '#ff9800', 'ADX', 2);
         addSubLine(adxV.plusDI, '#089981', '+DI', 1);
         addSubLine(adxV.minusDI, '#f23645', '-DI', 1);
         addLevel(25, 'rgba(255,255,255,0.15)');
-      } else if (subPanel === 'obv') {
+      } else if (panelId === 'obv') {
         addSubLine(ind.obv(), '#26c6da', 'OBV');
-      } else if (subPanel === 'aroon') {
+      } else if (panelId === 'aroon') {
         const ar = ind.aroon(25);
-        addSubLine(ar.up,   '#089981', 'Up',   1.2);
+        addSubLine(ar.up, '#089981', 'Up', 1.2);
         addSubLine(ar.down, '#f23645', 'Down', 1.2);
         addSubLine(ar.osc, '#f7a600', 'Osc', 1);
         addLevel(0, 'rgba(255,255,255,0.1)');
-      } else if (subPanel === 'cmf') {
+      } else if (panelId === 'cmf') {
         const cmfV = ind.cmf(20);
         const cmfHist = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
         cmfHist.setData(times.map((t: number, i: number) => ({ time: t, value: cmfV[i], color: (cmfV[i] || 0) >= 0 ? 'rgba(8,153,129,0.7)' : 'rgba(242,54,69,0.7)' })).filter((d: any) => !isNaN(d.value)));
         addLevel(0, 'rgba(255,255,255,0.1)');
-      } else if (subPanel === 'atr') {
+      } else if (panelId === 'atr') {
         addSubLine(ind.atr(14), '#ab47bc', 'ATR(14)');
-      } else if (subPanel === 'elder') {
+      } else if (panelId === 'elder') {
         const er = ind.elderRay(13);
         const bullPow = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
         bullPow.setData(times.map((t: number, i: number) => ({ time: t, value: er.bullPower[i], color: 'rgba(8,153,129,0.7)' })).filter((d: any) => !isNaN(d.value)));
         const bearPow = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
         bearPow.setData(times.map((t: number, i: number) => ({ time: t, value: er.bearPower[i], color: 'rgba(242,54,69,0.7)' })).filter((d: any) => !isNaN(d.value)));
         addLevel(0, 'rgba(255,255,255,0.1)');
-
-      // ── BANDARMOLOGI panels ──────────────────────────────────────────────────
-
-      } else if (subPanel === 'cvd') {
-        // Cumulative Volume Delta: delta histogram + CVD cumulative line
+      } else if (panelId === 'cvd') {
         const cvdResult = ind.cvd();
         const deltaHist = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'cvd_delta' });
-        deltaHist.setData(times.map((t: number, i: number) => ({
-          time: t, value: cvdResult.delta[i],
-          color: cvdResult.delta[i] >= 0 ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)',
-        })).filter((d: any) => !isNaN(d.value) && isFinite(d.value)));
+        deltaHist.setData(times.map((t: number, i: number) => ({ time: t, value: cvdResult.delta[i], color: cvdResult.delta[i] >= 0 ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)' })).filter((d: any) => !isNaN(d.value) && isFinite(d.value)));
         try { (subChart as any).priceScale('cvd_delta').applyOptions({ visible: false, scaleMargins: { top: 0.55, bottom: 0 } }); } catch {}
         addSubLine(cvdResult.cvd, '#00bcd4', 'CVD', 2);
         addLevel(0, 'rgba(255,255,255,0.1)');
-
-      } else if (subPanel === 'bandar') {
-        // Bandar Detector: composite 0–100 smart-money score + signal + phase zones
+      } else if (panelId === 'bandar') {
         const bnd = ind.bandarDetector(8);
-        addSubLine(bnd.score,  '#e91e63', 'Bandar', 2);
+        addSubLine(bnd.score, '#e91e63', 'Bandar', 2);
         addSubLine(bnd.signal, '#ff9800', 'Signal', 1.5);
         [[55, 'rgba(8,153,129,0.18)'], [50, 'rgba(255,255,255,0.07)'], [45, 'rgba(242,54,69,0.18)']].forEach(([v, c]) => addLevel(v as number, c as string));
-
-      } else if (subPanel === 'bandar_ad') {
-        // Bandar Accumulation/Distribution: A/D cumulative + EMA signal + oscillator histogram
+      } else if (panelId === 'bandar_ad') {
         const bad = ind.bandarAD(21);
         const adHist = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'bad_hist' });
-        adHist.setData(times.map((t: number, i: number) => ({
-          time: t, value: bad.histogram[i],
-          color: (bad.histogram[i] || 0) >= 0 ? 'rgba(8,153,129,0.65)' : 'rgba(242,54,69,0.65)',
-        })).filter((d: any) => !isNaN(d.value) && isFinite(d.value)));
+        adHist.setData(times.map((t: number, i: number) => ({ time: t, value: bad.histogram[i], color: (bad.histogram[i] || 0) >= 0 ? 'rgba(8,153,129,0.65)' : 'rgba(242,54,69,0.65)' })).filter((d: any) => !isNaN(d.value) && isFinite(d.value)));
         try { (subChart as any).priceScale('bad_hist').applyOptions({ visible: false, scaleMargins: { top: 0.5, bottom: 0 } }); } catch {}
-        addSubLine(bad.ad,     '#26c6da', 'A/D',    1.5);
+        addSubLine(bad.ad, '#26c6da', 'A/D', 1.5);
         addSubLine(bad.signal, '#ff9800', 'Sig(21)', 1);
         addLevel(0, 'rgba(255,255,255,0.1)');
-
-      } else if (subPanel === 'vol_delta') {
-        // Volume Delta: classified buy-vol (green above 0) and sell-vol (red below 0)
+      } else if (panelId === 'vol_delta') {
         const cvdData = ind.cvd();
-        const buyHist  = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
-        buyHist.setData(times.map((t: number, i: number) => ({
-          time: t, value: Math.max(0, cvdData.delta[i]), color: 'rgba(8,153,129,0.7)',
-        })).filter((d: any) => d.value > 0));
+        const buyHist = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
+        buyHist.setData(times.map((t: number, i: number) => ({ time: t, value: Math.max(0, cvdData.delta[i]), color: 'rgba(8,153,129,0.7)' })).filter((d: any) => d.value > 0));
         const sellHist = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
-        sellHist.setData(times.map((t: number, i: number) => ({
-          time: t, value: Math.min(0, cvdData.delta[i]), color: 'rgba(242,54,69,0.7)',
-        })).filter((d: any) => d.value < 0));
-        // Net delta EMA (trend of net buy/sell pressure)
-        const deltaEma = ind.ema(9).map((_: number, i: number) => cvdData.delta[i]);
-        const emaLine  = ind.ema(9); // use as smoothing reference below
-        // Smooth delta with a simple EMA-9 proxy via the existing ema() of delta values
-        const netEma   = (closes as number[]).map((_: number, i: number) => {
+        sellHist.setData(times.map((t: number, i: number) => ({ time: t, value: Math.min(0, cvdData.delta[i]), color: 'rgba(242,54,69,0.7)' })).filter((d: any) => d.value < 0));
+        const netEma = (closes as number[]).map((_: number, i: number) => {
           const k = 2 / 10; let prev = cvdData.delta[0] || 0;
           for (let j = 1; j <= i; j++) prev = cvdData.delta[j] * k + prev * (1 - k);
           return prev;
         });
         addSubLine(netEma, '#f7a600', 'Delta EMA', 1.5);
         addLevel(0, 'rgba(255,255,255,0.12)');
-        void deltaEma; void emaLine; // suppress unused warnings
-
-      } else if (subPanel === 'bandar_suite') {
-        // Multi-indicator Bandar Suite: all key bandarmologi lines on the same 0–100 scale.
-        // CVD delta and CMF are percentile-normalized to 0–100 so they overlay cleanly.
-        const bnd      = ind.bandarDetector(8);
-        const cvdData  = ind.cvd();
-        const mfiData  = ind.mfi(14);
-        const cmfRaw   = ind.cmf(20);
-        const obvData  = ind.obv();
-        // Normalize CVD delta → 0–100 rolling percentile
+      } else if (panelId === 'bandar_suite') {
+        const bnd = ind.bandarDetector(8);
+        const cvdData = ind.cvd();
+        const mfiData = ind.mfi(14);
+        const cmfRaw  = ind.cmf(20);
+        const obvData = ind.obv();
         const cvdNorm  = rollingPercentile(cvdData.delta, 100);
-        // Normalize CMF (-1..1) → 0–100
         const cmfNorm  = cmfRaw.map((v: number) => isNaN(v) ? 50 : Math.max(0, Math.min(100, (v + 1) / 2 * 100)));
-        // Normalize OBV slope → 0–100 rolling percentile on 8-bar change
         const obvSlope = obvData.map((v: number, i: number) => i >= 8 ? v - obvData[i - 8] : 0);
         const obvNorm  = rollingPercentile(obvSlope, 100);
-
-        addSubLine(bnd.score,  '#e91e63', 'Bandar',   2.5);
-        addSubLine(bnd.signal, '#ff9800', 'Signal',   1.5);
-        addSubLine(cvdNorm,    '#00bcd4', 'CVD%',     1.2);
-        addSubLine(mfiData,    '#7e57c2', 'MFI(14)',  1.2);
-        addSubLine(cmfNorm,    '#26a69a', 'CMF%',     1);
-        addSubLine(obvNorm,    '#ab47bc', 'OBV%',     1);
-
-        [[70, 'rgba(8,153,129,0.15)'], [55, 'rgba(8,153,129,0.08)'],
-         [50, 'rgba(255,255,255,0.07)'],
-         [45, 'rgba(242,54,69,0.08)'], [30, 'rgba(242,54,69,0.15)']].forEach(([v, c]) => addLevel(v as number, c as string));
+        addSubLine(bnd.score, '#e91e63', 'Bandar', 2.5);
+        addSubLine(bnd.signal, '#ff9800', 'Signal', 1.5);
+        addSubLine(cvdNorm, '#00bcd4', 'CVD%', 1.2);
+        addSubLine(mfiData, '#7e57c2', 'MFI(14)', 1.2);
+        addSubLine(cmfNorm, '#26a69a', 'CMF%', 1);
+        addSubLine(obvNorm, '#ab47bc', 'OBV%', 1);
+        [[70, 'rgba(8,153,129,0.15)'], [55, 'rgba(8,153,129,0.08)'], [50, 'rgba(255,255,255,0.07)'], [45, 'rgba(242,54,69,0.08)'], [30, 'rgba(242,54,69,0.15)']].forEach(([v, c]) => addLevel(v as number, c as string));
       }
 
-      // Sync timescales — logical range keeps all panels pixel-locked
-      let syncing = false;
-      const syncLogical = (src: any, targets: any[]) =>
-        src.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
-          if (syncing || !range) return;
-          syncing = true;
-          targets.forEach(c => { try { c.timeScale().setVisibleLogicalRange(range); } catch {} });
-          setTimeout(() => { syncing = false; }, 16);
-        });
-      syncLogical(main, [volChart, subChart]);
-      syncLogical(volChart, [main, subChart]);
-      syncLogical(subChart, [main, volChart]);
+      return anchorSeries;
+    };
+
+    for (const panelId of subPanels) {
+      const panelDiv = subPanelDivs.current.get(panelId);
+      const innerEl  = panelDiv?.querySelector<HTMLDivElement>('.sub-chart-inner');
+      if (!innerEl) continue;
+      const subChart = createChart(innerEl, baseOpts(innerEl) as any);
+      chartsRef.current[`sub_${panelId}`] = subChart;
+      const anchor = buildSubPanel(panelId, subChart);
+      allSubCharts.push({ chart: subChart, anchor });
     }
 
-    // ── Cross-panel crosshair sync (TradingView-style locked panels) ──
-    // Hovering any panel draws the aligned vertical crosshair on all panels.
+    // Sync timescales across main, vol, and all sub-panels
+    const allCharts = [main, volChart, ...allSubCharts.map(s => s.chart)];
+    let syncing = false;
+    for (const src of allCharts) {
+      src.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
+        if (syncing || !range) return;
+        syncing = true;
+        for (const tgt of allCharts) { if (tgt !== src) try { tgt.timeScale().setVisibleLogicalRange(range); } catch {} }
+        setTimeout(() => { syncing = false; }, 16);
+      });
+    }
+
+    // Cross-panel crosshair sync
     let xhairSyncing = false;
     const syncXhair = (param: any, srcCh: any) => {
       if (xhairSyncing) return;
@@ -861,9 +812,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       try {
         const idx = param?.time ? formatted.findIndex((c: any) => c.time === param.time) : -1;
         const targets = [
-          { ch: main,                   s: candleSeries,    v: idx >= 0 ? formatted[idx]?.close  : 0 },
-          { ch: chartsRef.current.vol,  s: volSeries,       v: idx >= 0 ? formatted[idx]?.volume : 0 },
-          { ch: chartsRef.current.sub,  s: subAnchorSeries, v: 0 },
+          { ch: main,     s: candleSeries, v: idx >= 0 ? formatted[idx]?.close  : 0 },
+          { ch: volChart, s: volSeries,    v: idx >= 0 ? formatted[idx]?.volume : 0 },
+          ...allSubCharts.map(({ chart, anchor }) => ({ ch: chart, s: anchor, v: 0 })),
         ];
         for (const t of targets) {
           if (!t.ch || t.ch === srcCh) continue;
@@ -874,50 +825,54 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       xhairSyncing = false;
     };
 
-    // Crosshair legend + sync
     main.subscribeCrosshairMove((param: any) => {
       if (!param.point || !param.time) { setLegend(null); }
       else {
         const cd = param.seriesData?.get(candleSeries);
         if (cd) {
           const idx = formatted.findIndex((c: any) => c.time === param.time);
-          // For line/area, cd has .value not .open/.high/.low/.close
           const candle = (chartType === 'line' || chartType === 'area')
-            ? { open: cd.value, high: cd.value, low: cd.value, close: cd.value }
-            : cd;
+            ? { open: cd.value, high: cd.value, low: cd.value, close: cd.value } : cd;
           setLegend({ ...candle, ema9: addedSeries['EMA_9']?.vals[idx], ema21: addedSeries['EMA_21']?.vals[idx], vwap: addedSeries['VWAP']?.vals[idx] });
         }
       }
       syncXhair(param, main);
     });
     try { volChart.subscribeCrosshairMove((param: any) => syncXhair(param, volChart)); } catch {}
-    try { if (chartsRef.current.sub) chartsRef.current.sub.subscribeCrosshairMove((param: any) => syncXhair(param, chartsRef.current.sub)); } catch {}
+    for (const { chart } of allSubCharts) {
+      try { chart.subscribeCrosshairMove((param: any) => syncXhair(param, chart)); } catch {}
+    }
 
-    // ResizeObserver — absolute layout: update top+height for all panels + splitters
+    // ResizeObserver — absolute layout
     const obs = new ResizeObserver(() => {
       if (!wrapRef.current) return;
       const th = wrapRef.current.clientHeight;
       const h0 = Math.floor(th * panelPctRef.current[0] / 100);
       const h1 = Math.floor(th * panelPctRef.current[1] / 100);
       const h2 = th - h0 - h1;
+      const entries = Array.from(subPanelDivs.current.entries());
+      const nSub = entries.length || 1;
+      const perSub = Math.floor(h2 / nSub);
       if (mainRef.current) { mainRef.current.style.top = '0px'; mainRef.current.style.height = h0 + 'px'; }
       if (volRef.current)  { volRef.current.style.top  = h0 + 'px'; volRef.current.style.height = h1 + 'px'; }
-      if (subRef.current)  { subRef.current.style.top  = (h0+h1) + 'px'; subRef.current.style.height = h2 + 'px'; }
       if (spl1Ref.current) spl1Ref.current.style.top = h0 + 'px';
-      if (spl2Ref.current) spl2Ref.current.style.top = (h0+h1) + 'px';
-      [[chartsRef.current.main, mainRef.current, h0], [chartsRef.current.vol, volRef.current, h1], [chartsRef.current.sub, subRef.current, h2]].forEach(([ch, el, h]) => {
-        if (el && ch && (h as number) > 0) { try { ch.applyOptions({ width: (el as HTMLDivElement).clientWidth, height: h }); } catch {} }
+      if (spl2Ref.current) spl2Ref.current.style.top = (h0 + h1) + 'px';
+      let subTop = h0 + h1;
+      entries.forEach(([id, el], idx) => {
+        if (!el) return;
+        const h = idx === nSub - 1 ? h2 - perSub * (nSub - 1) : perSub;
+        el.style.top = subTop + 'px'; el.style.height = h + 'px'; subTop += h;
+        const sc = chartsRef.current[`sub_${id}`];
+        if (sc) try { sc.applyOptions({ width: el.clientWidth, height: h }); } catch {}
       });
-      // Resize + redraw the T1MO pixel canvas
-      const pc = pixelCanvasRef.current;
-      const inner = subRef.current?.querySelector<HTMLDivElement>('.sub-chart-inner');
-      if (pc && inner) { pc.style.width = inner.clientWidth + 'px'; pc.style.height = inner.clientHeight + 'px'; }
+      if (mainRef.current && chartsRef.current.main) try { chartsRef.current.main.applyOptions({ width: mainRef.current.clientWidth, height: h0 }); } catch {}
+      if (volRef.current  && chartsRef.current.vol)  try { chartsRef.current.vol.applyOptions({ width: volRef.current.clientWidth, height: h1 }); } catch {}
       requestAnimationFrame(() => pixelRedrawRef.current?.());
     });
     if (wrapRef.current) obs.observe(wrapRef.current);
     chartsRef.current._obs = obs;
   // candles removed — reads via candlesRef.current; panelPct removed — reads via panelPctRef.current
-  }, [theme, activeIndicators, showSignals, subPanel, baseOpts, symbol, chartType]);
+  }, [theme, activeIndicators, showSignals, subPanels, baseOpts, symbol, chartType]);
 
   // Full chart rebuild — does NOT destroy chart in cleanup (avoids 60ms blank flash).
   // buildCharts() itself destroys old charts at its start.
@@ -933,6 +888,14 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       // intentionally NOT destroying charts here — prevents white flash on every dep change
     };
   }, [buildCharts]);
+
+  // Sync subPanelDivs map with current subPanels — prune removed panels
+  useEffect(() => {
+    const current = new Set(subPanels);
+    for (const id of Array.from(subPanelDivs.current.keys())) {
+      if (!current.has(id)) subPanelDivs.current.delete(id);
+    }
+  }, [subPanels]);
 
   // Unmount-only cleanup
   useEffect(() => {
@@ -1105,18 +1068,46 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         <div ref={spl1Ref} className={`chart-splitter${dragging===0?' dragging':''}`} onMouseDown={e=>startDrag(0,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
         <div ref={volRef} className="chart-panel chart-panel-vol"><div className="subchart-label2">VOL</div></div>
         <div ref={spl2Ref} className={`chart-splitter${dragging===1?' dragging':''}`} onMouseDown={e=>startDrag(1,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
-        <div ref={subRef} className="chart-panel chart-panel-sub">
-          <div className="subchart-tabs-row">
-            {SUB_PANELS.map(p=><button type="button" key={p.id} className={`subchart-tab ${subPanel===p.id?'active':''}`} onClick={()=>setSubPanel(p.id)}>{p.label}</button>)}
-            <div className="subchart-tabs-spacer"/>
-          </div>
-          <div className="sub-chart-inner"/>
-          <canvas
-            ref={pixelCanvasRef}
-            className="t1mo-pixel-canvas"
-            style={{ display: subPanel === 'atlas' ? 'block' : 'none' }}
-          />
-        </div>
+        {/* Multi sub-panel stack — one panel per active indicator */}
+        {subPanels.map((panelId) => {
+          const label = SUB_PANELS.find(p => p.id === panelId)?.label ?? panelId;
+          return (
+            <div
+              key={panelId}
+              ref={el => { subPanelDivs.current.set(panelId, el); }}
+              className="chart-panel chart-panel-sub"
+            >
+              <div className="subchart-tabs-row">
+                <span className="subchart-panel-label">{label}</span>
+                <div className="subchart-tabs-spacer"/>
+                {/* Toggle buttons — active = highlighted */}
+                {SUB_PANELS.map(p => (
+                  <button
+                    type="button"
+                    key={p.id}
+                    className={`subchart-tab ${subPanels.includes(p.id) ? 'active' : ''}`}
+                    onClick={() => setSubPanel(p.id)}
+                  >{p.label}</button>
+                ))}
+                {subPanels.length > 1 && (
+                  <button
+                    type="button"
+                    className="subchart-close-btn"
+                    onClick={() => removeSubPanel(panelId)}
+                    title="Remove panel"
+                  >×</button>
+                )}
+              </div>
+              <div className="sub-chart-inner"/>
+              {panelId === 'atlas' && (
+                <canvas
+                  ref={pixelCanvasRef}
+                  className="t1mo-pixel-canvas"
+                />
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Context Menu */}

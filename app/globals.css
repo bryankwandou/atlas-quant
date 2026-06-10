@@ -546,7 +546,12 @@ select{cursor:pointer;}
 .indmod-default-badge{background:var(--aq-bg3);color:var(--aq-text2);padding:2px 6px;border-radius:3px;font-size:9px;}
 .indmod-soon-badge{background:rgba(255,152,0,0.15);color:#ff9800;border:1px solid rgba(255,152,0,0.3);}
 .indmod-panel-badge{background:rgba(41,98,255,0.12);color:#5c7cfa;border:1px solid rgba(41,98,255,0.25);padding:2px 6px;border-radius:3px;font-size:9px;white-space:nowrap;}
+.indmod-panel-badge.active{background:rgba(8,153,129,0.18);color:#089981;border-color:rgba(8,153,129,0.4);}
 .sub-panel-item .indmod-item-check{background:rgba(41,98,255,0.06)!important;border-color:rgba(41,98,255,0.25)!important;}
+/* ── Multi sub-panel header ──────────────────────────────── */
+.subchart-panel-label{font-size:9px;font-weight:700;color:var(--aq-text2);text-transform:uppercase;letter-spacing:.5px;padding:0 8px;flex-shrink:0;}
+.subchart-close-btn{background:none;border:none;color:var(--aq-text2);font-size:14px;line-height:1;cursor:pointer;padding:0 6px;opacity:.6;flex-shrink:0;}
+.subchart-close-btn:hover{color:var(--aq-text);opacity:1;}
 .indmod-empty{text-align:center;color:var(--aq-text2);padding:30px;font-size:12px;}
 .indmod-footer,.ind-modal-footer{display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--aq-border);flex-shrink:0;}
 .indmod-footer-gap{justify-content:space-between;}

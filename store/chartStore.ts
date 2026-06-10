@@ -61,7 +61,7 @@ interface ChartStore {
   chartType: string;
   drawingTool: string;
   rightPanelTab: string;
-  subPanel: string;
+  subPanels: string[];
   showIndicatorModal: boolean;
   fibConfig: FibConfig;
   superRefresh: boolean;
@@ -85,6 +85,8 @@ interface ChartStore {
   setDrawingTool: (t: string) => void;
   setRightPanelTab: (tab: string) => void;
   setSubPanel: (p: string) => void;
+  addSubPanel: (p: string) => void;
+  removeSubPanel: (p: string) => void;
   toggleIndicatorModal: () => void;
   openIndicatorModal: () => void;
   closeIndicatorModal: () => void;
@@ -103,7 +105,7 @@ export const useChartStore = create<ChartStore>()(
       chartType: 'candlestick',
       drawingTool: 'cursor',
       rightPanelTab: 'signal',
-      subPanel: 'atlas',
+      subPanels: ['atlas'],
       showIndicatorModal: false,
       fibConfig: DEFAULT_FIB_CONFIG,
       superRefresh: false,
@@ -158,7 +160,18 @@ export const useChartStore = create<ChartStore>()(
       setChartType:  (chartType)   => set({ chartType }),
       setDrawingTool: (drawingTool) => set({ drawingTool }),
       setRightPanelTab: (rightPanelTab) => set({ rightPanelTab }),
-      setSubPanel: (subPanel) => set({ subPanel }),
+      // setSubPanel toggles: add if absent, remove if present (TradingView-style)
+      setSubPanel: (p) => set(s => ({
+        subPanels: s.subPanels.includes(p)
+          ? s.subPanels.filter(x => x !== p)
+          : [...s.subPanels, p],
+      })),
+      addSubPanel: (p) => set(s => ({
+        subPanels: s.subPanels.includes(p) ? s.subPanels : [...s.subPanels, p],
+      })),
+      removeSubPanel: (p) => set(s => ({
+        subPanels: s.subPanels.length > 1 ? s.subPanels.filter(x => x !== p) : s.subPanels,
+      })),
       toggleSuperRefresh: () => set(s => ({ superRefresh: !s.superRefresh })),
       setTimezone: (timezone) => set({ timezone }),
 
@@ -176,7 +189,7 @@ export const useChartStore = create<ChartStore>()(
         showSignals: s.showSignals,
         chartType: s.chartType,
         rightPanelTab: s.rightPanelTab,
-        subPanel: s.subPanel,
+        subPanels: s.subPanels,
         fibConfig: s.fibConfig,
       }),
       // Bulletproof: on hydration, ALWAYS strip the non-T1MO main-chart overlays
@@ -184,11 +197,15 @@ export const useChartStore = create<ChartStore>()(
       // regardless of any stale localStorage. Users can still re-add via the
       // indicator modal afterwards.
       merge: (persisted, current) => {
-        const p = (persisted ?? {}) as Partial<ChartStore>;
+        const p = (persisted ?? {}) as Partial<ChartStore> & { subPanel?: string };
         const merged = { ...current, ...p } as ChartStore;
         const STRIP = ['EMA_9', 'EMA_21', 'VWAP'];
         if (Array.isArray(merged.activeIndicators)) {
           merged.activeIndicators = merged.activeIndicators.filter(id => !STRIP.includes(id));
+        }
+        // Migrate old single subPanel string → array
+        if (!Array.isArray(merged.subPanels)) {
+          merged.subPanels = [typeof p.subPanel === 'string' ? p.subPanel : 'atlas'];
         }
         return merged;
       },
