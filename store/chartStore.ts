@@ -180,7 +180,7 @@ export const useChartStore = create<ChartStore>()(
       closeIndicatorModal:  () => set({ showIndicatorModal: false }),
     }),
     {
-      name: 'atlas-chart-v3',
+      name: 'atlas-chart-v4',
       partialize: (s) => ({
         symbol: s.symbol,
         timeframe: s.timeframe,
@@ -204,9 +204,14 @@ export const useChartStore = create<ChartStore>()(
         if (Array.isArray(merged.activeIndicators)) {
           merged.activeIndicators = merged.activeIndicators.filter(id => !STRIP.includes(id));
         }
-        // Migrate old single subPanel string → array
+        // Migrate old single subPanel string → array, always include 'atlas' (T1MO Pixel)
+        const VALID_PANELS = ['atlas','rsi','stochrsi','cci','macd','atr','bandarmologi','obv','cvd','mfi','wr','adx'];
         if (!Array.isArray(merged.subPanels)) {
-          merged.subPanels = [typeof p.subPanel === 'string' ? p.subPanel : 'atlas'];
+          merged.subPanels = ['atlas'];
+        } else {
+          // Strip invalid panel IDs from stale localStorage, then ensure 'atlas' is always first
+          merged.subPanels = merged.subPanels.filter(id => VALID_PANELS.includes(id));
+          if (!merged.subPanels.includes('atlas')) merged.subPanels = ['atlas'];
         }
         // Migrate old short timezone tokens → IANA names
         const tzMap: Record<string, string> = { utc: 'UTC', 'gmt+7': 'Asia/Jakarta', local: 'local' };
