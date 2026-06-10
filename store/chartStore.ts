@@ -200,7 +200,7 @@ export const useChartStore = create<ChartStore>()(
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<ChartStore> & { subPanel?: string };
         const merged = { ...current, ...p } as ChartStore;
-        const STRIP = ['EMA_9', 'EMA_21', 'VWAP'];
+        const STRIP = ['EMA_9', 'EMA_21', 'VWAP', 'SMC_OB', 'SMC_FVG'];
         if (Array.isArray(merged.activeIndicators)) {
           merged.activeIndicators = merged.activeIndicators.filter(id => !STRIP.includes(id));
         }

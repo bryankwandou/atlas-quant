@@ -16,7 +16,7 @@ const REGIME_COLORS: Record<string, string> = {
 };
 
 export default function StatusBar() {
-  const { symbol, timeframe, activeIndicators, timezone, setTimezone } = useChartStore();
+  const { symbol, timeframe, timezone, setTimezone } = useChartStore();
   const { lang } = useLanguage();
   const [latency, setLatency]   = useState<number | null>(null);
   const [now, setNow]           = useState('');
@@ -88,14 +88,11 @@ export default function StatusBar() {
         <span className={`sb-regime-label ${regimeCls}`}>{regimeLabel}</span>
       </div>
 
-      {/* Center: active indicator tags */}
+      {/* Center: version info */}
       <div className="sb-center">
-        {activeIndicators.slice(0, 6).map(ind => (
-          <span key={ind} className="sb-ind-tag">{ind.replace(/_/g, ' ')}</span>
-        ))}
-        {activeIndicators.length > 6 && (
-          <span className="sb-ind-tag">+{activeIndicators.length - 6}</span>
-        )}
+        <span className="sb-text">ATLAS-QUANT</span>
+        <div className="sb-sep" />
+        <span className="sb-text sb-text-dim">T1MO Core · Live</span>
       </div>
 
       {/* Right */}
