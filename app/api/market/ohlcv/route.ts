@@ -38,6 +38,20 @@ function isCacheValid(cached: any[], timeframe: string): boolean {
   return median >= expected / 3 && median <= expected * 3;
 }
 
+/** Check that the most recent cached candle is not stale.
+ *  Allows up to 3× the candle duration (minimum 5 min) before forcing a live refetch.
+ *  This prevents frozen chart data when the cache hasn't been updated for days. */
+function isCacheFresh(cached: any[], timeframe: string): boolean {
+  if (cached.length === 0) return false;
+  const last = cached[cached.length - 1];
+  const lastTime: number = last?.open_time ?? 0;
+  if (!lastTime) return false;
+  const expected = EXPECTED_INTERVAL_MS[timeframe] ?? 60_000;
+  // Stale threshold: 3× the candle interval, but at least 5 minutes
+  const maxStale = Math.max(expected * 3, 5 * 60_000);
+  return (Date.now() - lastTime) <= maxStale;
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const symbol    = searchParams.get('symbol') || 'BTCUSDT';
@@ -71,7 +85,7 @@ export async function GET(req: NextRequest) {
             });
           }
         }
-      } else if (cached.length >= 50 && isCacheValid(cached, timeframe)) {
+      } else if (cached.length >= 50 && isCacheValid(cached, timeframe) && isCacheFresh(cached, timeframe)) {
         return NextResponse.json({
           symbol, timeframe, data: cached, source: 'cache', backend: 'neon', count: cached.length,
         });
@@ -91,7 +105,7 @@ export async function GET(req: NextRequest) {
         .limit(limit);
 
       if (cached && cached.length >= 50) {
-        if (isCacheValid(cached, timeframe)) {
+        if (isCacheValid(cached, timeframe) && isCacheFresh(cached, timeframe)) {
           return NextResponse.json({
             symbol,
             timeframe,
