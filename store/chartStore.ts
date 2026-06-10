@@ -65,7 +65,7 @@ interface ChartStore {
   showIndicatorModal: boolean;
   fibConfig: FibConfig;
   superRefresh: boolean;
-  timezone: 'local' | 'utc' | 'gmt+7';
+  timezone: string; // IANA timezone name (e.g. 'UTC', 'Asia/Jakarta') or 'local'
 
   setSymbol: (s: string) => void;
   setTimeframe: (tf: string) => void;
@@ -91,7 +91,7 @@ interface ChartStore {
   openIndicatorModal: () => void;
   closeIndicatorModal: () => void;
   toggleSuperRefresh: () => void;
-  setTimezone: (tz: 'local' | 'utc' | 'gmt+7') => void;
+  setTimezone: (tz: string) => void;
 }
 
 export const useChartStore = create<ChartStore>()(
@@ -109,7 +109,7 @@ export const useChartStore = create<ChartStore>()(
       showIndicatorModal: false,
       fibConfig: DEFAULT_FIB_CONFIG,
       superRefresh: false,
-      timezone: 'utc',
+      timezone: 'UTC',
 
       setSymbol:    (symbol)    => set({ symbol }),
       setTimeframe: (timeframe) => set({ timeframe }),
@@ -191,6 +191,7 @@ export const useChartStore = create<ChartStore>()(
         rightPanelTab: s.rightPanelTab,
         subPanels: s.subPanels,
         fibConfig: s.fibConfig,
+        timezone: s.timezone,
       }),
       // Bulletproof: on hydration, ALWAYS strip the non-T1MO main-chart overlays
       // (EMA9/EMA21/VWAP) so the top panel shows only the 3 T1MO indicators —
@@ -206,6 +207,11 @@ export const useChartStore = create<ChartStore>()(
         // Migrate old single subPanel string → array
         if (!Array.isArray(merged.subPanels)) {
           merged.subPanels = [typeof p.subPanel === 'string' ? p.subPanel : 'atlas'];
+        }
+        // Migrate old short timezone tokens → IANA names
+        const tzMap: Record<string, string> = { utc: 'UTC', 'gmt+7': 'Asia/Jakarta', local: 'local' };
+        if (typeof merged.timezone === 'string' && tzMap[merged.timezone]) {
+          merged.timezone = tzMap[merged.timezone];
         }
         return merged;
       },

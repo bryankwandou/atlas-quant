@@ -4,6 +4,37 @@ import { useTheme } from '@/hooks/useTheme';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useUserStore } from '@/store/userStore';
 import { useChartStore } from '@/store/chartStore';
+
+const TIMEZONE_OPTIONS = [
+  { label: 'Local (Browser)', value: 'local' },
+  { label: 'UTC / GMT+0',     value: 'UTC' },
+  { label: 'GMT-12 (IDLW)',   value: 'Etc/GMT+12' },
+  { label: 'GMT-11 (SST)',    value: 'Pacific/Pago_Pago' },
+  { label: 'GMT-10 (HST)',    value: 'Pacific/Honolulu' },
+  { label: 'GMT-9  (AKT)',    value: 'America/Anchorage' },
+  { label: 'GMT-8  (PST)',    value: 'America/Los_Angeles' },
+  { label: 'GMT-7  (MST)',    value: 'America/Denver' },
+  { label: 'GMT-6  (CST)',    value: 'America/Chicago' },
+  { label: 'GMT-5  (EST)',    value: 'America/New_York' },
+  { label: 'GMT-4  (AST)',    value: 'America/Halifax' },
+  { label: 'GMT-3  (BRT)',    value: 'America/Sao_Paulo' },
+  { label: 'GMT-2',           value: 'Atlantic/South_Georgia' },
+  { label: 'GMT-1  (AZOT)',   value: 'Atlantic/Azores' },
+  { label: 'GMT+1  (CET)',    value: 'Europe/Paris' },
+  { label: 'GMT+2  (EET)',    value: 'Europe/Helsinki' },
+  { label: 'GMT+3  (MSK)',    value: 'Europe/Moscow' },
+  { label: 'GMT+4  (GST)',    value: 'Asia/Dubai' },
+  { label: 'GMT+5  (PKT)',    value: 'Asia/Karachi' },
+  { label: 'GMT+5:30 (IST)',  value: 'Asia/Kolkata' },
+  { label: 'GMT+6  (BST)',    value: 'Asia/Dhaka' },
+  { label: 'GMT+7  (WIB)',    value: 'Asia/Jakarta' },
+  { label: 'GMT+8  (SGT)',    value: 'Asia/Singapore' },
+  { label: 'GMT+9  (JST)',    value: 'Asia/Tokyo' },
+  { label: 'GMT+9:30 (ACST)',  value: 'Australia/Darwin' },
+  { label: 'GMT+10 (AEST)',   value: 'Australia/Sydney' },
+  { label: 'GMT+11 (SBT)',    value: 'Pacific/Guadalcanal' },
+  { label: 'GMT+12 (NZST)',   value: 'Pacific/Auckland' },
+];
 import { DEFAULT_SYMBOLS, SUPPORTED_TIMEFRAMES } from '@/src/domain/constants';
 
 const RISK_FIELDS = [
@@ -25,7 +56,7 @@ const FEATURE_FLAGS = [
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { lang, setLang, t } = useLanguage();
-  const { symbol, setSymbol, timeframe, setTimeframe } = useChartStore();
+  const { symbol, setSymbol, timeframe, setTimeframe, timezone, setTimezone } = useChartStore();
   const { riskPerTrade, maxDailyLoss, maxTradesDay, cooldownAfterLoss, updateRisk } = useUserStore();
 
   const [flags, setFlags] = useState<Record<string, boolean>>(
@@ -88,6 +119,17 @@ export default function SettingsPage() {
                 <select className="settings-select" value={timeframe}
                   onChange={e => setTimeframe(e.target.value)} title="Default timeframe">
                   {tfs.map(tf => <option key={tf.value} value={tf.value}>{tf.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="settings-row">
+              <span className="settings-label">Timezone</span>
+              <div className="settings-control">
+                <select className="settings-select" value={timezone}
+                  onChange={e => setTimezone(e.target.value)} title="Chart timezone">
+                  {TIMEZONE_OPTIONS.map(tz => (
+                    <option key={tz.value} value={tz.value}>{tz.label}</option>
+                  ))}
                 </select>
               </div>
             </div>

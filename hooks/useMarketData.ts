@@ -73,12 +73,15 @@ export function useMarketData(symbol: string, timeframe: string, limit?: number)
 export function useLiveBars(symbol: string, timeframe: string) {
   const superRefresh = useChartStore(s => s.superRefresh);
   const subMin = SUB_MIN_TFS.includes(timeframe);
-  const active = subMin || superRefresh;
-  const interval = subMin ? 1000 : (superRefresh ? 1000 : getRefreshInterval(timeframe));
+  // Always active — sub-minute/super-refresh at 1s; standard TFs at a smart interval
+  // so the current (open) candle stays live without hammering the API.
+  const interval = subMin || superRefresh
+    ? 1000
+    : Math.min(60_000, Math.max(15_000, Math.floor(getRefreshInterval(timeframe) / 15)));
   const { data } = useSWR(
-    active && symbol ? `/api/market/last?symbol=${symbol}&timeframe=${timeframe}` : null,
+    symbol ? `/api/market/last?symbol=${symbol}&timeframe=${timeframe}` : null,
     fetcher,
-    { refreshInterval: interval, revalidateOnFocus: false, dedupingInterval: 500 },
+    { refreshInterval: interval, revalidateOnFocus: false, dedupingInterval: Math.floor(interval / 2) },
   );
   return { liveBars: (data?.data as any[]) || [] };
 }

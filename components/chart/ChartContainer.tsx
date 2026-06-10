@@ -180,6 +180,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const subPanelDivs = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const pixelCanvasRef = useRef<HTMLCanvasElement>(null);
   const pixelRedrawRef = useRef<(() => void) | null>(null);
+  // Stores latest T1MO pixel scores so they update on each SWR candle poll
+  const pixelScoresRef = useRef<{ scores: Record<string, number[]>; nBars: number } | null>(null);
 
   const { theme }                        = useTheme();
   const { candles, isLoading, marketClosed } = useMarketData(symbol, timeframe);
@@ -276,8 +278,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     requestAnimationFrame(() => pixelRedrawRef.current?.());
   }, [panelPct, subPanels]);
 
-  // Timezone IANA name for Intl.DateTimeFormat
-  const tzName = timezone === 'utc' ? 'UTC' : timezone === 'gmt+7' ? 'Asia/Jakarta' : undefined;
+  // timezone is now the IANA string directly ('UTC', 'Asia/Jakarta', etc.) or 'local'
+  const tzName = timezone === 'local' ? undefined : timezone;
 
   const baseOpts = useCallback((el: HTMLDivElement) => {
     const showSecs = ['1s','5s','10s','15s','30s','45s'].includes(timeframe);
@@ -312,7 +314,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         },
       },
       localization: {
-        timeFormatter: (t: number) => `${fmtDate(t)}  ${fmtTime(t)}${tzName ? '  ' + timezone.toUpperCase() : '  Local'}`,
+        timeFormatter: (t: number) => `${fmtDate(t)}  ${fmtTime(t)}  ${tzName ?? 'Local'}`,
       },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale:  { mouseWheel: true, pinch: true, axisPressedMouseMove: { time: true, price: true } },
@@ -626,8 +628,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         try {
           try { (subChart as any).priceScale('right').applyOptions({ visible: false }); } catch {}
           const t1moSub = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes, open: closes, time: times } as any, {});
-          const { scores } = computePixelScores(ind, t1moSub.meta.ready ? t1moSub : null, closes);
-          const nBars = formatted.length;
+          const { scores: initScores } = computePixelScores(ind, t1moSub.meta.ready ? t1moSub : null, closes);
+          // Store in ref so candle-update effect can refresh scores without rebuilding charts
+          pixelScoresRef.current = { scores: initScores, nBars: formatted.length };
           const redraw = () => {
             const canvas = pixelCanvasRef.current;
             const sc = chartsRef.current['sub_atlas'];
@@ -651,6 +654,10 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             const rowGap = rowHeightGap(drawH / nRows);
             const rowH = drawH / nRows;
             const from = Math.max(0, Math.floor(range.from));
+            // Read latest scores from ref (updated by candle SWR polls)
+            const latest = pixelScoresRef.current;
+            const scores = latest?.scores ?? initScores;
+            const nBars  = latest?.nBars ?? formatted.length;
             const to   = Math.min(nBars - 1, Math.ceil(range.to));
             for (let i = from; i <= to; i++) {
               const xc = ts.logicalToCoordinate(i as any); if (xc == null) continue;
@@ -951,6 +958,22 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           }
         } catch {}
       }
+      // Recompute T1MO pixel scores so canvas heatmap tracks new candles
+      if (pixelScoresRef.current) {
+        try {
+          const mc = formatted.map((c: any) => c.close);
+          const mh = formatted.map((c: any) => c.high);
+          const ml = formatted.map((c: any) => c.low);
+          const mv = formatted.map((c: any) => c.volume);
+          const mt = formatted.map((c: any) => c.time);
+          const t1moSub2 = t1moCompute({ close: mc, high: mh, low: ml, volume: mv, open: mc, time: mt } as any, {});
+          const ind2 = computeIndicators(mc, mh, ml, mv, mc);
+          const { scores: fresh } = computePixelScores(ind2, t1moSub2.meta.ready ? t1moSub2 : null, mc);
+          pixelScoresRef.current = { scores: fresh, nBars: formatted.length };
+          requestAnimationFrame(() => pixelRedrawRef.current?.());
+        } catch {}
+      }
+
       // Apply default zoom once after first successful data update
       if (!defaultZoomedRef.current && chartsRef.current.main && formatted.length > 0) {
         defaultZoomedRef.current = true;
