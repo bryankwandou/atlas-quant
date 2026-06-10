@@ -43,12 +43,19 @@ const CHART_TYPES = [
   { id: 'area',        icon: Activity,              tip: 'Area'        },
 ];
 
-// ── T1MO Pixel — 14-indicator signal matrix ──────────────────────────────────
-// AUTHORITATIVE REFERENCE: "T1MO Pixel Showcase.html" → 14 rows, full mosaic (NO
-// gaps). Each column is one OHLCV bar, each row one indicator. The red/yellow/green
-// "blobs" emerge naturally because neighbouring bars share a regime → like colors
-// cluster. Do NOT reduce row count or gate columns — that breaks the reference look.
-const PIXEL_ROWS = ['RSI7','RSI14','MACD','EMA9','EMA21','EMA50','VWAP','HMF','MFI','%R','BB','ADX','Box','ATLAS'] as const;
+// ── T1MO Pixel — 5 T1MO-specific signal rows ─────────────────────────────────
+// AUTHORITATIVE REFERENCE (LEFT screenshot): 5 rows = HMF, Top Box, Btm Box,
+// Magenta, Backbone. Each is a T1MO component score. Rendered as ALL bars
+// compressed into canvas width (NOT zoom-dependent) — matches the dense mosaic.
+// Colored row labels match the T1MO overlay line colors.
+const PIXEL_ROWS = ['HMF', 'Top Box', 'Btm Box', 'Magenta', 'Backbone'] as const;
+const PIXEL_ROW_COLORS: Record<string, string> = {
+  'HMF':      '#ffffff',
+  'Top Box':  '#ff9800',
+  'Btm Box':  '#795548',
+  'Magenta':  '#e91e63',
+  'Backbone': '#00bcd4',
+};
 const PIXEL_GUTTER = 50; // left label gutter (matches reference HEADER_W)
 
 // 7-level score→color scale (identical to reference SCORE_COLORS)
@@ -109,60 +116,41 @@ function rollingPercentile(vals: number[], window = 120): number[] {
   return out;
 }
 
-/** Build all 14 T1MO pixel rows (0–100 bull-score each, rolling-percentile
- *  normalized so every row stays vivid/varied). NO conviction gate — the
- *  reference is a FULL mosaic; clustering comes from regime persistence, not
- *  blank columns. `active` is kept (all true) for call-site compatibility. */
+/** Build 5 T1MO-specific pixel rows (0–100 bull-score each, rolling-percentile
+ *  normalized). Rows = HMF, Top Box, Btm Box, Magenta, Backbone — all derived
+ *  from the same T1MO model, so they're correlated and naturally produce the
+ *  oval/blob color cluster pattern seen in the reference screenshot. */
 function computePixelScores(
-  ind: any,
+  _ind: any,
   t1mo: any,
   closes: number[],
 ): { scores: Record<string, number[]>; active: boolean[] } {
   const n = closes.length;
-  const win = Math.max(40, Math.min(150, Math.floor(n / 3))); // adaptive window
-  const num = (arr: any[], i: number, d = 0) => Number.isFinite(arr?.[i]) ? arr[i] : d;
+  const win = Math.max(40, Math.min(150, Math.floor(n / 3)));
+  const num = (arr: any, i: number, d = 0): number => Number.isFinite(arr?.[i]) ? arr[i] : d;
 
-  // ── Raw per-indicator bull-ness (higher = more bullish); normalized below ──
-  const rsi7  = ind.rsi(7);
-  const rsi14 = ind.rsi(14);
-  const macd  = ind.macd(12, 26, 9);
-  const ema9  = ind.ema(9);
-  const ema21 = ind.ema(21);
-  const ema50 = ind.ema(50);
-  const vwapLine = ind.vwap() as number[];             // returns number[] directly (not {vwap:...})
-  const mfi   = ind.mfi(14);
-  const wr    = ind.williamsR(14);          // -100..0
-  const bb    = ind.bollingerBands(20, 2);  // percentB already 0..100
-  const adx   = ind.adx(14);                // { adx, plusDI, minusDI }
-  const don   = ind.donchian(20);           // { upper, lower, middle }
-  const hmf      = (t1mo?.series?.hmf ?? []) as (number | null)[];
-  const bullProb = (t1mo?.series?.bullProb ?? []) as number[]; // 0..100 T1MO conviction
+  // Read T1MO series (all computed from the same EMA model → naturally correlated)
+  const hmfArr      = t1mo?.series?.hmf      ?? [];
+  const backboneArr = t1mo?.series?.backbone  ?? [];
+  const magentaArr  = t1mo?.series?.magenta   ?? [];
+  const topBoxArr   = t1mo?.series?.topBox    ?? [];
+  const btmBoxArr   = t1mo?.series?.btmBox    ?? [];
 
   const raw: Record<string, number[]> = {
-    RSI7:  closes.map((_, i) => num(rsi7, i, 50)),
-    RSI14: closes.map((_, i) => num(rsi14, i, 50)),
-    MACD:  closes.map((_, i) => num(macd.histogram, i, 0)),
-    EMA9:  closes.map((c, i) => c - num(ema9, i, c)),
-    EMA21: closes.map((c, i) => c - num(ema21, i, c)),
-    EMA50: closes.map((c, i) => c - num(ema50, i, c)),
-    VWAP:  closes.map((c, i) => c - num(vwapLine, i, c)),
-    HMF:   closes.map((_, i) => num(hmf as any, i, 0)),
-    MFI:   closes.map((_, i) => num(mfi, i, 50)),
-    '%R':  closes.map((_, i) => 100 + num(wr, i, -50)),     // → 0..100
-    BB:    closes.map((_, i) => num(bb.percentB, i, 50)),   // already 0..100, no ×100
-    ADX:   closes.map((_, i) => num(adx.plusDI, i, 0) - num(adx.minusDI, i, 0)),
-    Box:   closes.map((c, i) => {
-      const u = num(don.upper, i, c), l = num(don.lower, i, c);
-      return u > l ? ((c - l) / (u - l)) * 100 : 50;
-    }),
-    ATLAS: closes.map((_, i) => num(bullProb, i, 50)),
+    'HMF':      closes.map((_, i) => num(hmfArr, i, 0)),
+    // "above TopBox" = breakout (bullish), "below" = under resistance (bearish)
+    'Top Box':  closes.map((c, i) => c - num(topBoxArr, i, c)),
+    // "above BtmBox" = holding support (bullish), "below" = breakdown (bearish)
+    'Btm Box':  closes.map((c, i) => c - num(btmBoxArr, i, c)),
+    // price above Magenta EMA = short-term bullish
+    'Magenta':  closes.map((c, i) => c - num(magentaArr, i, c)),
+    // price above Backbone EMA = medium-term bullish
+    'Backbone': closes.map((c, i) => c - num(backboneArr, i, c)),
   };
 
   const scores: Record<string, number[]> = {};
-  // Smooth each row → gradual color "hills", then percentile-rank for a full
-  // green→red spread (matches the reference's vivid, varied matrix).
   for (const k of PIXEL_ROWS) {
-    const smoothed = emaSmooth(raw[k] ?? new Array(n).fill(50), 5);
+    const smoothed = emaSmooth(raw[k] ?? new Array(n).fill(0), 5);
     scores[k] = rollingPercentile(smoothed, win);
   }
   return { scores, active: new Array(n).fill(true) };
@@ -738,8 +726,6 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctx.clearRect(0, 0, W, H);
             const ts = sc.timeScale();
-            const range = ts.getVisibleLogicalRange();
-            if (!range) return;
             const axisH = (() => { try { return ts.height() || 0; } catch { return 0; } })();
             const drawH = Math.max(10, H - axisH);
             ctx.fillStyle = isDark ? '#0d1218' : '#ffffff';
@@ -747,31 +733,35 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             const nRows = PIXEL_ROWS.length;
             const rowGap = rowHeightGap(drawH / nRows);
             const rowH = drawH / nRows;
-            const from = Math.max(0, Math.floor(range.from));
             // Read latest scores from ref (updated by candle SWR polls)
             const latest = pixelScoresRef.current;
             const scores = latest?.scores ?? initScores;
             const nBars  = latest?.nBars ?? formatted.length;
-            const to   = Math.min(nBars - 1, Math.ceil(range.to));
-            for (let i = from; i <= to; i++) {
-              const xc = ts.logicalToCoordinate(i as any); if (xc == null) continue;
-              const xn = ts.logicalToCoordinate((i + 1) as any);
-              const barW = Math.max(1, xn != null ? Math.abs(xn - xc) : 6);
-              const cellW = Math.max(1, barW - 0.5);
-              const x = xc - barW / 2;
+            // ── Render ALL bars compressed into canvas width (NOT zoom-dependent) ──
+            // Reference draws barW = chartW / nBars so all bars are always visible as
+            // a dense mosaic — "3 bars per pixel" bug was caused by using chart
+            // coordinates which make cells wide when zoomed in.
+            const chartW = Math.max(1, W - PIXEL_GUTTER);
+            const barW   = Math.max(1, chartW / nBars);
+            for (let i = 0; i < nBars; i++) {
+              const x = PIXEL_GUTTER + i * barW;
               for (let r = 0; r < nRows; r++) {
                 const s = scores[PIXEL_ROWS[r]]?.[i] ?? 50;
                 ctx.fillStyle = pixelColor(s);
-                ctx.fillRect(x + 0.25, r * rowH + rowGap / 2, cellW, rowH - rowGap);
+                ctx.fillRect(x + 0.25, r * rowH + rowGap / 2, Math.max(0.5, barW - 0.5), rowH - rowGap);
               }
             }
+            // Gutter + separator
             ctx.fillStyle = isDark ? '#0d1218' : '#ffffff';
             ctx.fillRect(0, 0, PIXEL_GUTTER, drawH);
             ctx.strokeStyle = isDark ? '#222a36' : '#e0e3eb'; ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(PIXEL_GUTTER, 0); ctx.lineTo(PIXEL_GUTTER, drawH); ctx.stroke();
+            // Colored row labels (each matches its T1MO overlay line color)
             ctx.font = 'bold 9px "Roboto Mono", monospace'; ctx.textBaseline = 'middle';
-            ctx.fillStyle = isDark ? '#7a8294' : '#5a6273';
-            for (let r = 0; r < nRows; r++) ctx.fillText(PIXEL_ROWS[r], 5, r * rowH + rowH / 2);
+            for (let r = 0; r < nRows; r++) {
+              ctx.fillStyle = PIXEL_ROW_COLORS[PIXEL_ROWS[r]] ?? (isDark ? '#7a8294' : '#5a6273');
+              ctx.fillText(PIXEL_ROWS[r], 5, r * rowH + rowH / 2);
+            }
           };
           pixelRedrawRef.current = redraw;
           subChart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
