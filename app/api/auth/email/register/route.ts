@@ -10,10 +10,6 @@ export async function POST(req: Request) {
   try {
     await bootstrapMasterAccount();
 
-    if (process.env.WALLET_ONLY_REGISTER === 'true') {
-      return NextResponse.json({ error: 'Email register dinonaktifkan.' }, { status: 403 });
-    }
-
     const { email, password, username, displayName } = await req.json();
     if (!email || !password) {
       return NextResponse.json({ error: 'Email & password wajib.' }, { status: 400 });
