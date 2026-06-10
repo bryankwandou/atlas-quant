@@ -150,7 +150,9 @@ function computePixelScores(
 
   const scores: Record<string, number[]> = {};
   for (const k of PIXEL_ROWS) {
-    const smoothed = emaSmooth(raw[k] ?? new Array(n).fill(0), 5);
+    // EMA period 14 → smooth enough to produce gradual color hills (oval blob shape).
+    // Period 5 was too short → abrupt color blocks instead of smooth transitions.
+    const smoothed = emaSmooth(raw[k] ?? new Array(n).fill(0), 14);
     scores[k] = rollingPercentile(smoothed, win);
   }
   return { scores, active: new Array(n).fill(true) };
@@ -1190,6 +1192,20 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         <div ref={spl1Ref} className={`chart-splitter${dragging===0?' dragging':''}`} onMouseDown={e=>startDrag(0,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
         <div ref={volRef} className="chart-panel chart-panel-vol"><div className="subchart-label2">VOL</div></div>
         <div ref={spl2Ref} className={`chart-splitter${dragging===1?' dragging':''}`} onMouseDown={e=>startDrag(1,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
+        {/* Shared tab bar — renders ONCE above all panels (not once per panel).
+            Previously placed inside each panel's map() → N identical rows stacked. */}
+        {subPanels.length > 0 && (
+          <div className="subchart-tabs-row subchart-tabs-shared">
+            {SUB_PANELS.map(p => (
+              <button
+                type="button"
+                key={p.id}
+                className={`subchart-tab ${subPanels.includes(p.id) ? 'active' : ''}`}
+                onClick={() => setSubPanel(p.id)}
+              >{p.label}</button>
+            ))}
+          </div>
+        )}
         {/* Multi sub-panel stack — one panel per active indicator */}
         {subPanels.map((panelId) => {
           const label = SUB_PANELS.find(p => p.id === panelId)?.label ?? panelId;
@@ -1199,18 +1215,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
               ref={el => { subPanelDivs.current.set(panelId, el); }}
               className="chart-panel chart-panel-sub"
             >
-              <div className="subchart-tabs-row">
+              {/* Per-panel header: label only + close button (no repeated full tab list) */}
+              <div className="subchart-panel-header">
                 <span className="subchart-panel-label">{label}</span>
-                <div className="subchart-tabs-spacer"/>
-                {/* Toggle buttons — active = highlighted */}
-                {SUB_PANELS.map(p => (
-                  <button
-                    type="button"
-                    key={p.id}
-                    className={`subchart-tab ${subPanels.includes(p.id) ? 'active' : ''}`}
-                    onClick={() => setSubPanel(p.id)}
-                  >{p.label}</button>
-                ))}
                 {subPanels.length > 1 && (
                   <button
                     type="button"

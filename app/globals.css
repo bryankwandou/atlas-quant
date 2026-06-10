@@ -285,16 +285,21 @@ select{cursor:pointer;}
 .chart-splitter:hover .splitter-grip::before,.chart-splitter:hover .splitter-grip::after,.chart-splitter.dragging .splitter-grip::before,.chart-splitter.dragging .splitter-grip::after{background:var(--aq-blue);opacity:.8;}
 
 /* ── Sub-panel tabs ──────────────────────────────────────────── */
+/* Shared tab bar — rendered ONCE above all panels (not per-panel) */
+.subchart-tabs-shared{height:24px;flex-shrink:0;display:flex;align-items:center;gap:1px;padding:0 4px;background:rgba(0,0,0,0.20);border-bottom:1px solid var(--aq-border);overflow-x:auto;scrollbar-width:none;}
+.subchart-tabs-shared::-webkit-scrollbar{display:none;}
 .subchart-tabs-row{height:24px;flex-shrink:0;display:flex;align-items:center;gap:1px;padding:0 4px;background:rgba(0,0,0,0.15);border-bottom:1px solid var(--aq-border);overflow-x:auto;scrollbar-width:none;}
 .subchart-tabs-row::-webkit-scrollbar{display:none;}
 .subchart-tab{padding:2px 8px;border-radius:2px;font-size:10px;font-weight:500;color:var(--aq-text3);white-space:nowrap;transition:all .12s;flex-shrink:0;}
 .subchart-tab:hover{background:var(--aq-bg3);color:var(--aq-text2);}
 .subchart-tab.active{background:var(--aq-blue-light);color:var(--aq-blue);}
 .subchart-tabs-spacer{flex:1;}
+/* Per-panel header: just label + close button, no repeated tab list */
+.subchart-panel-header{height:18px;flex-shrink:0;display:flex;align-items:center;padding:0 4px;background:rgba(0,0,0,0.10);border-bottom:1px solid var(--aq-border);}
 .sub-chart-inner{flex:1;min-height:0;position:relative;}
 .subchart-label2{position:absolute;top:4px;left:6px;font-size:9px;color:var(--aq-text3);pointer-events:none;z-index:2;letter-spacing:.5px;}
-/* T1MO Pixel — canvas heatmap overlay covering the sub-chart area (below the 24px tab row) */
-.t1mo-pixel-canvas{position:absolute;top:24px;left:0;right:0;bottom:0;width:100%;height:calc(100% - 24px);pointer-events:none;z-index:3;}
+/* T1MO Pixel — canvas heatmap overlay; top offset accounts for panel-header height (18px) */
+.t1mo-pixel-canvas{position:absolute;top:18px;left:0;right:0;bottom:0;width:100%;height:calc(100% - 18px);pointer-events:none;z-index:3;}
 /* SMC Lux Algo style — OB boxes / FVG / BOS canvas layer on main chart */
 .smc-overlay-canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:4;}
 
