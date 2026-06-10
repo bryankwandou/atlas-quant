@@ -129,10 +129,10 @@ function computePixelScores(
   const ema9  = ind.ema(9);
   const ema21 = ind.ema(21);
   const ema50 = ind.ema(50);
-  const vwap  = ind.vwap().vwap;
+  const vwapLine = ind.vwap() as number[];             // returns number[] directly (not {vwap:...})
   const mfi   = ind.mfi(14);
   const wr    = ind.williamsR(14);          // -100..0
-  const bb    = ind.bollingerBands(20, 2);  // percentB ~0..1
+  const bb    = ind.bollingerBands(20, 2);  // percentB already 0..100
   const adx   = ind.adx(14);                // { adx, plusDI, minusDI }
   const don   = ind.donchian(20);           // { upper, lower, middle }
   const hmf      = (t1mo?.series?.hmf ?? []) as (number | null)[];
@@ -145,11 +145,11 @@ function computePixelScores(
     EMA9:  closes.map((c, i) => c - num(ema9, i, c)),
     EMA21: closes.map((c, i) => c - num(ema21, i, c)),
     EMA50: closes.map((c, i) => c - num(ema50, i, c)),
-    VWAP:  closes.map((c, i) => c - num(vwap, i, c)),
+    VWAP:  closes.map((c, i) => c - num(vwapLine, i, c)),
     HMF:   closes.map((_, i) => num(hmf as any, i, 0)),
     MFI:   closes.map((_, i) => num(mfi, i, 50)),
-    '%R':  closes.map((_, i) => 100 + num(wr, i, -50)),          // → 0..100
-    BB:    closes.map((_, i) => num(bb.percentB, i, 0.5) * 100), // → 0..100
+    '%R':  closes.map((_, i) => 100 + num(wr, i, -50)),     // → 0..100
+    BB:    closes.map((_, i) => num(bb.percentB, i, 50)),   // already 0..100, no ×100
     ADX:   closes.map((_, i) => num(adx.plusDI, i, 0) - num(adx.minusDI, i, 0)),
     Box:   closes.map((c, i) => {
       const u = num(don.upper, i, c), l = num(don.lower, i, c);
