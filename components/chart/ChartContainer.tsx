@@ -43,18 +43,25 @@ const CHART_TYPES = [
   { id: 'area',        icon: Activity,              tip: 'Area'        },
 ];
 
-// ── T1MO Pixel — 5 T1MO-specific signal rows ─────────────────────────────────
-// AUTHORITATIVE REFERENCE (LEFT screenshot): 5 rows = HMF, Top Box, Btm Box,
-// Magenta, Backbone. Each is a T1MO component score. Rendered as ALL bars
-// compressed into canvas width (NOT zoom-dependent) — matches the dense mosaic.
-// Colored row labels match the T1MO overlay line colors.
-const PIXEL_ROWS = ['HMF', 'Top Box', 'Btm Box', 'Magenta', 'Backbone'] as const;
+// ── T1MO Pixel — 14-row full mosaic (d8ab850 authoritative design) ───────────
+// Rows match the T1MO Pixel Showcase.html reference exactly.
+// Rendered compressed: barW = chartW / nBars (NOT zoom-dependent — SP2 fix).
+const PIXEL_ROWS = ['RSI7','RSI14','MACD','EMA9','EMA21','EMA50','VWAP','HMF','MFI','%R','BB','ADX','Box','ATLAS'] as const;
 const PIXEL_ROW_COLORS: Record<string, string> = {
-  'HMF':      '#ffffff',
-  'Top Box':  '#ff9800',
-  'Btm Box':  '#795548',
-  'Magenta':  '#e91e63',
-  'Backbone': '#00bcd4',
+  'RSI7':  '#7e57c2',
+  'RSI14': '#9575cd',
+  'MACD':  '#2962ff',
+  'EMA9':  '#ff6d00',
+  'EMA21': '#ff9800',
+  'EMA50': '#00bcd4',
+  'VWAP':  '#00e5ff',
+  'HMF':   '#ffffff',
+  'MFI':   '#26c6da',
+  '%R':    '#ec407a',
+  'BB':    '#ab47bc',
+  'ADX':   '#ef5350',
+  'Box':   '#ffb300',
+  'ATLAS': '#00c853',
 };
 const PIXEL_GUTTER = 50; // left label gutter (matches reference HEADER_W)
 
@@ -116,12 +123,11 @@ function rollingPercentile(vals: number[], window = 120): number[] {
   return out;
 }
 
-/** Build 5 T1MO-specific pixel rows (0–100 bull-score each, rolling-percentile
- *  normalized). Rows = HMF, Top Box, Btm Box, Magenta, Backbone — all derived
- *  from the same T1MO model, so they're correlated and naturally produce the
- *  oval/blob color cluster pattern seen in the reference screenshot. */
+/** Build all 14 T1MO Pixel rows — restored from d8ab850 pre-Lazarus design.
+ *  Each row is a 0–100 bull-score, rolling-percentile normalized for vivid spread.
+ *  SP2 bugs fixed: VWAP uses array directly, BB not double-multiplied. */
 function computePixelScores(
-  _ind: any,
+  ind: any,
   t1mo: any,
   closes: number[],
 ): { scores: Record<string, number[]>; active: boolean[] } {
@@ -129,30 +135,44 @@ function computePixelScores(
   const win = Math.max(40, Math.min(150, Math.floor(n / 3)));
   const num = (arr: any, i: number, d = 0): number => Number.isFinite(arr?.[i]) ? arr[i] : d;
 
-  // Read T1MO series (all computed from the same EMA model → naturally correlated)
-  const hmfArr      = t1mo?.series?.hmf      ?? [];
-  const backboneArr = t1mo?.series?.backbone  ?? [];
-  const magentaArr  = t1mo?.series?.magenta   ?? [];
-  const topBoxArr   = t1mo?.series?.topBox    ?? [];
-  const btmBoxArr   = t1mo?.series?.btmBox    ?? [];
+  const rsi7  = ind.rsi(7);
+  const rsi14 = ind.rsi(14);
+  const macd  = ind.macd(12, 26, 9);
+  const ema9  = ind.ema(9);
+  const ema21 = ind.ema(21);
+  const ema50 = ind.ema(50);
+  const vwapArr = ind.vwap() as number[];    // vwap() returns array directly (not .vwap)
+  const mfi   = ind.mfi(14);
+  const wr    = ind.williamsR(14);           // -100..0
+  const bb    = ind.bollingerBands(20, 2);   // percentB 0..1
+  const adx   = ind.adx(14);
+  const don   = ind.donchian(20);
+  const hmf      = (t1mo?.series?.hmf      ?? []) as (number | null)[];
+  const bullProb = (t1mo?.series?.bullProb  ?? []) as number[];
 
   const raw: Record<string, number[]> = {
-    'HMF':      closes.map((_, i) => num(hmfArr, i, 0)),
-    // "above TopBox" = breakout (bullish), "below" = under resistance (bearish)
-    'Top Box':  closes.map((c, i) => c - num(topBoxArr, i, c)),
-    // "above BtmBox" = holding support (bullish), "below" = breakdown (bearish)
-    'Btm Box':  closes.map((c, i) => c - num(btmBoxArr, i, c)),
-    // price above Magenta EMA = short-term bullish
-    'Magenta':  closes.map((c, i) => c - num(magentaArr, i, c)),
-    // price above Backbone EMA = medium-term bullish
-    'Backbone': closes.map((c, i) => c - num(backboneArr, i, c)),
+    RSI7:  closes.map((_, i) => num(rsi7, i, 50)),
+    RSI14: closes.map((_, i) => num(rsi14, i, 50)),
+    MACD:  closes.map((_, i) => num(macd.histogram, i, 0)),
+    EMA9:  closes.map((c, i) => c - num(ema9, i, c)),
+    EMA21: closes.map((c, i) => c - num(ema21, i, c)),
+    EMA50: closes.map((c, i) => c - num(ema50, i, c)),
+    VWAP:  closes.map((c, i) => c - num(vwapArr, i, c)),
+    HMF:   closes.map((_, i) => num(hmf as any, i, 0)),
+    MFI:   closes.map((_, i) => num(mfi, i, 50)),
+    '%R':  closes.map((_, i) => 100 + num(wr, i, -50)),           // → 0..100
+    BB:    closes.map((_, i) => num(bb.percentB, i, 0.5)),         // 0..1, percentile normalizes
+    ADX:   closes.map((_, i) => num(adx.plusDI, i, 0) - num(adx.minusDI, i, 0)),
+    Box:   closes.map((c, i) => {
+      const u = num(don.upper, i, c), l = num(don.lower, i, c);
+      return u > l ? ((c - l) / (u - l)) * 100 : 50;
+    }),
+    ATLAS: closes.map((_, i) => num(bullProb, i, 50)),
   };
 
   const scores: Record<string, number[]> = {};
   for (const k of PIXEL_ROWS) {
-    // EMA period 14 → smooth enough to produce gradual color hills (oval blob shape).
-    // Period 5 was too short → abrupt color blocks instead of smooth transitions.
-    const smoothed = emaSmooth(raw[k] ?? new Array(n).fill(0), 14);
+    const smoothed = emaSmooth(raw[k] ?? new Array(n).fill(50), 5);
     scores[k] = rollingPercentile(smoothed, win);
   }
   return { scores, active: new Array(n).fill(true) };
@@ -183,8 +203,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const candlesRef = useRef<typeof candles>([]);
   useEffect(() => { candlesRef.current = candles; }, [candles]);
 
-  const [panelPct, setPanelPct] = useState([62, 14, 24]);
-  const panelPctRef    = useRef([62, 14, 24]);
+  const [panelPct, setPanelPct] = useState([52, 10, 38]);
+  const panelPctRef    = useRef([52, 10, 38]);
   const buildPendingRef = useRef(false);
   const dataLengthRef  = useRef(0);
   const defaultZoomedRef = useRef(false); // apply default zoom once per symbol
