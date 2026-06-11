@@ -301,6 +301,8 @@ select{cursor:pointer;}
 .subchart-panel-title{height:18px;flex-shrink:0;display:flex;align-items:center;padding:0 8px;background:rgba(0,0,0,0.25);border-bottom:1px solid var(--aq-border);font-size:9px;font-weight:700;color:var(--aq-text2);letter-spacing:1px;text-transform:uppercase;}
 /* T1MO Pixel — canvas; top accounts for title(18px) + tabs(24px) = 42px */
 .t1mo-pixel-canvas{position:absolute;top:42px;left:0;right:0;bottom:0;width:100%;height:calc(100% - 42px);pointer-events:none;z-index:3;}
+/* SMC Lux Algo overlay — sits above the candle chart, below toolbars; non-interactive */
+.smc-overlay-canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:4;}
 
 /* ── Range selector bar ──────────────────────────────────────── */
 .chart-range-bar{height:24px;flex-shrink:0;display:flex;align-items:center;gap:1px;padding:0 8px;background:var(--aq-bg2);border-top:1px solid var(--aq-border);overflow:hidden;}

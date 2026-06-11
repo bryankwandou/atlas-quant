@@ -219,6 +219,10 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   // Live pixel scores — redraw reads from here so the heatmap advances with new
   // bars instead of freezing at the build-time snapshot. Refreshed on data polls.
   const pixelScoresRef = useRef<{ scores: Record<string, number[]>; nBars: number } | null>(null);
+  // SMC (Lux Algo style) overlay on the main chart — restrained rendering.
+  const smcCanvasRef = useRef<HTMLCanvasElement>(null);
+  const smcRedrawRef = useRef<(() => void) | null>(null);
+  const smcDataRef   = useRef<{ orderBlocks: any[]; fvg: any[]; series: any } | null>(null);
 
   const { theme }                        = useTheme();
   const { candles, isLoading, marketClosed } = useMarketData(symbol, timeframe);
@@ -305,7 +309,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       if (el && c) try { c.applyOptions({ width: el.clientWidth, height: el.clientHeight }); } catch {}
     });
     // Redraw the T1MO pixel canvas (CSS keeps it sized to the sub-chart area)
-    requestAnimationFrame(() => pixelRedrawRef.current?.());
+    requestAnimationFrame(() => { pixelRedrawRef.current?.(); smcRedrawRef.current?.(); });
   }, [panelPct]);
 
   // Timezone IANA name for Intl.DateTimeFormat. Settings stores IANA strings
@@ -361,6 +365,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     Object.entries(chartsRef.current).forEach(([k, c]) => { if (k !== '_obs') try { c.remove(); } catch {} });
     chartsRef.current = {}; seriesRef.current = {};
     pixelRedrawRef.current = null;  // drop stale T1MO-pixel redraw closure
+    smcRedrawRef.current = null;    // drop stale SMC overlay redraw closure
 
     const currentCandles = candlesRef.current;
     if (!mainRef.current || !volRef.current || !subRef.current || !currentCandles?.length) return;
@@ -544,16 +549,56 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       });
     }
 
-    // SMC Order Blocks
+    // ── SMC (Lux Algo style) — drawn on a canvas overlay, NOT as full-width price
+    // lines. Only the most recent unmitigated zones are shown as boxes that extend
+    // to the right edge, so the chart stays clean (the old createPriceLine approach
+    // flooded the chart with "OB" lines everywhere). Gated by the SMC toggle.
+    smcDataRef.current = null;
+    smcRedrawRef.current = null;
     if (activeIndicators.includes('SMC_OB')) {
-      const smc = ind.detectSMC();
-      smc.orderBlocks?.slice(-5).forEach((ob: any) => {
-        const color = ob.type === 'bullish' ? 'rgba(8,153,129,0.5)' : 'rgba(242,54,69,0.5)';
-        try {
-          candleSeries.createPriceLine({ price: ob.high, color, lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title: `OB ${ob.type === 'bullish' ? '▲' : '▼'}` });
-          candleSeries.createPriceLine({ price: ob.low,  color, lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title: '' });
-        } catch {}
-      });
+      try {
+        const smc = ind.detectSMC();
+        smcDataRef.current = {
+          orderBlocks: (smc.orderBlocks ?? []).slice(-3),  // last 3 only — restraint
+          fvg:         (smc.fvg ?? []).slice(-2),
+          series:      candleSeries,
+        };
+        const drawSMC = () => {
+          const canvas = smcCanvasRef.current;
+          const data = smcDataRef.current;
+          if (!canvas || !data || !chartsRef.current.main) return;
+          const W = canvas.clientWidth, H = canvas.clientHeight;
+          if (W < 2 || H < 2) return;
+          const dpr = window.devicePixelRatio || 1;
+          canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, W, H);
+          const ts = chartsRef.current.main.timeScale();
+          const ser = data.series;
+          const drawZone = (idx: number, top: number, bot: number, bull: boolean, label: string) => {
+            let x = ts.logicalToCoordinate(idx as any);
+            if (x == null) x = 0;
+            const yTop = ser.priceToCoordinate(top), yBot = ser.priceToCoordinate(bot);
+            if (yTop == null || yBot == null) return;
+            const fill   = bull ? 'rgba(8,153,129,0.12)' : 'rgba(242,54,69,0.12)';
+            const stroke = bull ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)';
+            ctx.fillStyle = fill;
+            ctx.fillRect(x, Math.min(yTop, yBot), W - x, Math.abs(yBot - yTop));
+            ctx.strokeStyle = stroke; ctx.lineWidth = 1;
+            ctx.strokeRect(x, Math.min(yTop, yBot), W - x, Math.abs(yBot - yTop));
+            ctx.fillStyle = stroke; ctx.font = '9px "Roboto Mono", monospace'; ctx.textBaseline = 'middle';
+            ctx.fillText(label, W - 64, Math.min(yTop, yBot) + 7);
+          };
+          // FVG first (behind), then order blocks (front)
+          for (const f of data.fvg) drawZone(f.idx, f.top, f.bottom, f.type === 'bullish', f.type === 'bullish' ? 'FVG ▲' : 'FVG ▼');
+          for (const ob of data.orderBlocks) drawZone(ob.idx, ob.high, ob.low, ob.type === 'bullish', ob.type === 'bullish' ? 'Bull OB' : 'Bear OB');
+        };
+        smcRedrawRef.current = drawSMC;
+        main.timeScale().subscribeVisibleLogicalRangeChange(drawSMC);
+        requestAnimationFrame(() => { drawSMC(); requestAnimationFrame(drawSMC); });
+      } catch { /* SMC compute error — non-fatal */ }
     }
 
     // ── T1MO Core — permanent overlay per DARURAT HUKUM design requirement ──
@@ -890,7 +935,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       const pc = pixelCanvasRef.current;
       const inner = subRef.current?.querySelector<HTMLDivElement>('.sub-chart-inner');
       if (pc && inner) { pc.style.width = inner.clientWidth + 'px'; pc.style.height = inner.clientHeight + 'px'; }
-      requestAnimationFrame(() => pixelRedrawRef.current?.());
+      requestAnimationFrame(() => { pixelRedrawRef.current?.(); smcRedrawRef.current?.(); });
     });
     if (wrapRef.current) obs.observe(wrapRef.current);
     chartsRef.current._obs = obs;
@@ -1028,6 +1073,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           }
         }
       }
+      // Keep SMC zones aligned as the live price (and thus the price scale) shifts
+      smcRedrawRef.current?.();
     } catch { /* update() rejects out-of-order times — safe to ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveBars, chartType]);
@@ -1053,7 +1100,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       const t1 = t1moCompute({ close: cl, high: hi, low: lo, volume: vo, open: cl, time: ti } as any, {});
       const { scores } = computePixelScores(ind2, t1.meta.ready ? t1 : null, cl);
       pixelScoresRef.current = { scores, nBars: fmtd.length };
-      requestAnimationFrame(() => pixelRedrawRef.current?.());
+      requestAnimationFrame(() => { pixelRedrawRef.current?.(); smcRedrawRef.current?.(); });
     } catch { /* non-fatal — keep last good scores */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, subPanel]);
@@ -1105,7 +1152,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       {/* Panels */}
       <div ref={wrapRef} className="chart-panels">
         {isLoading && <div className="chart-loading"><div className="spinner"/><span>Loading {symbol}...</span></div>}
-        <div ref={mainRef} className="chart-panel chart-panel-main"/>
+        <div ref={mainRef} className="chart-panel chart-panel-main">
+          <canvas ref={smcCanvasRef} className="smc-overlay-canvas"/>
+        </div>
         <div ref={spl1Ref} className={`chart-splitter${dragging===0?' dragging':''}`} onMouseDown={e=>startDrag(0,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
         <div ref={volRef} className="chart-panel chart-panel-vol"><div className="subchart-label2">VOL</div></div>
         <div ref={spl2Ref} className={`chart-splitter${dragging===1?' dragging':''}`} onMouseDown={e=>startDrag(1,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
