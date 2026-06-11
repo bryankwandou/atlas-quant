@@ -262,8 +262,12 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     requestAnimationFrame(() => pixelRedrawRef.current?.());
   }, [panelPct]);
 
-  // Timezone IANA name for Intl.DateTimeFormat
-  const tzName = timezone === 'utc' ? 'UTC' : timezone === 'gmt+7' ? 'Asia/Jakarta' : undefined;
+  // Timezone IANA name for Intl.DateTimeFormat. Settings stores IANA strings
+  // directly ('UTC','Asia/Tokyo',…); 'local' (or empty) → browser zone (undefined).
+  const tzName = (!timezone || timezone === 'local') ? undefined
+    : timezone === 'utc' ? 'UTC' : timezone === 'gmt+7' ? 'Asia/Jakarta' : timezone;
+  // Short label for the axis tooltip (e.g. "Asia/Tokyo" → "TOKYO", "UTC" → "UTC")
+  const tzLabel = !tzName ? 'Local' : (tzName.split('/').pop() || tzName).replace(/_/g, ' ').toUpperCase();
 
   const baseOpts = useCallback((el: HTMLDivElement) => {
     const showSecs = ['1s','5s','10s','15s','30s','45s'].includes(timeframe);
@@ -298,13 +302,13 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         },
       },
       localization: {
-        timeFormatter: (t: number) => `${fmtDate(t)}  ${fmtTime(t)}${tzName ? '  ' + timezone.toUpperCase() : '  Local'}`,
+        timeFormatter: (t: number) => `${fmtDate(t)}  ${fmtTime(t)}  ${tzLabel}`,
       },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale:  { mouseWheel: true, pinch: true, axisPressedMouseMove: { time: true, price: true } },
       width: el.clientWidth || 800, height: el.clientHeight || 400,
     };
-  }, [tk, timeframe, timezone, tzName]);
+  }, [tk, timeframe, timezone, tzName, tzLabel]);
 
   const buildCharts = useCallback(() => {
     if (chartsRef.current._obs) chartsRef.current._obs.disconnect();

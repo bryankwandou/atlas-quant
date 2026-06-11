@@ -65,7 +65,8 @@ interface ChartStore {
   showIndicatorModal: boolean;
   fibConfig: FibConfig;
   superRefresh: boolean;
-  timezone: 'local' | 'utc' | 'gmt+7';
+  /** IANA timezone name ('UTC', 'Asia/Tokyo', …) or 'local' for browser zone. */
+  timezone: string;
 
   setSymbol: (s: string) => void;
   setTimeframe: (tf: string) => void;
@@ -89,7 +90,7 @@ interface ChartStore {
   openIndicatorModal: () => void;
   closeIndicatorModal: () => void;
   toggleSuperRefresh: () => void;
-  setTimezone: (tz: 'local' | 'utc' | 'gmt+7') => void;
+  setTimezone: (tz: string) => void;
 }
 
 export const useChartStore = create<ChartStore>()(
@@ -107,7 +108,7 @@ export const useChartStore = create<ChartStore>()(
       showIndicatorModal: false,
       fibConfig: DEFAULT_FIB_CONFIG,
       superRefresh: false,
-      timezone: 'utc',
+      timezone: 'UTC',
 
       setSymbol:    (symbol)    => set({ symbol }),
       setTimeframe: (timeframe) => set({ timeframe }),
@@ -178,6 +179,7 @@ export const useChartStore = create<ChartStore>()(
         rightPanelTab: s.rightPanelTab,
         subPanel: s.subPanel,
         fibConfig: s.fibConfig,
+        timezone: s.timezone,
       }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<ChartStore>;
@@ -189,6 +191,11 @@ export const useChartStore = create<ChartStore>()(
         // Ensure subPanel is a valid string (guard against stale array values from v4)
         if (typeof merged.subPanel !== 'string' || !merged.subPanel) {
           merged.subPanel = 'atlas';
+        }
+        // Migrate legacy short timezone tokens → IANA names (settings now uses IANA)
+        const tzMap: Record<string, string> = { utc: 'UTC', 'gmt+7': 'Asia/Jakarta' };
+        if (typeof merged.timezone === 'string' && tzMap[merged.timezone]) {
+          merged.timezone = tzMap[merged.timezone];
         }
         return merged;
       },

@@ -3,9 +3,11 @@ import { useEffect, useState } from 'react';
 import { useChartStore } from '@/store/chartStore';
 import { useLanguage } from '@/hooks/useLanguage';
 
-type TZ = 'local' | 'utc' | 'gmt+7';
-const TZ_LABELS: Record<TZ, string> = { local: 'Local', utc: 'UTC', 'gmt+7': 'GMT+7' };
-const TZ_ORDER: TZ[] = ['utc', 'gmt+7', 'local'];
+// Quick-cycle a few common zones from the status bar; the full 28-zone list
+// lives in Settings. Values are IANA names ('local' = browser zone).
+const TZ_ORDER = ['UTC', 'Asia/Jakarta', 'America/New_York', 'Europe/London', 'local'];
+const tzShort = (tz: string) => !tz || tz === 'local' ? 'Local'
+  : tz === 'UTC' ? 'UTC' : (tz.split('/').pop() || tz).replace(/_/g, ' ');
 
 export default function StatusBar() {
   const { symbol, timeframe, timezone, setTimezone } = useChartStore();
@@ -25,16 +27,10 @@ export default function StatusBar() {
   }, [symbol]);
 
   useEffect(() => {
+    const tz = (!timezone || timezone === 'local') ? undefined : timezone;
     const tick = () => {
-      const d = new Date();
-      if (timezone === 'utc') {
-        setNow(d.toISOString().substring(11, 19) + ' UTC');
-      } else if (timezone === 'gmt+7') {
-        const g = new Date(d.getTime() + 7 * 3600000);
-        setNow(g.toISOString().substring(11, 19) + ' GMT+7');
-      } else {
-        setNow(d.toLocaleTimeString('en-US', { hour12: false }));
-      }
+      const t = new Date().toLocaleTimeString('en-GB', { hour12: false, timeZone: tz });
+      setNow(`${t} ${tzShort(timezone)}`);
     };
     tick();
     const iv = setInterval(tick, 1000);
@@ -80,13 +76,13 @@ export default function StatusBar() {
         <button
           type="button"
           className="sb-tz-btn"
-          title="Click to cycle timezone: UTC → GMT+7 → Local"
+          title="Quick-cycle timezone (full 28-zone list in Settings)"
           onClick={() => {
-            const curr = (timezone ?? 'utc') as TZ;
-            setTimezone(TZ_ORDER[(TZ_ORDER.indexOf(curr) + 1) % TZ_ORDER.length]);
+            const i = TZ_ORDER.indexOf(timezone);
+            setTimezone(TZ_ORDER[(i + 1) % TZ_ORDER.length]);
           }}
         >
-          {TZ_LABELS[(timezone ?? 'utc') as TZ]}
+          {tzShort(timezone)}
         </button>
         <div className="sb-sep" />
         <span className="sb-text mono">{now}</span>
