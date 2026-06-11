@@ -1014,6 +1014,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         <div ref={volRef} className="chart-panel chart-panel-vol"><div className="subchart-label2">VOL</div></div>
         <div ref={spl2Ref} className={`chart-splitter${dragging===1?' dragging':''}`} onMouseDown={e=>startDrag(1,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
         <div ref={subRef} className="chart-panel chart-panel-sub">
+          <div className="subchart-panel-title">T1MO PIXEL</div>
           <div className="subchart-tabs-row">
             {SUB_PANELS.map(p=><button type="button" key={p.id} className={`subchart-tab ${subPanel===p.id?'active':''}`} onClick={()=>setSubPanel(p.id)}>{p.label}</button>)}
             <div className="subchart-tabs-spacer"/>
