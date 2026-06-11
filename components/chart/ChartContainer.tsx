@@ -216,6 +216,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const seriesRef = useRef<Record<string, any>>({});
   const pixelCanvasRef = useRef<HTMLCanvasElement>(null);
   const pixelRedrawRef = useRef<(() => void) | null>(null);
+  // Live pixel scores — redraw reads from here so the heatmap advances with new
+  // bars instead of freezing at the build-time snapshot. Refreshed on data polls.
+  const pixelScoresRef = useRef<{ scores: Record<string, number[]>; nBars: number } | null>(null);
 
   const { theme }                        = useTheme();
   const { candles, isLoading, marketClosed } = useMarketData(symbol, timeframe);
@@ -665,8 +668,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           try { (subChart as any).priceScale('right').applyOptions({ visible: false }); } catch {}
 
           const t1moSub = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes, open: closes, time: times } as any, {});
-          const { scores, active } = computePixelScores(ind, t1moSub.meta.ready ? t1moSub : null, closes);
-          const nBars  = formatted.length;
+          const { scores } = computePixelScores(ind, t1moSub.meta.ready ? t1moSub : null, closes);
+          // Store in ref so the live-data effect can refresh scores without rebuilding charts
+          pixelScoresRef.current = { scores, nBars: formatted.length };
 
           const redraw = () => {
             const canvas = pixelCanvasRef.current;
@@ -695,6 +699,10 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             const nRows = PIXEL_ROWS.length;
             const rowGap = rowHeightGap(drawH / nRows); // hairline gap, scaled to row size
             const rowH  = drawH / nRows;
+            // Read latest scores from ref (refreshed by data polls → no freeze)
+            const ps     = pixelScoresRef.current;
+            const scores = ps?.scores ?? {};
+            const nBars  = ps?.nBars ?? 0;
             const from  = Math.max(0, Math.floor(range.from));
             const to    = Math.min(nBars - 1, Math.ceil(range.to));
 
@@ -1023,6 +1031,32 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     } catch { /* update() rejects out-of-order times — safe to ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveBars, chartType]);
+
+  // ── T1MO Pixel anti-freeze ─────────────────────────────────────────────────
+  // The pixel scores are computed once in buildCharts (which reads candlesRef and
+  // does NOT re-run on data polls). Without this, the heatmap freezes on a static
+  // symbol/TF. Here we recompute scores from the freshest candles on each history
+  // poll (~20s) so the mosaic keeps advancing. Gated to the atlas panel to avoid
+  // recomputing 14 indicators when the pixel isn't shown.
+  useEffect(() => {
+    if (subPanel !== 'atlas' || !pixelRedrawRef.current) return;
+    const src = candlesRef.current;
+    if (!src?.length) return;
+    try {
+      const fmtd = src
+        .map((c: any) => ({ time: Math.floor(c.open_time / 1000), open: +c.open, high: +c.high, low: +c.low, close: +c.close, volume: +c.volume }))
+        .sort((a: any, b: any) => a.time - b.time)
+        .filter((c: any) => c.time > 0 && c.close > 0);
+      if (fmtd.length < 2) return;
+      const cl = fmtd.map(c => c.close), hi = fmtd.map(c => c.high), lo = fmtd.map(c => c.low), vo = fmtd.map(c => c.volume), ti = fmtd.map(c => c.time);
+      const ind2 = computeIndicators(cl, hi, lo, vo);
+      const t1 = t1moCompute({ close: cl, high: hi, low: lo, volume: vo, open: cl, time: ti } as any, {});
+      const { scores } = computePixelScores(ind2, t1.meta.ready ? t1 : null, cl);
+      pixelScoresRef.current = { scores, nBars: fmtd.length };
+      requestAnimationFrame(() => pixelRedrawRef.current?.());
+    } catch { /* non-fatal — keep last good scores */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candles, subPanel]);
 
   const fmt = (v: number | null | undefined, d = 2) => v != null && !isNaN(v) && isFinite(v) ? Number(v).toFixed(d) : '';
   const isUp = legend ? legend.close >= legend.open : true;
