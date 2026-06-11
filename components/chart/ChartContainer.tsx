@@ -162,6 +162,45 @@ function computePixelScores(
   return { scores, active: new Array(n).fill(true) };
 }
 
+// ── T1MO signal classifier (single source of truth, matches RightPanel badge) ──
+// Maps (bullProb, positionPct) → a discrete T1MO signal exactly like the reference
+// screener (Hawk1 Detected / Green Bull / Break Top Box / Spec Buy / …).
+type T1moSig = { badge: string; dir: 'up' | 'down'; color: string };
+function classifyT1moSignal(bp: number, pos: number): T1moSig | null {
+  if (bp >= 72)                    return { badge: 'Hawk1 Detected', dir: 'up',   color: '#00c853' };
+  if (bp >= 58)                    return { badge: 'Green Bull',     dir: 'up',   color: '#26a69a' };
+  if (bp <= 30 && pos >= 70)       return { badge: 'Break Top Box',  dir: 'up',   color: '#ffb300' };
+  if (bp <= 42 && pos <= 30)       return { badge: 'Spec Buy',       dir: 'up',   color: '#42a5f5' };
+  if (bp <= 42)                    return { badge: 'Short Setup',    dir: 'down', color: '#f23645' };
+  return null; // NEUTRAL / Weak — no chart marker (avoids clutter)
+}
+
+/** Scan the full T1MO history and emit a marker ONLY where the signal CHANGES
+ *  (discrete events, like the reference screener — not one arrow per bar). */
+function computeT1moSignalMarkers(
+  bullProbArr: number[], posArr: number[], formatted: any[],
+): any[] {
+  const out: any[] = [];
+  let prevBadge = '';
+  const n = Math.min(bullProbArr.length, posArr.length, formatted.length);
+  for (let i = Math.max(0, n - 300); i < n; i++) {   // last ~300 bars keeps it readable
+    const sig = classifyT1moSignal(bullProbArr[i] ?? 50, posArr[i] ?? 50);
+    const badge = sig?.badge ?? '';
+    if (sig && badge !== prevBadge) {
+      out.push({
+        time: formatted[i].time,
+        position: sig.dir === 'up' ? 'belowBar' : 'aboveBar',
+        color: sig.color,
+        shape: sig.dir === 'up' ? 'arrowUp' : 'arrowDown',
+        text: sig.badge,
+        size: 1,
+      });
+    }
+    prevBadge = badge;
+  }
+  return out;
+}
+
 interface Props { symbol: string; timeframe: string; }
 
 export default function ChartContainer({ symbol, timeframe }: Props) {
@@ -527,29 +566,24 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           s.setData(times.map((t: number, i: number) => ({ time: t, value: vals?.[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
           seriesRef.current[key] = s;
         };
-        if (t1moBB)  addOverlay(t1moBB as any[],  { color: '#1976d2', lineWidth: 2,   lineStyle: 0, title: 'Backbone' }, 't1moBB');
-        if (t1moMG)  addOverlay(t1moMG as any[],  { color: '#e91e63', lineWidth: 1.5, lineStyle: 2, title: 'Magenta'  }, 't1moMG');
-        if (t1moTop) addOverlay(t1moTop as any[], { color: '#ff6f00', lineWidth: 2,   lineStyle: 0, title: 'TopBox'   }, 't1moTop');
-        if (t1moBtm) addOverlay(t1moBtm as any[], { color: '#757575', lineWidth: 2,   lineStyle: 0, title: 'BtmBox'   }, 't1moBtm');
+        if (t1moBB)  addOverlay(t1moBB as any[],  { color: '#00bcd4', lineWidth: 2.5, lineStyle: 0, title: 'Backbone' }, 't1moBB');
+        if (t1moMG)  addOverlay(t1moMG as any[],  { color: '#e91e63', lineWidth: 1.5, lineStyle: 1, title: 'Magenta'  }, 't1moMG');
+        if (t1moTop) addOverlay(t1moTop as any[], { color: '#ff9800', lineWidth: 3,   lineStyle: 0, title: 'TopBox'   }, 't1moTop');
+        if (t1moBtm) addOverlay(t1moBtm as any[], { color: '#795548', lineWidth: 3,   lineStyle: 0, title: 'BtmBox'   }, 't1moBtm');
+
+        // ── Real T1MO signal markers (Spec Buy / Break Top Box / Green Bull / Hawk1) ──
+        // Replaces the old fake (idx+symbol.length)%2 parity placeholder. Derived from
+        // the same bullProb+positionPct the RightPanel badge uses, scanned across history.
+        if (showSignals && formatted.length > 20) {
+          const bpArr  = (t1moResult.series.bullProb ?? []) as number[];
+          const posArr = (t1moResult.series.positionPct ?? []) as number[];
+          const markers = computeT1moSignalMarkers(bpArr, posArr, formatted);
+          if (markers.length) {
+            try { candleSeries.setMarkers(markers); } catch {}
+          }
+        }
       }
     } catch { /* T1MO compute error — non-fatal */ }
-
-    // Signal markers
-    if (showSignals && formatted.length > 20) {
-      const sig = ind.latestSignal();
-      if (sig && sig.type !== 'NEUTRAL') {
-        const isBuy = sig.type === 'BUY';
-        const markers: any[] = [];
-        for (let i = 5; i >= 1; i--) {
-          const idx = formatted.length - 1 - i * 7;
-          if (idx < 0) continue;
-          const bull = (idx + symbol.length) % 2 === 0;
-          markers.push({ time: formatted[idx].time, position: bull ? 'belowBar' : 'aboveBar', color: bull ? 'rgba(8,153,129,0.6)' : 'rgba(242,54,69,0.6)', shape: bull ? 'arrowUp' : 'arrowDown', text: `${55 + (idx % 40)}%`, size: 1 });
-        }
-        markers.push({ time: formatted[formatted.length - 1].time, position: isBuy ? 'belowBar' : 'aboveBar', color: isBuy ? '#089981' : '#f23645', shape: isBuy ? 'arrowUp' : 'arrowDown', text: `${sig.type} ${sig.confidence}%`, size: 2 });
-        try { candleSeries.setMarkers(markers.sort((a: any, b: any) => a.time - b.time)); } catch {}
-      }
-    }
     dataLengthRef.current = formatted.length;
     main.timeScale().fitContent();
     // Set a default visible range so the chart doesn't show the entire history
