@@ -28,6 +28,10 @@ const SUB_PANELS = [
   { id: 'cmf',      label: 'CMF'          },
   { id: 'atr',      label: 'ATR'          },
   { id: 'elder',    label: 'Elder'        },
+  // ── Bandarmologi suite (smart-money flow) ──
+  { id: 'bandar',   label: 'Bandar Detect' },
+  { id: 'bandarad', label: 'Bandar A/D'    },
+  { id: 'cvd',      label: 'CVD Flow'      },
 ];
 
 const CHART_TYPES = [
@@ -782,6 +786,26 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         const bearPow = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
         bearPow.setData(times.map((t: number, i: number) => ({ time: t, value: er.bearPower[i], color: 'rgba(242,54,69,0.7)' })).filter((d: any) => !isNaN(d.value)));
         addLevel(0, 'rgba(255,255,255,0.1)');
+      } else if (subPanel === 'bandar') {
+        // Bandar Detector — 0-100 accumulation score (>55 bandar accumulating, <45 distributing)
+        const bd = ind.bandarDetector(8);
+        const hist = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
+        hist.setData(times.map((t: number, i: number) => ({ time: t, value: bd.score[i], color: (bd.score[i] ?? 50) >= 55 ? 'rgba(8,153,129,0.7)' : (bd.score[i] ?? 50) <= 45 ? 'rgba(242,54,69,0.7)' : 'rgba(255,193,7,0.6)' })).filter((d: any) => !isNaN(d.value)));
+        addSubLine(bd.signal, '#ffffff', 'Signal', 1.2);
+        [[55, 'rgba(8,153,129,0.25)'], [45, 'rgba(242,54,69,0.25)']].forEach(([v, c]) => addLevel(v as number, c as string));
+      } else if (subPanel === 'bandarad') {
+        // Bandar Accumulation/Distribution — A/D oscillator histogram
+        const ba = ind.bandarAD(21);
+        const hist = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
+        hist.setData(times.map((t: number, i: number) => ({ time: t, value: ba.histogram[i], color: (ba.histogram[i] ?? 0) >= 0 ? 'rgba(8,153,129,0.7)' : 'rgba(242,54,69,0.7)' })).filter((d: any) => !isNaN(d.value)));
+        addLevel(0, 'rgba(255,255,255,0.12)');
+      } else if (subPanel === 'cvd') {
+        // Cumulative Volume Delta — smart-money net flow (rising = net buying pressure)
+        const cv = ind.cvd();
+        addSubLine(cv.cvd, '#00bcd4', 'CVD', 2);
+        const dh = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'cvd_delta' });
+        dh.setData(times.map((t: number, i: number) => ({ time: t, value: cv.delta[i], color: (cv.delta[i] ?? 0) >= 0 ? 'rgba(8,153,129,0.5)' : 'rgba(242,54,69,0.5)' })).filter((d: any) => !isNaN(d.value)));
+        try { (subChart as any).priceScale('cvd_delta').applyOptions({ visible: false, scaleMargins: { top: 0.7, bottom: 0 } }); } catch {}
       }
 
       // Sync timescales — logical range keeps all panels pixel-locked
