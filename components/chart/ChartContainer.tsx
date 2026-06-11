@@ -184,8 +184,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const candlesRef = useRef<typeof candles>([]);
   useEffect(() => { candlesRef.current = candles; }, [candles]);
 
-  const [panelPct, setPanelPct] = useState([62, 14, 24]);
-  const panelPctRef    = useRef([62, 14, 24]);
+  const [panelPct, setPanelPct] = useState([52, 10, 38]);
+  const panelPctRef    = useRef([52, 10, 38]);
   const buildPendingRef = useRef(false);
   const dataLengthRef  = useRef(0);
   const defaultZoomedRef = useRef(false); // apply default zoom once per symbol
