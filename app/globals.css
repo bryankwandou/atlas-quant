@@ -263,9 +263,9 @@ select{cursor:pointer;}
 .chart-panels{flex:1;min-height:0;position:relative;overflow:hidden;background:var(--aq-bg);}
 /* Absolute-positioned panels — JS sets exact top+height on drag; CSS gives fallback before JS runs */
 .chart-panel{overflow:hidden;position:absolute;left:0;right:0;}
-.chart-panel-main{top:0;height:52%;}
-.chart-panel-vol {top:52%;height:10%;}
-.chart-panel-sub {top:62%;bottom:0;height:38%;display:flex;flex-direction:column;}
+.chart-panel-main{top:0;height:62%;}
+.chart-panel-vol {top:62%;height:14%;}
+.chart-panel-sub {top:76%;bottom:0;height:24%;display:flex;flex-direction:column;}
 .main-chart-panel{flex:1;min-height:0;}
 .sub-chart-panel{flex-shrink:0;display:flex;flex-direction:column;border-top:1px solid var(--aq-border);}
 .sub-panel-header{height:24px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 8px;background:rgba(0,0,0,0.15);z-index:5;}
@@ -298,8 +298,8 @@ select{cursor:pointer;}
 .subchart-panel-header{height:18px;flex-shrink:0;display:flex;align-items:center;padding:0 4px;background:rgba(0,0,0,0.10);border-bottom:1px solid var(--aq-border);}
 .sub-chart-inner{flex:1;min-height:0;position:relative;}
 .subchart-label2{position:absolute;top:4px;left:6px;font-size:9px;color:var(--aq-text3);pointer-events:none;z-index:2;letter-spacing:.5px;}
-/* T1MO Pixel — canvas heatmap overlay; top offset accounts for panel-header height (18px) */
-.t1mo-pixel-canvas{position:absolute;top:18px;left:0;right:0;bottom:0;width:100%;height:calc(100% - 18px);pointer-events:none;z-index:3;}
+/* T1MO Pixel — canvas heatmap overlay; top offset accounts for subchart-tabs-row height (24px) */
+.t1mo-pixel-canvas{position:absolute;top:24px;left:0;right:0;bottom:0;width:100%;height:calc(100% - 24px);pointer-events:none;z-index:3;}
 
 /* ── Range selector bar ──────────────────────────────────────── */
 .chart-range-bar{height:24px;flex-shrink:0;display:flex;align-items:center;gap:1px;padding:0 8px;background:var(--aq-bg2);border-top:1px solid var(--aq-border);overflow:hidden;}

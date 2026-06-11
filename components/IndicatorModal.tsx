@@ -372,14 +372,14 @@ export default function IndicatorModal() {
     closeIndicatorModal,
     showIndicatorModal,
     setSubPanel,
-    subPanels,
+    subPanel,
   } = useChartStore();
 
   const handleItemClick = (item: IndicatorItem) => {
     if (item.disabled) return;
     const panelId = SUB_PANEL_MAP[item.id];
     if (panelId) {
-      setSubPanel(panelId); // toggles: add if absent, remove if present
+      setSubPanel(panelId);
     } else {
       toggleIndicator(item.id);
     }
@@ -532,8 +532,8 @@ export default function IndicatorModal() {
                     </span>
                   )}
                   {!item.disabled && SUB_PANEL_MAP[item.id] && (
-                    <span className={`indmod-panel-badge${subPanels.includes(SUB_PANEL_MAP[item.id]) ? ' active' : ''}`}>
-                      {subPanels.includes(SUB_PANEL_MAP[item.id]) ? 'Active' : 'Panel'}
+                    <span className={`indmod-panel-badge${subPanel === SUB_PANEL_MAP[item.id] ? ' active' : ''}`}>
+                      {subPanel === SUB_PANEL_MAP[item.id] ? 'Active' : 'Panel'}
                     </span>
                   )}
                   {!item.disabled && !SUB_PANEL_MAP[item.id] && (

@@ -61,11 +61,11 @@ interface ChartStore {
   chartType: string;
   drawingTool: string;
   rightPanelTab: string;
-  subPanels: string[];
+  subPanel: string;
   showIndicatorModal: boolean;
   fibConfig: FibConfig;
   superRefresh: boolean;
-  timezone: string; // IANA timezone name (e.g. 'UTC', 'Asia/Jakarta') or 'local'
+  timezone: 'local' | 'utc' | 'gmt+7';
 
   setSymbol: (s: string) => void;
   setTimeframe: (tf: string) => void;
@@ -85,13 +85,11 @@ interface ChartStore {
   setDrawingTool: (t: string) => void;
   setRightPanelTab: (tab: string) => void;
   setSubPanel: (p: string) => void;
-  addSubPanel: (p: string) => void;
-  removeSubPanel: (p: string) => void;
   toggleIndicatorModal: () => void;
   openIndicatorModal: () => void;
   closeIndicatorModal: () => void;
   toggleSuperRefresh: () => void;
-  setTimezone: (tz: string) => void;
+  setTimezone: (tz: 'local' | 'utc' | 'gmt+7') => void;
 }
 
 export const useChartStore = create<ChartStore>()(
@@ -105,11 +103,11 @@ export const useChartStore = create<ChartStore>()(
       chartType: 'candlestick',
       drawingTool: 'cursor',
       rightPanelTab: 'signal',
-      subPanels: ['atlas'],
+      subPanel: 'atlas',
       showIndicatorModal: false,
       fibConfig: DEFAULT_FIB_CONFIG,
       superRefresh: false,
-      timezone: 'UTC',
+      timezone: 'utc',
 
       setSymbol:    (symbol)    => set({ symbol }),
       setTimeframe: (timeframe) => set({ timeframe }),
@@ -160,18 +158,7 @@ export const useChartStore = create<ChartStore>()(
       setChartType:  (chartType)   => set({ chartType }),
       setDrawingTool: (drawingTool) => set({ drawingTool }),
       setRightPanelTab: (rightPanelTab) => set({ rightPanelTab }),
-      // setSubPanel toggles: add if absent, remove if present (TradingView-style)
-      setSubPanel: (p) => set(s => ({
-        subPanels: s.subPanels.includes(p)
-          ? s.subPanels.filter(x => x !== p)
-          : [...s.subPanels, p],
-      })),
-      addSubPanel: (p) => set(s => ({
-        subPanels: s.subPanels.includes(p) ? s.subPanels : [...s.subPanels, p],
-      })),
-      removeSubPanel: (p) => set(s => ({
-        subPanels: s.subPanels.length > 1 ? s.subPanels.filter(x => x !== p) : s.subPanels,
-      })),
+      setSubPanel: (subPanel) => set({ subPanel }),
       toggleSuperRefresh: () => set(s => ({ superRefresh: !s.superRefresh })),
       setTimezone: (timezone) => set({ timezone }),
 
@@ -180,7 +167,7 @@ export const useChartStore = create<ChartStore>()(
       closeIndicatorModal:  () => set({ showIndicatorModal: false }),
     }),
     {
-      name: 'atlas-chart-v4',
+      name: 'atlas-chart-v5',
       partialize: (s) => ({
         symbol: s.symbol,
         timeframe: s.timeframe,
@@ -189,34 +176,19 @@ export const useChartStore = create<ChartStore>()(
         showSignals: s.showSignals,
         chartType: s.chartType,
         rightPanelTab: s.rightPanelTab,
-        subPanels: s.subPanels,
+        subPanel: s.subPanel,
         fibConfig: s.fibConfig,
-        timezone: s.timezone,
       }),
-      // Bulletproof: on hydration, ALWAYS strip the non-T1MO main-chart overlays
-      // (EMA9/EMA21/VWAP) so the top panel shows only the 3 T1MO indicators —
-      // regardless of any stale localStorage. Users can still re-add via the
-      // indicator modal afterwards.
       merge: (persisted, current) => {
-        const p = (persisted ?? {}) as Partial<ChartStore> & { subPanel?: string };
+        const p = (persisted ?? {}) as Partial<ChartStore>;
         const merged = { ...current, ...p } as ChartStore;
         const STRIP = ['EMA_9', 'EMA_21', 'VWAP', 'SMC_OB', 'SMC_FVG'];
         if (Array.isArray(merged.activeIndicators)) {
           merged.activeIndicators = merged.activeIndicators.filter(id => !STRIP.includes(id));
         }
-        // Migrate old single subPanel string → array, always include 'atlas' (T1MO Pixel)
-        const VALID_PANELS = ['atlas','rsi','stochrsi','cci','macd','atr','bandarmologi','obv','cvd','mfi','wr','adx'];
-        if (!Array.isArray(merged.subPanels)) {
-          merged.subPanels = ['atlas'];
-        } else {
-          // Strip invalid panel IDs from stale localStorage, then ensure 'atlas' is always first
-          merged.subPanels = merged.subPanels.filter(id => VALID_PANELS.includes(id));
-          if (!merged.subPanels.includes('atlas')) merged.subPanels = ['atlas'];
-        }
-        // Migrate old short timezone tokens → IANA names
-        const tzMap: Record<string, string> = { utc: 'UTC', 'gmt+7': 'Asia/Jakarta', local: 'local' };
-        if (typeof merged.timezone === 'string' && tzMap[merged.timezone]) {
-          merged.timezone = tzMap[merged.timezone];
+        // Ensure subPanel is a valid string (guard against stale array values from v4)
+        if (typeof merged.subPanel !== 'string' || !merged.subPanel) {
+          merged.subPanel = 'atlas';
         }
         return merged;
       },
