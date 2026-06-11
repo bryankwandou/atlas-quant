@@ -123,7 +123,7 @@ function computePixelScores(
   const ema9  = ind.ema(9);
   const ema21 = ind.ema(21);
   const ema50 = ind.ema(50);
-  const vwap  = ind.vwap().vwap;
+  const vwap  = ind.vwap() as number[];
   const mfi   = ind.mfi(14);
   const wr    = ind.williamsR(14);          // -100..0
   const bb    = ind.bollingerBands(20, 2);  // percentB ~0..1
