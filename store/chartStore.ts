@@ -61,7 +61,9 @@ interface ChartStore {
   chartType: string;
   drawingTool: string;
   rightPanelTab: string;
-  subPanel: string;
+  /** Stacked oscillator panels (TradingView-style). Each id renders its own sub-chart,
+   *  stacked top→bottom and individually removable. 'atlas' = the T1MO Pixel matrix. */
+  subPanels: string[];
   showIndicatorModal: boolean;
   fibConfig: FibConfig;
   superRefresh: boolean;
@@ -85,7 +87,14 @@ interface ChartStore {
   setChartType: (t: string) => void;
   setDrawingTool: (t: string) => void;
   setRightPanelTab: (tab: string) => void;
-  setSubPanel: (p: string) => void;
+  /** Add an oscillator panel to the stack (no-op if already present). */
+  addSubPanel: (p: string) => void;
+  /** Remove an oscillator panel from the stack. */
+  removeSubPanel: (p: string) => void;
+  /** Add the panel if absent, remove it if present (used by the indicator modal). */
+  toggleSubPanel: (p: string) => void;
+  /** Replace the whole stack (e.g. reset to default). */
+  setSubPanels: (p: string[]) => void;
   toggleIndicatorModal: () => void;
   openIndicatorModal: () => void;
   closeIndicatorModal: () => void;
@@ -104,7 +113,7 @@ export const useChartStore = create<ChartStore>()(
       chartType: 'candlestick',
       drawingTool: 'cursor',
       rightPanelTab: 'signal',
-      subPanel: 'atlas',
+      subPanels: ['atlas'],
       showIndicatorModal: false,
       fibConfig: DEFAULT_FIB_CONFIG,
       superRefresh: false,
@@ -159,7 +168,18 @@ export const useChartStore = create<ChartStore>()(
       setChartType:  (chartType)   => set({ chartType }),
       setDrawingTool: (drawingTool) => set({ drawingTool }),
       setRightPanelTab: (rightPanelTab) => set({ rightPanelTab }),
-      setSubPanel: (subPanel) => set({ subPanel }),
+      addSubPanel: (p) => set(s => ({
+        subPanels: s.subPanels.includes(p) ? s.subPanels : [...s.subPanels, p],
+      })),
+      removeSubPanel: (p) => set(s => ({
+        subPanels: s.subPanels.filter(x => x !== p),
+      })),
+      toggleSubPanel: (p) => set(s => ({
+        subPanels: s.subPanels.includes(p)
+          ? s.subPanels.filter(x => x !== p)
+          : [...s.subPanels, p],
+      })),
+      setSubPanels: (subPanels) => set({ subPanels }),
       toggleSuperRefresh: () => set(s => ({ superRefresh: !s.superRefresh })),
       setTimezone: (timezone) => set({ timezone }),
 
@@ -177,7 +197,7 @@ export const useChartStore = create<ChartStore>()(
         showSignals: s.showSignals,
         chartType: s.chartType,
         rightPanelTab: s.rightPanelTab,
-        subPanel: s.subPanel,
+        subPanels: s.subPanels,
         fibConfig: s.fibConfig,
         timezone: s.timezone,
       }),
@@ -188,10 +208,14 @@ export const useChartStore = create<ChartStore>()(
         if (Array.isArray(merged.activeIndicators)) {
           merged.activeIndicators = merged.activeIndicators.filter(id => !STRIP.includes(id));
         }
-        // Ensure subPanel is a valid string (guard against stale array values from v4)
-        if (typeof merged.subPanel !== 'string' || !merged.subPanel) {
-          merged.subPanel = 'atlas';
+        // Migrate the old singular `subPanel: string` → `subPanels: string[]`.
+        // (Pre-multi-window builds persisted a single panel id.)
+        const legacySub = (p as any).subPanel;
+        if (!Array.isArray(merged.subPanels)) {
+          merged.subPanels = typeof legacySub === 'string' && legacySub ? [legacySub] : ['atlas'];
         }
+        // Drop any empty/invalid ids; never leave the stack in a broken state.
+        merged.subPanels = merged.subPanels.filter(id => typeof id === 'string' && id);
         // Migrate legacy short timezone tokens → IANA names (settings now uses IANA)
         const tzMap: Record<string, string> = { utc: 'UTC', 'gmt+7': 'Asia/Jakarta' };
         if (typeof merged.timezone === 'string' && tzMap[merged.timezone]) {

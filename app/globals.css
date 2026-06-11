@@ -294,13 +294,27 @@ select{cursor:pointer;}
 .subchart-tab:hover{background:var(--aq-bg3);color:var(--aq-text);}
 .subchart-tab.active{background:var(--aq-blue-light);color:var(--aq-blue);font-weight:700;}
 .subchart-tabs-spacer{flex:1;}
-/* Per-panel header: just label + close button, no repeated tab list */
-.subchart-panel-header{height:18px;flex-shrink:0;display:flex;align-items:center;padding:0 4px;background:rgba(0,0,0,0.10);border-bottom:1px solid var(--aq-border);}
+/* ── Stacked oscillator panels (TradingView-style multi-window) ──────── */
+/* Each subPanel id renders one slot: an 18px header (label + remove ✕) over its
+   own chart. Slots divide the sub-area equally via flex. */
+.sub-panel-slot{flex:1;min-height:0;position:relative;display:flex;flex-direction:column;border-top:1px solid var(--aq-border);}
+.sub-panel-slot:first-child{border-top:none;}
+.subchart-panel-header{height:18px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 6px;background:rgba(0,0,0,0.18);border-bottom:1px solid var(--aq-border);z-index:5;}
+.sub-slot-title{font-size:9px;font-weight:700;color:var(--aq-text2);letter-spacing:.8px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sub-slot-close{flex-shrink:0;width:15px;height:15px;border-radius:3px;display:flex;align-items:center;justify-content:center;color:var(--aq-text3);opacity:0;transition:all .12s;}
+.sub-panel-slot:hover .sub-slot-close{opacity:.7;}
+.sub-slot-close:hover{opacity:1;background:rgba(242,54,69,.18);color:#f23645;}
 .sub-chart-inner{flex:1;min-height:0;position:relative;}
 .subchart-label2{position:absolute;top:4px;left:6px;font-size:9px;color:var(--aq-text3);pointer-events:none;z-index:2;letter-spacing:.5px;}
-.subchart-panel-title{height:18px;flex-shrink:0;display:flex;align-items:center;padding:0 8px;background:rgba(0,0,0,0.25);border-bottom:1px solid var(--aq-border);font-size:9px;font-weight:700;color:var(--aq-text2);letter-spacing:1px;text-transform:uppercase;}
-/* T1MO Pixel — canvas; top accounts for title(18px) + tabs(24px) = 42px */
-.t1mo-pixel-canvas{position:absolute;top:42px;left:0;right:0;bottom:0;width:100%;height:calc(100% - 42px);pointer-events:none;z-index:3;}
+/* T1MO Pixel — canvas covers its slot's chart area (below the 18px header) */
+.t1mo-pixel-canvas{position:absolute;top:18px;left:0;right:0;bottom:0;width:100%;height:calc(100% - 18px);pointer-events:none;z-index:3;}
+/* Add-panel bar — quick-add any oscillator window, like TradingView's "+ Indicator" */
+.sub-add-bar{flex-shrink:0;height:22px;display:flex;align-items:center;gap:3px;padding:0 6px;background:var(--aq-bg2);border-top:1px solid var(--aq-border);overflow-x:auto;scrollbar-width:none;}
+.sub-add-bar::-webkit-scrollbar{display:none;}
+.sub-add-icon{flex-shrink:0;color:var(--aq-text3);}
+.sub-add-chip{flex-shrink:0;padding:1px 7px;border-radius:3px;font-size:9px;font-weight:600;color:var(--aq-text2);background:var(--aq-bg3);border:1px solid var(--aq-border);white-space:nowrap;transition:all .12s;}
+.sub-add-chip:hover{background:var(--aq-blue-light);color:var(--aq-blue);border-color:var(--aq-blue);}
+.sub-stack-empty{flex:1;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--aq-text3);}
 /* SMC Lux Algo overlay — sits above the candle chart, below toolbars; non-interactive */
 .smc-overlay-canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:4;}
 

@@ -4,7 +4,7 @@ import { createChart, ColorType, CandlestickSeries, LineSeries, HistogramSeries,
 import { useTheme } from '@/hooks/useTheme';
 import { useMarketData, useLiveBars } from '@/hooks/useMarketData';
 import { useChartStore } from '@/store/chartStore';
-import { BarChart2, TrendingUp, Activity, Zap, Layers, Maximize2 } from 'lucide-react';
+import { BarChart2, TrendingUp, Activity, Zap, Layers, Maximize2, X, Plus } from 'lucide-react';
 import { computeIndicators } from '@/core/indicators/client';
 import { t1moCompute } from '@/src/core/indicators/t1mo';
 
@@ -33,6 +33,8 @@ const SUB_PANELS = [
   { id: 'bandarad', label: 'Bandar A/D'    },
   { id: 'cvd',      label: 'CVD Flow'      },
 ];
+const SUB_PANEL_LABEL: Record<string, string> =
+  Object.fromEntries(SUB_PANELS.map(p => [p.id, p.label]));
 
 const CHART_TYPES = [
   { id: 'candlestick', icon: CandlestickChartIcon, tip: 'Candlestick' },
@@ -211,10 +213,13 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const wrapRef  = useRef<HTMLDivElement>(null);
   const mainRef  = useRef<HTMLDivElement>(null);
   const volRef   = useRef<HTMLDivElement>(null);
-  const subRef   = useRef<HTMLDivElement>(null);
+  const subRef   = useRef<HTMLDivElement>(null);  // sub-panel STACK container (flex column)
   const chartsRef = useRef<Record<string, any>>({});
   const seriesRef = useRef<Record<string, any>>({});
-  const pixelCanvasRef = useRef<HTMLCanvasElement>(null);
+  // Stacked oscillator panels — one lightweight-chart per active subPanel id.
+  // Heights are divided equally across the sub-area; each is independently removable.
+  const subChartsRef = useRef<Array<{ id: string; chart: any; inner: HTMLDivElement; anchor: any }>>([]);
+  const pixelCanvasRef = useRef<HTMLCanvasElement>(null);  // canvas for the 'atlas' slot
   const pixelRedrawRef = useRef<(() => void) | null>(null);
   // Live pixel scores — redraw reads from here so the heatmap advances with new
   // bars instead of freezing at the build-time snapshot. Refreshed on data polls.
@@ -227,7 +232,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const { theme }                        = useTheme();
   const { candles, isLoading, marketClosed } = useMarketData(symbol, timeframe);
   const { liveBars } = useLiveBars(symbol, timeframe);
-  const { activeIndicators, showSignals, chartType, setChartType, subPanel, setSubPanel, timezone } = useChartStore();
+  const { activeIndicators, showSignals, chartType, setChartType, subPanels, addSubPanel, removeSubPanel, timezone } = useChartStore();
 
   // Stable ref for candles — prevents buildCharts from re-running on every SWR poll
   // (SWR creates a new array reference on each successful fetch even with same data)
@@ -303,14 +308,15 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     // Splitters positioned at panel boundaries
     if (spl1Ref.current) spl1Ref.current.style.top = h0 + 'px';
     if (spl2Ref.current) spl2Ref.current.style.top = (h0 + h1) + 'px';
-    Object.entries(chartsRef.current).forEach(([k, c]) => {
-      if (k === '_obs') return;
-      const el = k === 'main' ? mainRef.current : k === 'vol' ? volRef.current : subRef.current;
-      if (el && c) try { c.applyOptions({ width: el.clientWidth, height: el.clientHeight }); } catch {}
-    });
-    // Redraw the T1MO pixel canvas (CSS keeps it sized to the sub-chart area)
+    if (chartsRef.current.main && mainRef.current) try { chartsRef.current.main.applyOptions({ width: mainRef.current.clientWidth, height: mainRef.current.clientHeight }); } catch {}
+    if (chartsRef.current.vol && volRef.current) try { chartsRef.current.vol.applyOptions({ width: volRef.current.clientWidth, height: volRef.current.clientHeight }); } catch {}
+    // Stacked sub-panels: flex divides the height; read each inner's measured size.
+    for (const sp of subChartsRef.current) {
+      if (sp.chart && sp.inner) try { sp.chart.applyOptions({ width: sp.inner.clientWidth, height: sp.inner.clientHeight }); } catch {}
+    }
+    // Redraw the T1MO pixel canvas (CSS keeps it sized to the atlas slot)
     requestAnimationFrame(() => { pixelRedrawRef.current?.(); smcRedrawRef.current?.(); });
-  }, [panelPct]);
+  }, [panelPct, subPanels]);
 
   // Timezone IANA name for Intl.DateTimeFormat. Settings stores IANA strings
   // directly ('UTC','Asia/Tokyo',…); 'local' (or empty) → browser zone (undefined).
@@ -340,7 +346,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       layout: { background: { type: ColorType.Solid, color: tk.bg }, textColor: tk.text2, fontFamily: 'Roboto Mono, monospace', fontSize: 10, attributionLogo: false },
       grid:   { vertLines: { color: tk.grid, style: 1 }, horzLines: { color: tk.grid, style: 1 } },
       crosshair: { mode: 1, vertLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true }, horzLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true } },
-      rightPriceScale: { borderColor: tk.border, textColor: tk.text2 },
+      // Fixed minimum width so every stacked panel's price axis is the same width →
+      // their time columns line up exactly (pixel-locked panes, TradingView-style).
+      rightPriceScale: { borderColor: tk.border, textColor: tk.text2, minimumWidth: 60 },
       timeScale: {
         borderColor: tk.border, textColor: tk.text2,
         timeVisible: showTime, secondsVisible: showSecs,
@@ -363,6 +371,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const buildCharts = useCallback(() => {
     if (chartsRef.current._obs) chartsRef.current._obs.disconnect();
     Object.entries(chartsRef.current).forEach(([k, c]) => { if (k !== '_obs') try { c.remove(); } catch {} });
+    for (const sp of subChartsRef.current) { try { sp.chart.remove(); } catch {} }
+    subChartsRef.current = [];
     chartsRef.current = {}; seriesRef.current = {};
     pixelRedrawRef.current = null;  // drop stale T1MO-pixel redraw closure
     smcRedrawRef.current = null;    // drop stale SMC overlay redraw closure
@@ -672,12 +682,21 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       vs.setData(times.map((t: number, i: number) => ({ time: t, value: vsma[i] })).filter((d: any) => !isNaN(d.value)));
     }
 
-    // ── SUB CHART ─────────────────────────────────────────────
-    let subAnchorSeries: any = null;
-    const subChartEl = subRef.current!.querySelector<HTMLDivElement>('.sub-chart-inner');
-    if (subChartEl) {
-      const subChart = createChart(subChartEl, baseOpts(subChartEl) as any);
-      chartsRef.current.sub = subChart;
+    // ── SUB CHARTS (stacked, TradingView-style) ───────────────
+    // One lightweight-chart per active subPanel id, rendered into its slot's
+    // `.sub-chart-inner`. The per-indicator render branches below are unchanged —
+    // we loop, binding `subPanel` to each slot's id so every branch still matches.
+    // Only the bottom-most panel shows the time axis (the rest hide it, like TV).
+    const subSlotEls = Array.from(subRef.current!.querySelectorAll<HTMLDivElement>('.sub-panel-slot'));
+    for (let si = 0; si < subSlotEls.length; si++) {
+      const slotEl = subSlotEls[si];
+      const isLastSub = si === subSlotEls.length - 1;
+      const subPanel = slotEl.dataset.panel || '';
+      const subChartEl = slotEl.querySelector<HTMLDivElement>('.sub-chart-inner');
+      if (!subChartEl) continue;
+      let subAnchorSeries: any = null;
+      const subBase = baseOpts(subChartEl) as any;
+      const subChart = createChart(subChartEl, isLastSub ? subBase : { ...subBase, timeScale: { ...subBase.timeScale, visible: false } });
 
       // Invisible anchor on its OWN price scale so cross-panel crosshair can be
       // positioned in the sub panel without distorting the real indicator scale.
@@ -719,7 +738,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
 
           const redraw = () => {
             const canvas = pixelCanvasRef.current;
-            const sc = chartsRef.current.sub;
+            const sc = subChart;
             if (!canvas || !sc) return;
             const W = canvas.clientWidth, H = canvas.clientHeight;
             if (W < 2 || H < 2) return;
@@ -861,19 +880,26 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         try { (subChart as any).priceScale('cvd_delta').applyOptions({ visible: false, scaleMargins: { top: 0.7, bottom: 0 } }); } catch {}
       }
 
-      // Sync timescales — logical range keeps all panels pixel-locked
-      let syncing = false;
-      const syncLogical = (src: any, targets: any[]) =>
-        src.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
-          if (syncing || !range) return;
-          syncing = true;
-          targets.forEach(c => { try { c.timeScale().setVisibleLogicalRange(range); } catch {} });
-          setTimeout(() => { syncing = false; }, 16);
-        });
-      syncLogical(main, [volChart, subChart]);
-      syncLogical(volChart, [main, subChart]);
-      syncLogical(subChart, [main, volChart]);
+      subChartsRef.current.push({ id: subPanel, chart: subChart, inner: subChartEl, anchor: subAnchorSeries });
     }
+
+    // Sync timescales across ALL panels — logical range keeps them pixel-locked.
+    const allCharts = [main, volChart, ...subChartsRef.current.map(s => s.chart)];
+    let syncing = false;
+    const syncLogical = (src: any) =>
+      src.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
+        if (syncing || !range) return;
+        syncing = true;
+        for (const c of allCharts) { if (c !== src) try { c.timeScale().setVisibleLogicalRange(range); } catch {} }
+        setTimeout(() => { syncing = false; }, 16);
+      });
+    for (const c of allCharts) syncLogical(c);
+    // Snap every sub-panel to the main chart's current view right away (otherwise a
+    // freshly-added panel shows the full history until the first scroll event).
+    try {
+      const mr = main.timeScale().getVisibleLogicalRange();
+      if (mr) for (const s of subChartsRef.current) { try { s.chart.timeScale().setVisibleLogicalRange(mr); } catch {} }
+    } catch {}
 
     // ── Cross-panel crosshair sync (TradingView-style locked panels) ──
     // Hovering any panel draws the aligned vertical crosshair on all panels.
@@ -884,9 +910,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       try {
         const idx = param?.time ? formatted.findIndex((c: any) => c.time === param.time) : -1;
         const targets = [
-          { ch: main,                   s: candleSeries,    v: idx >= 0 ? formatted[idx]?.close  : 0 },
-          { ch: chartsRef.current.vol,  s: volSeries,       v: idx >= 0 ? formatted[idx]?.volume : 0 },
-          { ch: chartsRef.current.sub,  s: subAnchorSeries, v: 0 },
+          { ch: main,                  s: candleSeries, v: idx >= 0 ? formatted[idx]?.close  : 0 },
+          { ch: chartsRef.current.vol, s: volSeries,    v: idx >= 0 ? formatted[idx]?.volume : 0 },
+          ...subChartsRef.current.map(sp => ({ ch: sp.chart, s: sp.anchor, v: 0 })),
         ];
         for (const t of targets) {
           if (!t.ch || t.ch === srcCh) continue;
@@ -914,7 +940,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       syncXhair(param, main);
     });
     try { volChart.subscribeCrosshairMove((param: any) => syncXhair(param, volChart)); } catch {}
-    try { if (chartsRef.current.sub) chartsRef.current.sub.subscribeCrosshairMove((param: any) => syncXhair(param, chartsRef.current.sub)); } catch {}
+    for (const sp of subChartsRef.current) {
+      try { sp.chart.subscribeCrosshairMove((param: any) => syncXhair(param, sp.chart)); } catch {}
+    }
 
     // ResizeObserver — absolute layout: update top+height for all panels + splitters
     const obs = new ResizeObserver(() => {
@@ -928,19 +956,19 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       if (subRef.current)  { subRef.current.style.top  = (h0+h1) + 'px'; subRef.current.style.height = h2 + 'px'; }
       if (spl1Ref.current) spl1Ref.current.style.top = h0 + 'px';
       if (spl2Ref.current) spl2Ref.current.style.top = (h0+h1) + 'px';
-      [[chartsRef.current.main, mainRef.current, h0], [chartsRef.current.vol, volRef.current, h1], [chartsRef.current.sub, subRef.current, h2]].forEach(([ch, el, h]) => {
-        if (el && ch && (h as number) > 0) { try { ch.applyOptions({ width: (el as HTMLDivElement).clientWidth, height: h }); } catch {} }
-      });
-      // Resize + redraw the T1MO pixel canvas
-      const pc = pixelCanvasRef.current;
-      const inner = subRef.current?.querySelector<HTMLDivElement>('.sub-chart-inner');
-      if (pc && inner) { pc.style.width = inner.clientWidth + 'px'; pc.style.height = inner.clientHeight + 'px'; }
+      if (chartsRef.current.main && mainRef.current && h0 > 0) { try { chartsRef.current.main.applyOptions({ width: mainRef.current.clientWidth, height: h0 }); } catch {} }
+      if (chartsRef.current.vol && volRef.current && h1 > 0) { try { chartsRef.current.vol.applyOptions({ width: volRef.current.clientWidth, height: h1 }); } catch {} }
+      // Stacked sub-panels — flex divides the space; read each inner's measured size.
+      for (const sp of subChartsRef.current) {
+        if (sp.chart && sp.inner) { try { sp.chart.applyOptions({ width: sp.inner.clientWidth, height: sp.inner.clientHeight }); } catch {} }
+      }
+      // The T1MO pixel canvas (atlas slot) is sized via CSS; its redraw rescales the buffer.
       requestAnimationFrame(() => { pixelRedrawRef.current?.(); smcRedrawRef.current?.(); });
     });
     if (wrapRef.current) obs.observe(wrapRef.current);
     chartsRef.current._obs = obs;
   // candles removed — reads via candlesRef.current; panelPct removed — reads via panelPctRef.current
-  }, [theme, activeIndicators, showSignals, subPanel, baseOpts, symbol, chartType]);
+  }, [theme, activeIndicators, showSignals, subPanels, baseOpts, symbol, chartType]);
 
   // Full chart rebuild — does NOT destroy chart in cleanup (avoids 60ms blank flash).
   // buildCharts() itself destroys old charts at its start.
@@ -962,6 +990,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     return () => {
       if (chartsRef.current._obs) chartsRef.current._obs.disconnect();
       Object.entries(chartsRef.current).forEach(([k, c]) => { if (k !== '_obs') try { c.remove(); } catch {} });
+      for (const sp of subChartsRef.current) { try { sp.chart.remove(); } catch {} }
+      subChartsRef.current = [];
       chartsRef.current = {};
       seriesRef.current = {};
     };
@@ -1086,7 +1116,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   // poll (~20s) so the mosaic keeps advancing. Gated to the atlas panel to avoid
   // recomputing 14 indicators when the pixel isn't shown.
   useEffect(() => {
-    if (subPanel !== 'atlas' || !pixelRedrawRef.current) return;
+    if (!subPanels.includes('atlas') || !pixelRedrawRef.current) return;
     const src = candlesRef.current;
     if (!src?.length) return;
     try {
@@ -1103,7 +1133,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       requestAnimationFrame(() => { pixelRedrawRef.current?.(); smcRedrawRef.current?.(); });
     } catch { /* non-fatal — keep last good scores */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candles, subPanel]);
+  }, [candles, subPanels]);
 
   const fmt = (v: number | null | undefined, d = 2) => v != null && !isNaN(v) && isFinite(v) ? Number(v).toFixed(d) : '';
   const isUp = legend ? legend.close >= legend.open : true;
@@ -1159,17 +1189,29 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         <div ref={volRef} className="chart-panel chart-panel-vol"><div className="subchart-label2">VOL</div></div>
         <div ref={spl2Ref} className={`chart-splitter${dragging===1?' dragging':''}`} onMouseDown={e=>startDrag(1,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
         <div ref={subRef} className="chart-panel chart-panel-sub">
-          <div className="subchart-panel-title">T1MO PIXEL</div>
-          <div className="subchart-tabs-row">
-            {SUB_PANELS.map(p=><button type="button" key={p.id} className={`subchart-tab ${subPanel===p.id?'active':''}`} onClick={()=>setSubPanel(p.id)}>{p.label}</button>)}
-            <div className="subchart-tabs-spacer"/>
+          {subPanels.length === 0 && (
+            <div className="sub-stack-empty">No indicator panel — add one below ↓</div>
+          )}
+          {/* Stacked oscillator panels — each its own chart, individually removable */}
+          {subPanels.map(id => (
+            <div key={id} className="sub-panel-slot" data-panel={id}>
+              <div className="subchart-panel-header">
+                <span className="sub-slot-title">{SUB_PANEL_LABEL[id] ?? id}</span>
+                <button type="button" className="sub-slot-close" title="Remove panel" onClick={() => removeSubPanel(id)}>
+                  <X size={11} />
+                </button>
+              </div>
+              <div className="sub-chart-inner" />
+              {id === 'atlas' && <canvas ref={pixelCanvasRef} className="t1mo-pixel-canvas" />}
+            </div>
+          ))}
+          {/* Add-panel bar — TradingView-style quick add of any oscillator window */}
+          <div className="sub-add-bar">
+            <Plus size={11} className="sub-add-icon" />
+            {SUB_PANELS.filter(p => !subPanels.includes(p.id)).map(p => (
+              <button type="button" key={p.id} className="sub-add-chip" onClick={() => addSubPanel(p.id)}>{p.label}</button>
+            ))}
           </div>
-          <div className="sub-chart-inner"/>
-          <canvas
-            ref={pixelCanvasRef}
-            className="t1mo-pixel-canvas"
-            style={{ display: subPanel === 'atlas' ? 'block' : 'none' }}
-          />
         </div>
       </div>
 

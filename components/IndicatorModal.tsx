@@ -3,8 +3,10 @@ import { useMemo, useState } from 'react';
 import { X, Search, Layers, Check, Library, Settings } from 'lucide-react';
 import { useChartStore } from '@/store/chartStore';
 
-// Map indicator IDs that act as sub-panel selectors → sub-panel ID
+// Map indicator IDs that act as sub-panel selectors → sub-panel ID.
+// These ids MUST match the panel ids rendered by ChartContainer's SUB_PANELS.
 const SUB_PANEL_MAP: Record<string, string> = {
+  T1MO_PIXEL_PANEL:  'atlas',
   RSI_PANEL:         'rsi',
   MACD_PANEL:        'macd',
   WILLIAMS_PANEL:    'williams',
@@ -19,9 +21,9 @@ const SUB_PANEL_MAP: Record<string, string> = {
   ELDER_RAY:         'elder',
   CVD_PANEL:         'cvd',
   BANDAR_PANEL:      'bandar',
-  BANDAR_AD_PANEL:   'bandar_ad',
-  VOL_DELTA_PANEL:   'vol_delta',
-  BANDAR_SUITE_PANEL:'bandar_suite',
+  BANDAR_AD_PANEL:   'bandarad',
+  VOL_DELTA_PANEL:   'cvd',
+  BANDAR_SUITE_PANEL:'bandar',
 };
 import { INDICATOR_REGISTRY, type IndicatorPreset } from '@/core/indicators/registry';
 import IndicatorParamModal from './IndicatorParamModal';
@@ -156,6 +158,7 @@ const LEGACY_CATEGORIES: Category[] = [
   {
     id: 'Quantitative', label: 'Quantitative', color: '#9c27b0',
     items: [
+      { id: 'T1MO_PIXEL_PANEL', name: 'T1MO Pixel Matrix', desc: 'ATLAS T1MO 14-row signal heatmap — RSI/MACD/EMA/VWAP/HMF/MFI/%R/BB/ADX/Box/ATLAS rolling-percentile mosaic. The default T1MO bottom panel.' },
       { id: 'HIST_VOL',  name: 'Historical Volatility', desc: 'Realized annualized volatility' },
       { id: 'ZSCORE',    name: 'Z-Score',               desc: 'Statistical deviation from mean' },
       { id: 'SQUEEZE',   name: 'Squeeze Momentum',      desc: 'Volatility compression indicator' },
@@ -371,15 +374,16 @@ export default function IndicatorModal() {
     resetIndicators,
     closeIndicatorModal,
     showIndicatorModal,
-    setSubPanel,
-    subPanel,
+    toggleSubPanel,
+    subPanels,
   } = useChartStore();
 
   const handleItemClick = (item: IndicatorItem) => {
     if (item.disabled) return;
     const panelId = SUB_PANEL_MAP[item.id];
     if (panelId) {
-      setSubPanel(panelId);
+      // Add the panel to the stack (or remove it if it's already open) — multi-window.
+      toggleSubPanel(panelId);
     } else {
       toggleIndicator(item.id);
     }
@@ -532,8 +536,8 @@ export default function IndicatorModal() {
                     </span>
                   )}
                   {!item.disabled && SUB_PANEL_MAP[item.id] && (
-                    <span className={`indmod-panel-badge${subPanel === SUB_PANEL_MAP[item.id] ? ' active' : ''}`}>
-                      {subPanel === SUB_PANEL_MAP[item.id] ? 'Active' : 'Panel'}
+                    <span className={`indmod-panel-badge${subPanels.includes(SUB_PANEL_MAP[item.id]) ? ' active' : ''}`}>
+                      {subPanels.includes(SUB_PANEL_MAP[item.id]) ? 'Active' : 'Panel'}
                     </span>
                   )}
                   {!item.disabled && !SUB_PANEL_MAP[item.id] && (
