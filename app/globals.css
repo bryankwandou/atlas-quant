@@ -265,7 +265,7 @@ select{cursor:pointer;}
 .chart-panel{overflow:hidden;position:absolute;left:0;right:0;}
 .chart-panel-main{top:0;height:52%;}
 .chart-panel-vol {top:52%;height:10%;}
-.chart-panel-sub {top:62%;bottom:0;height:38%;display:flex;flex-direction:column;}
+.chart-panel-sub {top:62%;bottom:0;height:38%;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;}
 .main-chart-panel{flex:1;min-height:0;}
 .sub-chart-panel{flex-shrink:0;display:flex;flex-direction:column;border-top:1px solid var(--aq-border);}
 .sub-panel-header{height:24px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 8px;background:rgba(0,0,0,0.15);z-index:5;}
@@ -297,7 +297,7 @@ select{cursor:pointer;}
 /* ── Stacked oscillator panels (TradingView-style multi-window) ──────── */
 /* Each subPanel id renders one slot: an 18px header (label + remove ✕) over its
    own chart. Slots divide the sub-area equally via flex. */
-.sub-panel-slot{flex:1;min-height:0;position:relative;display:flex;flex-direction:column;border-top:1px solid var(--aq-border);}
+.sub-panel-slot{flex:1 0 auto;min-height:84px;position:relative;display:flex;flex-direction:column;border-top:1px solid var(--aq-border);}
 .sub-panel-slot:first-child{border-top:none;}
 .subchart-panel-header{height:18px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 6px;background:rgba(0,0,0,0.18);border-bottom:1px solid var(--aq-border);z-index:5;}
 .sub-slot-title{font-size:9px;font-weight:700;color:var(--aq-text2);letter-spacing:.8px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}

@@ -348,7 +348,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       crosshair: { mode: 1, vertLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true }, horzLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true } },
       // Fixed minimum width so every stacked panel's price axis is the same width →
       // their time columns line up exactly (pixel-locked panes, TradingView-style).
-      rightPriceScale: { borderColor: tk.border, textColor: tk.text2, minimumWidth: 60 },
+      rightPriceScale: { borderColor: tk.border, textColor: tk.text2, minimumWidth: 78 },
       timeScale: {
         borderColor: tk.border, textColor: tk.text2,
         timeVisible: showTime, secondsVisible: showSecs,
@@ -395,7 +395,12 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     const ind = computeIndicators(closes, highs, lows, volumes);
 
     // ── MAIN CHART ──────────────────────────────────────────────
-    const main = createChart(mainRef.current, baseOpts(mainRef.current) as any);
+    // When oscillator panels are stacked below, only the BOTTOM pane shows the
+    // date axis (TradingView-style) — so the main chart hides its own time axis.
+    const mainBase = baseOpts(mainRef.current) as any;
+    const main = createChart(mainRef.current, subPanels.length
+      ? { ...mainBase, timeScale: { ...mainBase.timeScale, visible: false } }
+      : mainBase);
     chartsRef.current.main = main;
 
     let candleSeries: any;
@@ -628,10 +633,12 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           s.setData(times.map((t: number, i: number) => ({ time: t, value: vals?.[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
           seriesRef.current[key] = s;
         };
-        if (t1moBB)  addOverlay(t1moBB as any[],  { color: '#00bcd4', lineWidth: 2.5, lineStyle: 0, title: 'Backbone' }, 't1moBB');
-        if (t1moMG)  addOverlay(t1moMG as any[],  { color: '#e91e63', lineWidth: 1.5, lineStyle: 1, title: 'Magenta'  }, 't1moMG');
-        if (t1moTop) addOverlay(t1moTop as any[], { color: '#ff9800', lineWidth: 3,   lineStyle: 0, title: 'TopBox'   }, 't1moTop');
-        if (t1moBtm) addOverlay(t1moBtm as any[], { color: '#795548', lineWidth: 3,   lineStyle: 0, title: 'BtmBox'   }, 't1moBtm');
+        // No `title` → no price-axis tag (the four lines sit close together and their
+        // tags overlapped into an unreadable cluster). Identify them by color instead.
+        if (t1moBB)  addOverlay(t1moBB as any[],  { color: '#00bcd4', lineWidth: 2.5, lineStyle: 0 }, 't1moBB');
+        if (t1moMG)  addOverlay(t1moMG as any[],  { color: '#e91e63', lineWidth: 1.5, lineStyle: 1 }, 't1moMG');
+        if (t1moTop) addOverlay(t1moTop as any[], { color: '#ff9800', lineWidth: 3,   lineStyle: 0 }, 't1moTop');
+        if (t1moBtm) addOverlay(t1moBtm as any[], { color: '#795548', lineWidth: 3,   lineStyle: 0 }, 't1moBtm');
 
         // ── Real T1MO signal markers (Spec Buy / Break Top Box / Green Bull / Hawk1) ──
         // Replaces the old fake (idx+symbol.length)%2 parity placeholder. Derived from
@@ -861,10 +868,13 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       } else if (subPanel === 'bandar') {
         // Bandar Detector — 0-100 accumulation score (>55 bandar accumulating, <45 distributing)
         const bd = ind.bandarDetector(8);
-        const hist = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right' });
-        hist.setData(times.map((t: number, i: number) => ({ time: t, value: bd.score[i], color: (bd.score[i] ?? 50) >= 55 ? 'rgba(8,153,129,0.7)' : (bd.score[i] ?? 50) <= 45 ? 'rgba(242,54,69,0.7)' : 'rgba(255,193,7,0.6)' })).filter((d: any) => !isNaN(d.value)));
+        // base:50 → bars grow UP from the neutral 50 line when bandar is accumulating
+        // (>50) and DOWN when distributing (<50). Without this the 0-based bars sat
+        // far below the auto-scaled 42–58 window and the panel looked empty.
+        const hist = (subChart as any).addSeries(HistogramSeries, { priceScaleId: 'right', base: 50 });
+        hist.setData(times.map((t: number, i: number) => ({ time: t, value: bd.score[i], color: (bd.score[i] ?? 50) >= 55 ? 'rgba(8,153,129,0.85)' : (bd.score[i] ?? 50) <= 45 ? 'rgba(242,54,69,0.85)' : 'rgba(255,193,7,0.75)' })).filter((d: any) => !isNaN(d.value)));
         addSubLine(bd.signal, '#ffffff', 'Signal', 1.2);
-        [[55, 'rgba(8,153,129,0.25)'], [45, 'rgba(242,54,69,0.25)']].forEach(([v, c]) => addLevel(v as number, c as string));
+        [[55, 'rgba(8,153,129,0.25)'], [50, 'rgba(255,255,255,0.12)'], [45, 'rgba(242,54,69,0.25)']].forEach(([v, c]) => addLevel(v as number, c as string));
       } else if (subPanel === 'bandarad') {
         // Bandar Accumulation/Distribution — A/D oscillator histogram
         const ba = ind.bandarAD(21);
