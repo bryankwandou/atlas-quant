@@ -88,21 +88,39 @@ function emaSmooth(vals: number[], period: number): number[] {
 const sigScore = (x: number) => clampScore(50 + 50 * Math.tanh(x));
 
 /**
- * T1MO Pixel scoring engine — REBUILT to match the authoritative
- * `T1MO Pixel Showcase.html` reference exactly.
+ * Detrended momentum oscillator → 0..100. Subtracts a slow EMA (the trend) from
+ * the series, normalizes by rolling stdev, and tanh-maps to 0..100. THIS is the
+ * key to the reference look: it OSCILLATES (green hills ↔ red valleys) even inside
+ * a sustained trend — because it measures momentum *relative to its own trend*,
+ * not absolute bull/bear (which just saturates one color in a trend).
+ */
+function detrendOsc(arr: number[], slowP: number, gain = 1.0): number[] {
+  const n = arr.length;
+  const slow = emaSmooth(arr, slowP);
+  const d = arr.map((v, i) => (Number.isFinite(v) && Number.isFinite(slow[i]) ? v - slow[i] : 0));
+  const win = Math.max(20, slowP);
+  const out = new Array(n).fill(50);
+  let sq = 0; const q: number[] = [];
+  for (let i = 0; i < n; i++) {
+    q.push(d[i] * d[i]); sq += d[i] * d[i];
+    if (q.length > win) sq -= q.shift()!;
+    const sd = Math.sqrt(sq / q.length);
+    out[i] = sigScore(sd > 1e-9 ? (d[i] / (sd * 1.1)) * gain : 0);
+  }
+  return out;
+}
+
+/**
+ * T1MO Pixel scoring engine — REBUILT (v3) to match `T1MO Pixel Showcase.html`.
  *
- * The reference's signature green→yellow→red "hills" come from ONE slow regime
- * trend shared by every row per column (so columns are color-coherent and the
- * mosaic flows in smooth hills), PLUS a per-row tilt so each indicator still
- * reads differently. We reproduce that honestly from REAL indicators:
- *
- *   1. each of the 14 rows → its own 0..100 bull score (lightly smoothed)
- *   2. shared regime BASE = mean of all rows, then HEAVILY smoothed  → the hills
- *   3. final cell = BASE_W·base  +  (1−BASE_W)·rowScore             → coherent
- *      columns with real per-indicator variation
- *
- * Replaces the old per-row independent rolling-percentile (which produced noise
- * with NO hills — the reason the pixel looked "0 progress vs the example").
+ * Lesson from v2: an ABSOLUTE bull/bear base saturates to a solid-green wall in a
+ * trending market (BBCA.JK). The reference instead OSCILLATES green↔red as hills.
+ * v3 fix — everything is a DETRENDED momentum oscillator:
+ *   1. each row → real 0..100 bull score
+ *   2. shared BASE = detrended-oscillator of the composite (mean of rows) →
+ *      smooth hills AND valleys (the reference's signature undulation)
+ *   3. each row → its own detrended oscillator (subtle per-row texture)
+ *   4. cell = baseHill + (rowOsc−50)·tilt  → coherent oscillating columns
  */
 function computePixelScores(
   ind: any,
@@ -126,10 +144,10 @@ function computePixelScores(
   const don   = ind.donchian(20);           // { upper, lower, middle }
   const atr   = ind.atr(14) as number[];    // for normalizing price-distance rows
   const hmf      = (t1mo?.series?.hmf ?? []) as (number | null)[];
-  const bullProb = (t1mo?.series?.bullProb ?? []) as number[]; // 0..100 T1MO conviction
+  const bullProb = (t1mo?.series?.bullProb ?? []) as number[];
 
   // ── Step 1: each row → a real 0..100 bull score ──
-  const a = (i: number) => num(atr as any, i, 0) || (closes[i] * 0.01) || 1; // ATR floor
+  const a = (i: number) => num(atr as any, i, 0) || (closes[i] * 0.01) || 1;
   const raw: Record<string, number[]> = {
     RSI7:  closes.map((_, i) => num(rsi7, i, 50)),
     RSI14: closes.map((_, i) => num(rsi14, i, 50)),
@@ -150,27 +168,28 @@ function computePixelScores(
     ATLAS: closes.map((_, i) => num(bullProb, i, 50)),
   };
 
-  // Light per-row smoothing (kills bar-to-bar flicker, keeps the row's identity)
-  const rowSm: Record<string, number[]> = {};
-  for (const k of PIXEL_ROWS) rowSm[k] = emaSmooth(raw[k] ?? new Array(n).fill(50), 4).map(clampScore);
+  // Slow-trend period scales with history → wide, smooth hills (~20–40 bar cycle).
+  const slowP = Math.max(10, Math.min(34, Math.floor(n / 16)));
 
-  // ── Step 2: shared regime BASE = mean of all rows, then HEAVILY smoothed ──
-  const base = new Array(n).fill(50);
+  // ── Step 2: shared BASE = detrended oscillator of the composite → hills+valleys ──
+  const comp = new Array(n).fill(50);
   for (let i = 0; i < n; i++) {
     let s = 0, c = 0;
-    for (const k of PIXEL_ROWS) { const v = rowSm[k][i]; if (Number.isFinite(v)) { s += v; c++; } }
-    base[i] = c ? s / c : 50;
+    for (const k of PIXEL_ROWS) { const v = raw[k][i]; if (Number.isFinite(v)) { s += v; c++; } }
+    comp[i] = c ? s / c : 50;
   }
-  // Large EMA period → slow, smooth hills (the reference's clamped random-walk trend).
-  const basePeriod = Math.max(12, Math.min(60, Math.floor(n / 22)));
-  const baseSmooth = emaSmooth(base, basePeriod).map(clampScore);
+  const baseOsc = emaSmooth(detrendOsc(comp, slowP, 1.1), 3).map(clampScore);
 
-  // ── Step 3: blend — coherent column hills + per-indicator tilt ──
-  const BASE_W = 0.6;
+  // ── Step 3: each row → its own detrended oscillator (subtle texture) ──
+  const rowOsc: Record<string, number[]> = {};
+  for (const k of PIXEL_ROWS) rowOsc[k] = emaSmooth(detrendOsc(raw[k] ?? new Array(n).fill(50), slowP, 1.0), 2).map(clampScore);
+
+  // ── Step 4: blend — base sets the hue (hills), row nudges ± for per-indicator texture ──
+  const TILT = 0.42;
   const scores: Record<string, number[]> = {};
   for (const k of PIXEL_ROWS) {
     const out = new Array(n);
-    for (let i = 0; i < n; i++) out[i] = clampScore(BASE_W * baseSmooth[i] + (1 - BASE_W) * rowSm[k][i]);
+    for (let i = 0; i < n; i++) out[i] = clampScore(baseOsc[i] + (rowOsc[k][i] - 50) * TILT);
     scores[k] = out;
   }
   return { scores, active: new Array(n).fill(true) };
