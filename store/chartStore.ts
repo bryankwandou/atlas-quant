@@ -28,6 +28,25 @@ export interface FibConfig {
   direction: 'long' | 'short';
 }
 
+/** A user-drawn object on the main price chart (trendline / ray / horizontal /
+ *  vertical / fib retracement). Anchors are stored in chart space (unix-seconds
+ *  time + price) so they stay pinned to the data as the user pans/zooms. */
+export interface Drawing {
+  id: string;
+  type: 'trendline' | 'ray' | 'hline' | 'vline' | 'fib';
+  points: { time: number; price: number }[];
+  color: string;
+}
+
+/** A saved Pine-lite script. `code` is interpreted by the in-app mini engine
+ *  (subset of Pine: close/open/high/low/volume, sma/ema/rsi/atr, plot, hline). */
+export interface PineScript {
+  id: string;
+  name: string;
+  code: string;
+  enabled: boolean;
+}
+
 export const DEFAULT_FIB_RR_LEVELS: FibLevel[] = [
   { ratio: -0.5, enabled: true,  color: '#f23645', label: 'SL' },
   { ratio:  0,   enabled: true,  color: '#f23645', label: 'Entry Low' },
@@ -69,6 +88,17 @@ interface ChartStore {
   superRefresh: boolean;
   /** IANA timezone name ('UTC', 'Asia/Tokyo', …) or 'local' for browser zone. */
   timezone: string;
+  /** Compare/overlay symbols drawn as normalized (% change) lines on the main chart. */
+  compareSymbols: string[];
+  /** Bar-replay mode — when active the chart is truncated to `replayIndex` bars. */
+  replayActive: boolean;
+  /** Index (bar count) the replay is paused at. -1 = full/live (no truncation). */
+  replayIndex: number;
+  replayPlaying: boolean;
+  /** User drawings on the price chart. */
+  drawings: Drawing[];
+  /** Saved Pine-lite scripts (interpreted + overlaid when enabled). */
+  pineScripts: PineScript[];
 
   setSymbol: (s: string) => void;
   setTimeframe: (tf: string) => void;
@@ -101,6 +131,24 @@ interface ChartStore {
   closeIndicatorModal: () => void;
   toggleSuperRefresh: () => void;
   setTimezone: (tz: string) => void;
+
+  addCompareSymbol: (s: string) => void;
+  removeCompareSymbol: (s: string) => void;
+  clearCompareSymbols: () => void;
+
+  setReplayActive: (on: boolean) => void;
+  setReplayIndex: (i: number) => void;
+  setReplayPlaying: (p: boolean) => void;
+
+  addDrawing: (d: Drawing) => void;
+  updateDrawing: (id: string, patch: Partial<Drawing>) => void;
+  removeDrawing: (id: string) => void;
+  clearDrawings: () => void;
+
+  addPineScript: (p: PineScript) => void;
+  updatePineScript: (id: string, patch: Partial<PineScript>) => void;
+  removePineScript: (id: string) => void;
+  togglePineScript: (id: string) => void;
 }
 
 export const useChartStore = create<ChartStore>()(
@@ -119,6 +167,12 @@ export const useChartStore = create<ChartStore>()(
       fibConfig: DEFAULT_FIB_CONFIG,
       superRefresh: false,
       timezone: 'UTC',
+      compareSymbols: [],
+      replayActive: false,
+      replayIndex: -1,
+      replayPlaying: false,
+      drawings: [],
+      pineScripts: [],
 
       setSymbol:    (symbol)    => set({ symbol }),
       setTimeframe: (timeframe) => set({ timeframe }),
@@ -185,6 +239,34 @@ export const useChartStore = create<ChartStore>()(
       toggleSuperRefresh: () => set(s => ({ superRefresh: !s.superRefresh })),
       setTimezone: (timezone) => set({ timezone }),
 
+      addCompareSymbol: (s) => set(st => ({
+        compareSymbols: st.compareSymbols.includes(s) ? st.compareSymbols : [...st.compareSymbols, s].slice(0, 4),
+      })),
+      removeCompareSymbol: (s) => set(st => ({ compareSymbols: st.compareSymbols.filter(x => x !== s) })),
+      clearCompareSymbols: () => set({ compareSymbols: [] }),
+
+      setReplayActive: (replayActive) => set(replayActive
+        ? { replayActive }
+        : { replayActive, replayIndex: -1, replayPlaying: false }),
+      setReplayIndex: (replayIndex) => set({ replayIndex }),
+      setReplayPlaying: (replayPlaying) => set({ replayPlaying }),
+
+      addDrawing: (d) => set(s => ({ drawings: [...s.drawings, d] })),
+      updateDrawing: (id, patch) => set(s => ({
+        drawings: s.drawings.map(d => (d.id === id ? { ...d, ...patch } : d)),
+      })),
+      removeDrawing: (id) => set(s => ({ drawings: s.drawings.filter(d => d.id !== id) })),
+      clearDrawings: () => set({ drawings: [] }),
+
+      addPineScript: (p) => set(s => ({ pineScripts: [...s.pineScripts, p] })),
+      updatePineScript: (id, patch) => set(s => ({
+        pineScripts: s.pineScripts.map(p => (p.id === id ? { ...p, ...patch } : p)),
+      })),
+      removePineScript: (id) => set(s => ({ pineScripts: s.pineScripts.filter(p => p.id !== id) })),
+      togglePineScript: (id) => set(s => ({
+        pineScripts: s.pineScripts.map(p => (p.id === id ? { ...p, enabled: !p.enabled } : p)),
+      })),
+
       toggleIndicatorModal: () => set(s => ({ showIndicatorModal: !s.showIndicatorModal })),
       openIndicatorModal:   () => set({ showIndicatorModal: true }),
       closeIndicatorModal:  () => set({ showIndicatorModal: false }),
@@ -202,6 +284,9 @@ export const useChartStore = create<ChartStore>()(
         subPanels: s.subPanels,
         fibConfig: s.fibConfig,
         timezone: s.timezone,
+        compareSymbols: s.compareSymbols,
+        drawings: s.drawings,
+        pineScripts: s.pineScripts,
       }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<ChartStore>;
@@ -218,6 +303,12 @@ export const useChartStore = create<ChartStore>()(
         }
         // Drop any empty/invalid ids; never leave the stack in a broken state.
         merged.subPanels = merged.subPanels.filter(id => typeof id === 'string' && id);
+        // New persisted collections — guard against undefined from older snapshots.
+        if (!Array.isArray(merged.compareSymbols)) merged.compareSymbols = [];
+        if (!Array.isArray(merged.drawings))       merged.drawings = [];
+        if (!Array.isArray(merged.pineScripts))    merged.pineScripts = [];
+        // Replay is always a fresh session state (never restored as active).
+        merged.replayActive = false; merged.replayIndex = -1; merged.replayPlaying = false;
         // Migrate legacy short timezone tokens → IANA names (settings now uses IANA)
         const tzMap: Record<string, string> = { utc: 'UTC', 'gmt+7': 'Asia/Jakarta' };
         if (typeof merged.timezone === 'string' && tzMap[merged.timezone]) {

@@ -7,6 +7,7 @@ import { useChartStore } from '@/store/chartStore';
 import { BarChart2, TrendingUp, Activity, Zap, Layers, Maximize2, X, Plus } from 'lucide-react';
 import { computeIndicators } from '@/core/indicators/client';
 import { t1moCompute } from '@/src/core/indicators/t1mo';
+import { runPine } from '@/lib/pineLite';
 
 const CandlestickChartIcon = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -83,46 +84,34 @@ function emaSmooth(vals: number[], period: number): number[] {
   return out;
 }
 
-/**
- * Rolling percentile rank → 0–100. For each bar, where does its value fall
- * within the last `window` bars? This spreads scores across the FULL color
- * range so the heatmap stays vivid/varied even inside a strong trend (matches
- * the T1MO Pixel reference look — not a one-color wall).
- */
-function rollingPercentile(vals: number[], window = 120): number[] {
-  const n = vals.length;
-  const out = new Array(n).fill(50);
-  for (let i = 0; i < n; i++) {
-    const cur = vals[i];
-    if (!Number.isFinite(cur)) { out[i] = 50; continue; }
-    const start = Math.max(0, i - window + 1);
-    let below = 0, equal = 0, count = 0;
-    for (let j = start; j <= i; j++) {
-      const v = vals[j];
-      if (!Number.isFinite(v)) continue;
-      count++;
-      if (v < cur) below++; else if (v === cur) equal++;
-    }
-    // mid-rank percentile (Hazen) — avoids 0/100 saturation at the extremes
-    out[i] = count > 0 ? clampScore(((below + equal / 2) / count) * 100) : 50;
-  }
-  return out;
-}
+/** Unbounded value → 0..100 bull score via a soft tanh squash (50 = neutral). */
+const sigScore = (x: number) => clampScore(50 + 50 * Math.tanh(x));
 
-/** Build all 14 T1MO pixel rows (0–100 bull-score each, rolling-percentile
- *  normalized so every row stays vivid/varied). NO conviction gate — the
- *  reference is a FULL mosaic; clustering comes from regime persistence, not
- *  blank columns. `active` is kept (all true) for call-site compatibility. */
+/**
+ * T1MO Pixel scoring engine — REBUILT to match the authoritative
+ * `T1MO Pixel Showcase.html` reference exactly.
+ *
+ * The reference's signature green→yellow→red "hills" come from ONE slow regime
+ * trend shared by every row per column (so columns are color-coherent and the
+ * mosaic flows in smooth hills), PLUS a per-row tilt so each indicator still
+ * reads differently. We reproduce that honestly from REAL indicators:
+ *
+ *   1. each of the 14 rows → its own 0..100 bull score (lightly smoothed)
+ *   2. shared regime BASE = mean of all rows, then HEAVILY smoothed  → the hills
+ *   3. final cell = BASE_W·base  +  (1−BASE_W)·rowScore             → coherent
+ *      columns with real per-indicator variation
+ *
+ * Replaces the old per-row independent rolling-percentile (which produced noise
+ * with NO hills — the reason the pixel looked "0 progress vs the example").
+ */
 function computePixelScores(
   ind: any,
   t1mo: any,
   closes: number[],
 ): { scores: Record<string, number[]>; active: boolean[] } {
   const n = closes.length;
-  const win = Math.max(40, Math.min(150, Math.floor(n / 3))); // adaptive window
   const num = (arr: any[], i: number, d = 0) => Number.isFinite(arr?.[i]) ? arr[i] : d;
 
-  // ── Raw per-indicator bull-ness (higher = more bullish); normalized below ──
   const rsi7  = ind.rsi(7);
   const rsi14 = ind.rsi(14);
   const macd  = ind.macd(12, 26, 9);
@@ -135,35 +124,54 @@ function computePixelScores(
   const bb    = ind.bollingerBands(20, 2);  // percentB ~0..1
   const adx   = ind.adx(14);                // { adx, plusDI, minusDI }
   const don   = ind.donchian(20);           // { upper, lower, middle }
+  const atr   = ind.atr(14) as number[];    // for normalizing price-distance rows
   const hmf      = (t1mo?.series?.hmf ?? []) as (number | null)[];
   const bullProb = (t1mo?.series?.bullProb ?? []) as number[]; // 0..100 T1MO conviction
 
+  // ── Step 1: each row → a real 0..100 bull score ──
+  const a = (i: number) => num(atr as any, i, 0) || (closes[i] * 0.01) || 1; // ATR floor
   const raw: Record<string, number[]> = {
     RSI7:  closes.map((_, i) => num(rsi7, i, 50)),
     RSI14: closes.map((_, i) => num(rsi14, i, 50)),
-    MACD:  closes.map((_, i) => num(macd.histogram, i, 0)),
-    EMA9:  closes.map((c, i) => c - num(ema9, i, c)),
-    EMA21: closes.map((c, i) => c - num(ema21, i, c)),
-    EMA50: closes.map((c, i) => c - num(ema50, i, c)),
-    VWAP:  closes.map((c, i) => c - num(vwap, i, c)),
-    HMF:   closes.map((_, i) => num(hmf as any, i, 0)),
+    MACD:  closes.map((_, i) => sigScore(num(macd.histogram, i, 0) / a(i) * 1.5)),
+    EMA9:  closes.map((c, i) => sigScore((c - num(ema9, i, c)) / a(i) * 1.2)),
+    EMA21: closes.map((c, i) => sigScore((c - num(ema21, i, c)) / a(i) * 0.8)),
+    EMA50: closes.map((c, i) => sigScore((c - num(ema50, i, c)) / a(i) * 0.5)),
+    VWAP:  closes.map((c, i) => sigScore((c - num(vwap, i, c)) / a(i) * 0.8)),
+    HMF:   closes.map((_, i) => { const h = num(hmf as any, i, NaN); return Number.isFinite(h) ? clampScore(50 + h * 0.5) : 50; }),
     MFI:   closes.map((_, i) => num(mfi, i, 50)),
-    '%R':  closes.map((_, i) => 100 + num(wr, i, -50)),          // → 0..100
-    BB:    closes.map((_, i) => num(bb.percentB, i, 0.5) * 100), // → 0..100
-    ADX:   closes.map((_, i) => num(adx.plusDI, i, 0) - num(adx.minusDI, i, 0)),
+    '%R':  closes.map((_, i) => clampScore(100 + num(wr, i, -50))),
+    BB:    closes.map((_, i) => clampScore(num(bb.percentB, i, 0.5) * 100)),
+    ADX:   closes.map((_, i) => sigScore((num(adx.plusDI, i, 0) - num(adx.minusDI, i, 0)) / 18)),
     Box:   closes.map((c, i) => {
       const u = num(don.upper, i, c), l = num(don.lower, i, c);
-      return u > l ? ((c - l) / (u - l)) * 100 : 50;
+      return u > l ? clampScore(((c - l) / (u - l)) * 100) : 50;
     }),
     ATLAS: closes.map((_, i) => num(bullProb, i, 50)),
   };
 
+  // Light per-row smoothing (kills bar-to-bar flicker, keeps the row's identity)
+  const rowSm: Record<string, number[]> = {};
+  for (const k of PIXEL_ROWS) rowSm[k] = emaSmooth(raw[k] ?? new Array(n).fill(50), 4).map(clampScore);
+
+  // ── Step 2: shared regime BASE = mean of all rows, then HEAVILY smoothed ──
+  const base = new Array(n).fill(50);
+  for (let i = 0; i < n; i++) {
+    let s = 0, c = 0;
+    for (const k of PIXEL_ROWS) { const v = rowSm[k][i]; if (Number.isFinite(v)) { s += v; c++; } }
+    base[i] = c ? s / c : 50;
+  }
+  // Large EMA period → slow, smooth hills (the reference's clamped random-walk trend).
+  const basePeriod = Math.max(12, Math.min(60, Math.floor(n / 22)));
+  const baseSmooth = emaSmooth(base, basePeriod).map(clampScore);
+
+  // ── Step 3: blend — coherent column hills + per-indicator tilt ──
+  const BASE_W = 0.6;
   const scores: Record<string, number[]> = {};
-  // Smooth each row → gradual color "hills", then percentile-rank for a full
-  // green→red spread (matches the reference's vivid, varied matrix).
   for (const k of PIXEL_ROWS) {
-    const smoothed = emaSmooth(raw[k] ?? new Array(n).fill(50), 5);
-    scores[k] = rollingPercentile(smoothed, win);
+    const out = new Array(n);
+    for (let i = 0; i < n; i++) out[i] = clampScore(BASE_W * baseSmooth[i] + (1 - BASE_W) * rowSm[k][i]);
+    scores[k] = out;
   }
   return { scores, active: new Array(n).fill(true) };
 }
@@ -232,12 +240,50 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const { theme }                        = useTheme();
   const { candles, isLoading, marketClosed } = useMarketData(symbol, timeframe);
   const { liveBars } = useLiveBars(symbol, timeframe);
-  const { activeIndicators, showSignals, chartType, setChartType, subPanels, addSubPanel, removeSubPanel, timezone } = useChartStore();
+  const { activeIndicators, showSignals, chartType, setChartType, subPanels, addSubPanel, removeSubPanel, timezone,
+    compareSymbols, removeCompareSymbol,
+    replayActive, replayIndex, replayPlaying, setReplayActive, setReplayIndex, setReplayPlaying,
+    drawings, addDrawing, removeDrawing, clearDrawings, drawingTool, setDrawingTool,
+    pineScripts } = useChartStore();
+
+  // ── Compare symbols — fetched independently, overlaid as normalized % lines ──
+  const [compareData, setCompareData] = useState<Record<string, Array<{ time: number; close: number }>>>({});
+  // ── Drawing overlay (trendlines / rays / hlines / vlines / fib) ──
+  const drawCanvasRef = useRef<HTMLCanvasElement>(null);
+  const drawRedrawRef = useRef<(() => void) | null>(null);
+  const draftRef = useRef<{ type: string; points: { time: number; price: number }[] } | null>(null);
+  const drawingsRef = useRef(drawings);
+  useEffect(() => { drawingsRef.current = drawings; }, [drawings]);
+  const [drawCursor, setDrawCursor] = useState(false);
 
   // Stable ref for candles — prevents buildCharts from re-running on every SWR poll
   // (SWR creates a new array reference on each successful fetch even with same data)
   const candlesRef = useRef<typeof candles>([]);
   useEffect(() => { candlesRef.current = candles; }, [candles]);
+
+  // ── Fetch compare-symbol histories (own SWR-free poll; aligned in buildCharts) ──
+  useEffect(() => {
+    if (!compareSymbols.length) { setCompareData({}); return; }
+    let alive = true;
+    const load = async () => {
+      const next: Record<string, Array<{ time: number; close: number }>> = {};
+      await Promise.all(compareSymbols.map(async (cs) => {
+        try {
+          const res = await fetch(`/api/market/ohlcv?symbol=${cs}&timeframe=${timeframe}&limit=1500`);
+          const j = await res.json();
+          const rows = (j?.data || []) as any[];
+          next[cs] = rows
+            .map(c => ({ time: Math.floor(+c.open_time / 1000), close: +c.close }))
+            .filter(c => c.time > 0 && c.close > 0)
+            .sort((a, b) => a.time - b.time);
+        } catch { next[cs] = []; }
+      }));
+      if (alive) setCompareData(next);
+    };
+    load();
+    const iv = setInterval(load, 30_000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [compareSymbols, timeframe]);
 
   const [panelPct, setPanelPct] = useState([52, 10, 38]);
   const panelPctRef    = useRef([52, 10, 38]);
@@ -315,7 +361,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       if (sp.chart && sp.inner) try { sp.chart.applyOptions({ width: sp.inner.clientWidth, height: sp.inner.clientHeight }); } catch {}
     }
     // Redraw the T1MO pixel canvas (CSS keeps it sized to the atlas slot)
-    requestAnimationFrame(() => { pixelRedrawRef.current?.(); smcRedrawRef.current?.(); });
+    requestAnimationFrame(() => { pixelRedrawRef.current?.(); smcRedrawRef.current?.(); drawRedrawRef.current?.(); });
   }, [panelPct, subPanels]);
 
   // Timezone IANA name for Intl.DateTimeFormat. Settings stores IANA strings
@@ -380,10 +426,17 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     const currentCandles = candlesRef.current;
     if (!mainRef.current || !volRef.current || !subRef.current || !currentCandles?.length) return;
 
-    const formatted = currentCandles
+    const fmtAll = currentCandles
       .map((c: any) => ({ time: Math.floor(c.open_time / 1000) as any, open: +c.open, high: +c.high, low: +c.low, close: +c.close, volume: +c.volume }))
       .sort((a: any, b: any) => a.time - b.time)
       .filter((c: any) => c.time > 0 && c.close > 0);
+
+    // Bar-replay: truncate the visible history to the paused index so the chart
+    // "plays back" candle-by-candle (TradingView-style). Indicators recompute on
+    // the truncated set, exactly as if those future bars hadn't printed yet.
+    const formatted = (replayActive && replayIndex >= 2 && replayIndex < fmtAll.length)
+      ? fmtAll.slice(0, replayIndex)
+      : fmtAll;
 
     if (formatted.length < 2) return;
 
@@ -653,6 +706,62 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         }
       }
     } catch { /* T1MO compute error — non-fatal */ }
+
+    // ── COMPARE / OVERLAY SYMBOLS ──────────────────────────────────────────────
+    // Each compare symbol is drawn as a normalized %-change line on a SEPARATE
+    // left price scale, so the main candles keep their absolute right axis while
+    // the user compares relative performance (shape) against the base symbol.
+    const COMPARE_COLORS = ['#ff9800', '#ab47bc', '#26c6da', '#ec407a'];
+    if (compareSymbols.length) {
+      try { (main as any).priceScale('left').applyOptions({ visible: true, borderColor: tk.border, textColor: tk.text2 }); } catch {}
+      compareSymbols.forEach((cs, ci) => {
+        const rows = compareData[cs] || [];
+        if (rows.length < 2) return;
+        const map = new Map<number, number>();
+        for (const r of rows) map.set(r.time, r.close);
+        // Forward-fill align to the main timeline, then normalize to % vs first point.
+        let base = NaN; let lastClose = NaN;
+        const pct = times.map((t: number) => {
+          const c = map.get(t);
+          if (Number.isFinite(c)) lastClose = c as number;
+          if (!Number.isFinite(lastClose)) return NaN;
+          if (!Number.isFinite(base)) base = lastClose;
+          return (lastClose / base - 1) * 100;
+        });
+        const color = COMPARE_COLORS[ci % COMPARE_COLORS.length];
+        const s = (main as any).addSeries(LineSeries, {
+          color, lineWidth: 1.5, priceScaleId: 'left', priceLineVisible: false,
+          lastValueVisible: true, title: cs,
+        });
+        s.setData(times.map((t: number, i: number) => ({ time: t, value: pct[i] })).filter((d: any) => Number.isFinite(d.value)));
+      });
+    }
+
+    // ── PINE-LITE SCRIPTS ──────────────────────────────────────────────────────
+    // Enabled scripts are interpreted over the (replay-aware) OHLCV history; each
+    // plot() becomes a line on the main pane, or — when panel="sub" — on a hidden
+    // secondary scale so oscillators don't distort the candle scale.
+    const enabledPine = pineScripts.filter(p => p.enabled && p.code.trim());
+    if (enabledPine.length) {
+      const opens = formatted.map((c: any) => c.open);
+      for (const ps of enabledPine) {
+        try {
+          const res = runPine(ps.code, { open: opens, high: highs, low: lows, close: closes, volume: volumes });
+          for (const pl of res.plots) {
+            const scaleId = pl.panel === 'sub' ? 'pineOsc' : 'right';
+            const s = (main as any).addSeries(LineSeries, {
+              color: pl.color, lineWidth: pl.kind === 'hline' ? 1 : 1.6,
+              lineStyle: pl.kind === 'hline' ? 2 : 0,
+              priceScaleId: scaleId, priceLineVisible: false, lastValueVisible: pl.kind !== 'hline',
+              title: pl.title,
+            });
+            s.setData(times.map((t: number, i: number) => ({ time: t, value: pl.data[i] })).filter((d: any) => Number.isFinite(d.value)));
+          }
+        } catch { /* per-script error — non-fatal, editor surfaces it */ }
+      }
+      try { (main as any).priceScale('pineOsc').applyOptions({ visible: false, scaleMargins: { top: 0.05, bottom: 0.05 } }); } catch {}
+    }
+
     dataLengthRef.current = formatted.length;
     main.timeScale().fitContent();
     // Set a default visible range so the chart doesn't show the entire history
@@ -954,6 +1063,73 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       try { sp.chart.subscribeCrosshairMove((param: any) => syncXhair(param, sp.chart)); } catch {}
     }
 
+    // ── DRAWINGS OVERLAY (trendlines / rays / h-/v-lines / fib) ─────────────────
+    // Rendered on a canvas above the main pane; anchors are stored in chart space
+    // (time+price) so they stay pinned as the user pans/zooms. Redraw reads the
+    // live store via drawingsRef (no chart rebuild needed when a drawing is added).
+    const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+    const drawOverlay = () => {
+      const canvas = drawCanvasRef.current;
+      if (!canvas || !chartsRef.current.main) return;
+      const W = canvas.clientWidth, H = canvas.clientHeight;
+      if (W < 2 || H < 2) return;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+      const ctx = canvas.getContext('2d'); if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      const ts = chartsRef.current.main.timeScale();
+      const ser = seriesRef.current.candle;
+      if (!ser) return;
+      const X = (t: number) => ts.timeToCoordinate(t as any);
+      const Y = (p: number) => ser.priceToCoordinate(p);
+      const drawOne = (d: { type: string; points: { time: number; price: number }[]; color: string }, draft = false) => {
+        ctx.save();
+        ctx.strokeStyle = d.color; ctx.fillStyle = d.color;
+        ctx.lineWidth = 1.5; ctx.setLineDash(draft ? [4, 3] : []);
+        const p0 = d.points[0]; const p1 = d.points[1];
+        if (d.type === 'hline' && p0) {
+          const y = Y(p0.price); if (y == null) { ctx.restore(); return; }
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+          ctx.font = '10px "Roboto Mono", monospace';
+          ctx.fillText(p0.price.toFixed(2), 4, y - 4);
+        } else if (d.type === 'vline' && p0) {
+          const x = X(p0.time); if (x == null) { ctx.restore(); return; }
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+        } else if ((d.type === 'trendline' || d.type === 'ray') && p0 && p1) {
+          let x0 = X(p0.time), y0 = Y(p0.price), x1 = X(p1.time), y1 = Y(p1.price);
+          if (x0 == null || y0 == null || x1 == null || y1 == null) { ctx.restore(); return; }
+          if (d.type === 'ray' && x1 !== x0) {
+            const slope = (y1 - y0) / (x1 - x0);
+            const ex = x1 >= x0 ? W : 0; y1 = y0 + slope * (ex - x0); x1 = ex;
+          }
+          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+          if (!draft) { ctx.beginPath(); ctx.arc(x0, y0, 3, 0, 7); ctx.arc(x1, y1, 3, 0, 7); ctx.fill(); }
+        } else if (d.type === 'fib' && p0 && p1) {
+          const x0 = X(p0.time), x1 = X(p1.time);
+          const hi = Math.max(p0.price, p1.price), lo = Math.min(p0.price, p1.price);
+          const xa = Math.min(x0 ?? 0, x1 ?? 0), xb = Math.max(x0 ?? W, x1 ?? W);
+          ctx.font = '9px "Roboto Mono", monospace';
+          for (const lv of FIB_LEVELS) {
+            const price = hi - (hi - lo) * lv;
+            const y = Y(price); if (y == null) continue;
+            ctx.globalAlpha = 0.85;
+            ctx.beginPath(); ctx.moveTo(xa, y); ctx.lineTo(xb, y); ctx.stroke();
+            ctx.fillText(`${(lv * 100).toFixed(1)}%  ${price.toFixed(2)}`, xa + 4, y - 3);
+          }
+          ctx.globalAlpha = 1;
+        }
+        ctx.restore();
+      };
+      for (const d of drawingsRef.current) drawOne(d);
+      if (draftRef.current && draftRef.current.points.length >= 1) {
+        drawOne({ ...draftRef.current, color: '#2962ff' } as any, true);
+      }
+    };
+    drawRedrawRef.current = drawOverlay;
+    main.timeScale().subscribeVisibleLogicalRangeChange(drawOverlay);
+    requestAnimationFrame(() => { drawOverlay(); requestAnimationFrame(drawOverlay); });
+
     // ResizeObserver — absolute layout: update top+height for all panels + splitters
     const obs = new ResizeObserver(() => {
       if (!wrapRef.current) return;
@@ -973,12 +1149,13 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         if (sp.chart && sp.inner) { try { sp.chart.applyOptions({ width: sp.inner.clientWidth, height: sp.inner.clientHeight }); } catch {} }
       }
       // The T1MO pixel canvas (atlas slot) is sized via CSS; its redraw rescales the buffer.
-      requestAnimationFrame(() => { pixelRedrawRef.current?.(); smcRedrawRef.current?.(); });
+      requestAnimationFrame(() => { pixelRedrawRef.current?.(); smcRedrawRef.current?.(); drawRedrawRef.current?.(); });
     });
     if (wrapRef.current) obs.observe(wrapRef.current);
     chartsRef.current._obs = obs;
   // candles removed — reads via candlesRef.current; panelPct removed — reads via panelPctRef.current
-  }, [theme, activeIndicators, showSignals, subPanels, baseOpts, symbol, chartType]);
+  }, [theme, activeIndicators, showSignals, subPanels, baseOpts, symbol, chartType,
+      compareSymbols, compareData, pineScripts, replayActive, replayIndex]);
 
   // Full chart rebuild — does NOT destroy chart in cleanup (avoids 60ms blank flash).
   // buildCharts() itself destroys old charts at its start.
@@ -1140,10 +1317,84 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       const t1 = t1moCompute({ close: cl, high: hi, low: lo, volume: vo, open: cl, time: ti } as any, {});
       const { scores } = computePixelScores(ind2, t1.meta.ready ? t1 : null, cl);
       pixelScoresRef.current = { scores, nBars: fmtd.length };
-      requestAnimationFrame(() => { pixelRedrawRef.current?.(); smcRedrawRef.current?.(); });
+      requestAnimationFrame(() => { pixelRedrawRef.current?.(); smcRedrawRef.current?.(); drawRedrawRef.current?.(); });
     } catch { /* non-fatal — keep last good scores */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, subPanels]);
+
+  // ── Drawing interaction ─────────────────────────────────────────────────────
+  const DRAW_TOOLS = ['trendline', 'ray', 'hline', 'vline', 'fib'];
+  const isDrawingTool = DRAW_TOOLS.includes(drawingTool);
+
+  const getChartPoint = useCallback((clientX: number, clientY: number) => {
+    const main = chartsRef.current.main; const ser = seriesRef.current.candle; const canvas = drawCanvasRef.current;
+    if (!main || !ser || !canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const time = main.timeScale().coordinateToTime(clientX - rect.left);
+    const price = ser.coordinateToPrice(clientY - rect.top);
+    if (time == null || price == null) return null;
+    return { time: Number(time), price: Number(price) };
+  }, []);
+
+  const onDrawPointerDown = useCallback((e: React.PointerEvent) => {
+    if (!isDrawingTool) return;
+    const pt = getChartPoint(e.clientX, e.clientY); if (!pt) return;
+    const color = '#2962ff';
+    const newId = `dr_${Date.now()}`;
+    if (drawingTool === 'hline' || drawingTool === 'vline') {
+      addDrawing({ id: newId, type: drawingTool as any, points: [pt], color });
+      draftRef.current = null; setDrawingTool('cursor');
+    } else if (!draftRef.current) {
+      draftRef.current = { type: drawingTool, points: [pt] };
+    } else {
+      addDrawing({ id: newId, type: draftRef.current.type as any, points: [draftRef.current.points[0], pt], color });
+      draftRef.current = null; setDrawingTool('cursor');
+    }
+    drawRedrawRef.current?.();
+  }, [isDrawingTool, drawingTool, getChartPoint, addDrawing, setDrawingTool]);
+
+  const onDrawPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!draftRef.current) return;
+    const pt = getChartPoint(e.clientX, e.clientY); if (!pt) return;
+    draftRef.current.points[1] = pt;
+    drawRedrawRef.current?.();
+  }, [getChartPoint]);
+
+  // Escape cancels an in-progress drawing
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && draftRef.current) { draftRef.current = null; drawRedrawRef.current?.(); setDrawCursor(c => c); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Redraw overlay whenever the drawings collection changes (no chart rebuild).
+  useEffect(() => { drawRedrawRef.current?.(); }, [drawings]);
+
+  // Initialize replay index to ~60% of history when replay is switched on.
+  useEffect(() => {
+    if (replayActive && replayIndex < 0) {
+      const total = candlesRef.current?.length || 0;
+      if (total > 10) setReplayIndex(Math.max(5, Math.floor(total * 0.6)));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replayActive]);
+
+  // Replay playback — advance one bar per tick while playing.
+  useEffect(() => {
+    if (!replayActive || !replayPlaying) return;
+    const iv = setInterval(() => {
+      const total = candlesRef.current?.length || 0;
+      const cur = useChartStore.getState().replayIndex;
+      const next = cur < 0 ? Math.floor(total * 0.6) : cur + 1;
+      if (next >= total) { setReplayIndex(total); setReplayPlaying(false); }
+      else setReplayIndex(next);
+    }, 700);
+    return () => clearInterval(iv);
+  }, [replayActive, replayPlaying, setReplayIndex, setReplayPlaying]);
+
+  const replayTotal = candlesRef.current?.length || dataLengthRef.current || 0;
 
   const fmt = (v: number | null | undefined, d = 2) => v != null && !isNaN(v) && isFinite(v) ? Number(v).toFixed(d) : '';
   const isUp = legend ? legend.close >= legend.open : true;
@@ -1194,6 +1445,29 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         {isLoading && <div className="chart-loading"><div className="spinner"/><span>Loading {symbol}...</span></div>}
         <div ref={mainRef} className="chart-panel chart-panel-main">
           <canvas ref={smcCanvasRef} className="smc-overlay-canvas"/>
+          <canvas
+            ref={drawCanvasRef}
+            className={`draw-overlay-canvas${isDrawingTool ? ' active' : ''}`}
+            onPointerDown={onDrawPointerDown}
+            onPointerMove={onDrawPointerMove}
+          />
+          {/* Compare-symbol chips (top-left of the price pane) */}
+          {compareSymbols.length > 0 && (
+            <div className="compare-chips">
+              {compareSymbols.map((cs, i) => (
+                <span key={cs} className="compare-chip" style={{ borderColor: ['#ff9800','#ab47bc','#26c6da','#ec407a'][i % 4] }}>
+                  <span className="compare-dot" style={{ background: ['#ff9800','#ab47bc','#26c6da','#ec407a'][i % 4] }} />
+                  {cs}
+                  <button type="button" className="compare-x" title={`Remove ${cs}`} onClick={() => removeCompareSymbol(cs)}><X size={9} /></button>
+                </span>
+              ))}
+            </div>
+          )}
+          {drawings.length > 0 && (
+            <button type="button" className="draw-clear-btn" title="Clear all drawings" onClick={() => clearDrawings()}>
+              <X size={11} /> {drawings.length}
+            </button>
+          )}
         </div>
         <div ref={spl1Ref} className={`chart-splitter${dragging===0?' dragging':''}`} onMouseDown={e=>startDrag(0,e)}><div className="splitter-line"/><div className="splitter-grip"/></div>
         <div ref={volRef} className="chart-panel chart-panel-vol"><div className="subchart-label2">VOL</div></div>
@@ -1231,6 +1505,28 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           {[{label:'Add Indicator',action:()=>{useChartStore.getState().openIndicatorModal();setCtxMenu(null);}},{label:'Fit Content',action:()=>{chartsRef.current.main?.timeScale().fitContent();setCtxMenu(null);}},null,{label:'Reset Chart',action:()=>{buildCharts();setCtxMenu(null);}}].map((item,i)=>
             item ? <div key={i} className="ctx-menu-item" onClick={item.action}>{item.label}</div> : <div key={i} className="ctx-menu-sep"/>
           )}
+        </div>
+      )}
+
+      {/* ── Bar Replay control bar ── */}
+      {replayActive && (
+        <div className="replay-bar">
+          <span className="replay-label">⏯ REPLAY</span>
+          <button type="button" className="replay-btn" title="Step back"
+            onClick={() => setReplayIndex(Math.max(2, (replayIndex < 0 ? replayTotal : replayIndex) - 1))}>‹‹</button>
+          <button type="button" className={`replay-btn play${replayPlaying ? ' on' : ''}`} title={replayPlaying ? 'Pause' : 'Play'}
+            onClick={() => setReplayPlaying(!replayPlaying)}>{replayPlaying ? '❚❚' : '▶'}</button>
+          <button type="button" className="replay-btn" title="Step forward"
+            onClick={() => setReplayIndex(Math.min(replayTotal, (replayIndex < 0 ? replayTotal : replayIndex) + 1))}>››</button>
+          <input
+            title="Replay position" className="replay-slider" type="range" min={2} max={Math.max(3, replayTotal)}
+            value={replayIndex < 0 ? replayTotal : replayIndex}
+            onChange={e => { setReplayPlaying(false); setReplayIndex(parseInt(e.target.value, 10)); }}
+          />
+          <span className="replay-count mono">{(replayIndex < 0 ? replayTotal : replayIndex)} / {replayTotal}</span>
+          <button type="button" className="replay-exit" title="Exit replay" onClick={() => setReplayActive(false)}>
+            <X size={12} />
+          </button>
         </div>
       )}
 

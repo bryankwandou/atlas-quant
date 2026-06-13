@@ -7,6 +7,7 @@ import { useChartStore } from '@/store/chartStore';
 import { useMarketPrice, useMarketData } from '@/hooks/useMarketData';
 import { clearSession } from '@/lib/atlas-auth';
 import { TZ_ZONES, tzCity, tzOffset } from '@/lib/timezones';
+import PineEditor from '@/components/PineEditor';
 
 interface ChartTemplate { id: string; name: string; chartType: string; activeIndicators: string[]; subPanels: string[]; }
 interface PriceAlert { id: string; symbol: string; price: number; dir: 'above' | 'below'; }
@@ -105,6 +106,8 @@ export default function TopBar() {
     chartType, setChartType, subPanels, setSubPanels,
     superRefresh, toggleSuperRefresh,
     timezone, setTimezone,
+    compareSymbols, addCompareSymbol, removeCompareSymbol,
+    replayActive, setReplayActive,
   } = useChartStore();
   const { priceData } = useMarketPrice(symbol);
   // SINGLE SOURCE OF TRUTH: header price = last chart candle's close (same feed as
@@ -116,6 +119,9 @@ export default function TopBar() {
   const [showTZ, setShowTZ]           = useState(false);
   const [showTpl, setShowTpl]         = useState(false);
   const [showAlerts, setShowAlerts]   = useState(false);
+  const [showCompare, setShowCompare] = useState(false);
+  const [compareInput, setCompareInput] = useState('');
+  const [showPine, setShowPine]       = useState(false);
   const [search, setSearch]           = useState('');
   const [searchResults, setResults]   = useState<any[]>(WATCHLIST_DEFAULTS);
   const [toast, setToast]             = useState('');
@@ -128,6 +134,7 @@ export default function TopBar() {
   const tzRef      = useRef<HTMLDivElement>(null);
   const tplRef     = useRef<HTMLDivElement>(null);
   const alertRef   = useRef<HTMLDivElement>(null);
+  const compareRef = useRef<HTMLDivElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flash = (msg: string) => {
@@ -175,6 +182,14 @@ export default function TopBar() {
     flash(tl(`Alarm ${a.dir === 'above' ? '≥' : '≤'} ${p} dibuat`, `Alert ${a.dir === 'above' ? '≥' : '≤'} ${p} set`));
   };
   const deleteAlert = (id: string) => persistAlerts(alerts.filter(a => a.id !== id));
+
+  const addCompare = (s: string) => {
+    const sym = s.trim().toUpperCase();
+    if (!sym || sym === symbol) return;
+    addCompareSymbol(sym);
+    setCompareInput('');
+    flash(tl(`Bandingkan: ${sym}`, `Compare: ${sym}`));
+  };
 
   const lastC  = candles?.length ? candles[candles.length - 1] : null;
   const prevC  = candles?.length > 1 ? candles[candles.length - 2] : null;
@@ -226,6 +241,9 @@ export default function TopBar() {
       }
       if (alertRef.current && !alertRef.current.contains(e.target as Node)) {
         setShowAlerts(false);
+      }
+      if (compareRef.current && !compareRef.current.contains(e.target as Node)) {
+        setShowCompare(false);
       }
     };
     document.addEventListener('mousedown', h);
@@ -393,14 +411,38 @@ export default function TopBar() {
         <span>{tl('Indikator', 'Indicators')}</span>
       </button>
 
-      <button
-        className="tb-action"
-        title={tl('Bandingkan simbol — segera hadir', 'Compare symbol — coming soon')}
-        onClick={() => flash(tl('Bandingkan: segera hadir', 'Compare: coming soon'))}
-      >
-        <IconCompare size={13} />
-        <span>{tl('Bandingkan', 'Compare')}</span>
-      </button>
+      {/* ── Compare — overlay other symbols as normalized % lines ── */}
+      <div style={{ position: 'relative' }} ref={compareRef}>
+        <button
+          className={`tb-action${compareSymbols.length ? ' tb-action-on' : ''}`}
+          title={tl('Bandingkan simbol', 'Compare symbol')}
+          onClick={() => setShowCompare(v => !v)}
+        >
+          <IconCompare size={13} />
+          <span>{tl('Bandingkan', 'Compare')}{compareSymbols.length ? ` (${compareSymbols.length})` : ''}</span>
+        </button>
+        {showCompare && (
+          <div className="tb-compare-menu">
+            <input
+              className="tb-compare-input"
+              placeholder={tl('Simbol (mis. ETHUSDT) + Enter', 'Symbol (e.g. ETHUSDT) + Enter')}
+              value={compareInput}
+              onChange={e => setCompareInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addCompare(compareInput); }}
+            />
+            {compareSymbols.map(cs => (
+              <button key={cs} type="button" className="tb-compare-item on" onClick={() => removeCompareSymbol(cs)}>
+                <span>✓ {cs}</span><X size={11} />
+              </button>
+            ))}
+            {WATCHLIST_DEFAULTS.filter(w => w.symbol !== symbol && !compareSymbols.includes(w.symbol)).map(w => (
+              <button key={w.symbol} type="button" className="tb-compare-item" onClick={() => addCompare(w.symbol)}>
+                <span>{w.symbol}</span><span style={{ color: 'var(--aq-text2)', fontSize: 10 }}>{w.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* ── Alerts (Peringatan) — real price alerts (localStorage) ── */}
       <div style={{ position: 'relative' }} ref={alertRef}>
@@ -442,9 +484,9 @@ export default function TopBar() {
       </div>
 
       <button
-        className="tb-action"
-        title={tl('Replay bar — segera hadir', 'Bar replay — coming soon')}
-        onClick={() => flash(tl('Replay: segera hadir', 'Replay: coming soon'))}
+        className={`tb-action${replayActive ? ' tb-action-on' : ''}`}
+        title={tl('Replay bar — putar ulang riwayat', 'Bar replay — step through history')}
+        onClick={() => { setReplayActive(!replayActive); if (!replayActive) flash(tl('Mode Replay aktif', 'Replay mode on')); }}
       >
         <IconReplay size={13} />
         <span>Replay</span>
@@ -478,8 +520,8 @@ export default function TopBar() {
 
       <button
         className="tb-action"
-        title={tl('Pine Script editor — segera hadir', 'Pine Script editor — coming soon')}
-        onClick={() => flash(tl('Pine Script: segera hadir', 'Pine Script: coming soon'))}
+        title={tl('Pine-lite editor', 'Pine-lite editor')}
+        onClick={() => setShowPine(true)}
       >
         <IconPineScript size={13} />
         <span>Pine Script</span>
@@ -582,6 +624,7 @@ export default function TopBar() {
       </div>
 
       {toast && <div className="tb-toast">{toast}</div>}
+      <PineEditor open={showPine} onClose={() => setShowPine(false)} />
     </header>
   );
 }
