@@ -101,16 +101,16 @@ function detrendOsc(arr: number[], slowP: number, scale: number): number[] {
 }
 
 /**
- * T1MO Pixel scoring engine — REBUILT (v3) to match `T1MO Pixel Showcase.html`.
+ * T1MO Pixel scoring engine — v7 (2026-06-14). Matches T1MO Pixel Showcase.html.
  *
- * Lesson from v2: an ABSOLUTE bull/bear base saturates to a solid-green wall in a
- * trending market (BBCA.JK). The reference instead OSCILLATES green↔red as hills.
- * v3 fix — everything is a DETRENDED momentum oscillator:
- *   1. each row → real 0..100 bull score
- *   2. shared BASE = detrended-oscillator of the composite (mean of rows) →
- *      smooth hills AND valleys (the reference's signature undulation)
- *   3. each row → its own detrended oscillator (subtle per-row texture)
- *   4. cell = baseHill + (rowOsc−50)·tilt  → coherent oscillating columns
+ * Reference `generatePixel` uses ONE slow random-walk `trend` per column shared by
+ * all 14 rows (+ ±11 per-row noise). Replicating with real data:
+ *  1. MASTER = mean of inherently-oscillating indicators (RSI7, RSI14, MFI, %R) —
+ *     these naturally cycle 0..100 without detrending, exactly like the random walk.
+ *     Double EMA(10) smoothing → slow rounded hills (20–30 bar half-cycle).
+ *  2. PER-ROW scores from all 14 real indicators (raw 0..100 bull scores).
+ *  3. FINAL cell = 0.72·master + 0.28·rowScore → coherent column hills + real tilt.
+ *     TILT kept small so within-column variance stays narrow (like reference ±11 noise).
  */
 function computePixelScores(
   ind: any,
@@ -128,16 +128,17 @@ function computePixelScores(
   const ema50 = ind.ema(50);
   const vwap  = ind.vwap() as number[];
   const mfi   = ind.mfi(14);
-  const wr    = ind.williamsR(14);          // -100..0
-  const bb    = ind.bollingerBands(20, 2);  // percentB ~0..1
-  const adx   = ind.adx(14);                // { adx, plusDI, minusDI }
-  const don   = ind.donchian(20);           // { upper, lower, middle }
-  const atr   = ind.atr(14) as number[];    // for normalizing price-distance rows
+  const wr    = ind.williamsR(14);
+  const bb    = ind.bollingerBands(20, 2);
+  const adx   = ind.adx(14);
+  const don   = ind.donchian(20);
+  const atr   = ind.atr(14) as number[];
   const hmf      = (t1mo?.series?.hmf ?? []) as (number | null)[];
   const bullProb = (t1mo?.series?.bullProb ?? []) as number[];
 
-  // ── Step 1: each row → a real 0..100 bull score ──
   const a = (i: number) => num(atr as any, i, 0) || (closes[i] * 0.01) || 1;
+
+  // ── Step 1: per-row real 0..100 bull scores (identical mapping as before) ──
   const raw: Record<string, number[]> = {
     RSI7:  closes.map((_, i) => num(rsi7, i, 50)),
     RSI14: closes.map((_, i) => num(rsi14, i, 50)),
@@ -158,35 +159,32 @@ function computePixelScores(
     ATLAS: closes.map((_, i) => num(bullProb, i, 50)),
   };
 
-  // Slow-trend period (~13 bars) → momentum cycles every ~20–30 bars → several
-  // ROUNDED hills (not 1–2 blocks, not noisy stripes).
-  const slowP = Math.max(11, Math.min(17, Math.floor(n / 20)));
+  // ── Step 2: MASTER oscillator from pure 0..100 oscillators (inherently cyclical) ──
+  // RSI7, RSI14, MFI, %R(normalized) cycle naturally — no detrending needed,
+  // exactly like the reference's clamped random-walk trend value per column.
+  const oscMean = closes.map((_, i) => {
+    const vals = [
+      num(rsi7, i, NaN),
+      num(rsi14, i, NaN),
+      num(mfi, i, NaN),
+      clampScore(100 + num(wr, i, NaN)),
+    ].filter(v => Number.isFinite(v));
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 50;
+  });
+  // Double EMA(10) → slow drift, rounded hills (half-cycle ~15–25 bars = reference cadence)
+  const masterHills = emaSmooth(emaSmooth(oscMean, 10), 10);
 
-  // ── Step 2: shared BASE = detrended oscillator of composite → smooth rounded hills ──
-  const comp = new Array(n).fill(50);
-  for (let i = 0; i < n; i++) {
-    let s = 0, c = 0;
-    for (const k of PIXEL_ROWS) { const v = raw[k][i]; if (Number.isFinite(v)) { s += v; c++; } }
-    comp[i] = c ? s / c : 50;
-  }
-  // Smooth the composite BEFORE detrending → the base wanders smoothly (passes
-  // gradually through yellow, no harsh flips). scale 14 = gentle, so most cells
-  // sit in the 35–65 yellow/orange band and only reach bright green/red at real
-  // swing extremes (matches the reference's yellow-dominant rounded hills).
-  const compSm = emaSmooth(comp, 4);
-  const baseOsc = emaSmooth(detrendOsc(compSm, slowP, 14), 4).map(clampScore);
-
-  // ── Step 3: each row → its own detrended oscillator (per-row texture) ──
-  const rowOsc: Record<string, number[]> = {};
-  for (const k of PIXEL_ROWS) rowOsc[k] = emaSmooth(detrendOsc(raw[k] ?? new Array(n).fill(50), slowP, 16), 3).map(clampScore);
-
-  // ── Step 4: blend — base sets the hue (smooth hills); row adds per-indicator texture ──
-  const TILT = 0.45;
+  // ── Step 3: blend master with per-row score (small tilt = reference ±11 noise) ──
+  // 0.72 master weight keeps within-column variance tight (all rows same hue per column)
+  // while 0.28 row weight adds the real indicator texture the reference's labels imply.
+  const MASTER_W = 0.72;
+  const ROW_W    = 0.28;
   const scores: Record<string, number[]> = {};
   for (const k of PIXEL_ROWS) {
-    const out = new Array(n);
-    for (let i = 0; i < n; i++) out[i] = clampScore(baseOsc[i] + (rowOsc[k][i] - 50) * TILT);
-    scores[k] = out;
+    const rowSm = emaSmooth(raw[k], 5);
+    scores[k] = masterHills.map((m, i) =>
+      clampScore(m * MASTER_W + rowSm[i] * ROW_W)
+    );
   }
   return { scores, active: new Array(n).fill(true) };
 }
