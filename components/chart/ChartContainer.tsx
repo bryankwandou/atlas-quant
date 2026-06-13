@@ -88,26 +88,16 @@ function emaSmooth(vals: number[], period: number): number[] {
 const sigScore = (x: number) => clampScore(50 + 50 * Math.tanh(x));
 
 /**
- * Detrended momentum oscillator → 0..100. Subtracts a slow EMA (the trend) from
- * the series, normalizes by rolling stdev, and tanh-maps to 0..100. THIS is the
- * key to the reference look: it OSCILLATES (green hills ↔ red valleys) even inside
- * a sustained trend — because it measures momentum *relative to its own trend*,
- * not absolute bull/bear (which just saturates one color in a trend).
+ * Detrended momentum oscillator → 0..100. Subtracts a slow EMA (the trend) and
+ * maps the deviation through a GENTLE fixed-scale tanh. This is the key to the
+ * reference look: it OSCILLATES (green hills ↔ red valleys) even inside a trend
+ * (momentum relative to its own trend, not absolute bull/bear which saturates),
+ * and the fixed scale gives SMOOTH gradual transitions — no harsh binary flips.
+ * `scale` = sensitivity in score-units; larger = gentler / more yellow-dominant.
  */
-function detrendOsc(arr: number[], slowP: number, gain = 1.0): number[] {
-  const n = arr.length;
+function detrendOsc(arr: number[], slowP: number, scale: number): number[] {
   const slow = emaSmooth(arr, slowP);
-  const d = arr.map((v, i) => (Number.isFinite(v) && Number.isFinite(slow[i]) ? v - slow[i] : 0));
-  const win = Math.max(20, slowP);
-  const out = new Array(n).fill(50);
-  let sq = 0; const q: number[] = [];
-  for (let i = 0; i < n; i++) {
-    q.push(d[i] * d[i]); sq += d[i] * d[i];
-    if (q.length > win) sq -= q.shift()!;
-    const sd = Math.sqrt(sq / q.length);
-    out[i] = sigScore(sd > 1e-9 ? (d[i] / (sd * 1.1)) * gain : 0);
-  }
-  return out;
+  return arr.map((v, i) => (Number.isFinite(v) && Number.isFinite(slow[i]) ? sigScore((v - slow[i]) / scale) : 50));
 }
 
 /**
@@ -168,32 +158,28 @@ function computePixelScores(
     ATLAS: closes.map((_, i) => num(bullProb, i, 50)),
   };
 
-  // Slow-trend period → WIDE hills. Larger = wider, smoother hills (fewer, gentler).
-  const slowP = Math.max(16, Math.min(46, Math.floor(n / 11)));
+  // Slow-trend period = SHORT & roughly fixed (~10–15 bars) so momentum oscillates
+  // on a ~15–25 bar cycle → MANY narrow hills (like the reference), not 1–2 wide
+  // blocks. Not scaled to full history (that made it one red + one green block).
+  const slowP = Math.max(9, Math.min(15, Math.floor(n / 24)));
 
-  // Reference band: `trend` is clamped 15..85 and never fully saturates, so the
-  // mosaic is yellow/light-dominant and only reaches bright green/red at the hill
-  // peaks/valleys. We compress our oscillator into the same band.
-  const BAND = 34;                                   // 50 ± 34  →  16..84  (≈ reference 15..85)
-  const compress = (v: number) => 50 + (v - 50) / 50 * BAND;
-
-  // ── Step 2: shared BASE = detrended oscillator of composite, HEAVILY smoothed ──
+  // ── Step 2: shared BASE = detrended oscillator of composite → multiple smooth hills ──
   const comp = new Array(n).fill(50);
   for (let i = 0; i < n; i++) {
     let s = 0, c = 0;
     for (const k of PIXEL_ROWS) { const v = raw[k][i]; if (Number.isFinite(v)) { s += v; c++; } }
     comp[i] = c ? s / c : 50;
   }
-  // gain 0.8 (gentle, mostly mid-range) → detrend → smooth ~slowP/2 (wide hills) → compress.
-  const baseSmoothP = Math.max(6, Math.floor(slowP / 2));
-  const baseOsc = emaSmooth(detrendOsc(comp, slowP, 0.8), baseSmoothP).map(v => clampScore(compress(v)));
+  // scale 9 (gentle → yellow-dominant, bright only at swing extremes); light EMA(3)
+  // keeps the hills smooth without merging them into blocks.
+  const baseOsc = emaSmooth(detrendOsc(comp, slowP, 9), 3).map(clampScore);
 
-  // ── Step 3: each row → its own detrended oscillator, smoothed (per-row texture) ──
+  // ── Step 3: each row → its own detrended oscillator (per-row texture) ──
   const rowOsc: Record<string, number[]> = {};
-  for (const k of PIXEL_ROWS) rowOsc[k] = emaSmooth(detrendOsc(raw[k] ?? new Array(n).fill(50), slowP, 0.7), 4).map(clampScore);
+  for (const k of PIXEL_ROWS) rowOsc[k] = emaSmooth(detrendOsc(raw[k] ?? new Array(n).fill(50), slowP, 11), 3).map(clampScore);
 
-  // ── Step 4: blend — base sets the hue (smooth wide hills); row adds ±~11 texture ──
-  const TILT = 0.32;                                 // ±~11 around base, matching reference noise
+  // ── Step 4: blend — base sets the hue (smooth hills); row adds per-indicator texture ──
+  const TILT = 0.4;
   const scores: Record<string, number[]> = {};
   for (const k of PIXEL_ROWS) {
     const out = new Array(n);
