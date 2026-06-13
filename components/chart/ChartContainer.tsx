@@ -158,28 +158,30 @@ function computePixelScores(
     ATLAS: closes.map((_, i) => num(bullProb, i, 50)),
   };
 
-  // Slow-trend period = SHORT & roughly fixed (~10–15 bars) so momentum oscillates
-  // on a ~15–25 bar cycle → MANY narrow hills (like the reference), not 1–2 wide
-  // blocks. Not scaled to full history (that made it one red + one green block).
-  const slowP = Math.max(9, Math.min(15, Math.floor(n / 24)));
+  // Slow-trend period (~13 bars) → momentum cycles every ~20–30 bars → several
+  // ROUNDED hills (not 1–2 blocks, not noisy stripes).
+  const slowP = Math.max(11, Math.min(17, Math.floor(n / 20)));
 
-  // ── Step 2: shared BASE = detrended oscillator of composite → multiple smooth hills ──
+  // ── Step 2: shared BASE = detrended oscillator of composite → smooth rounded hills ──
   const comp = new Array(n).fill(50);
   for (let i = 0; i < n; i++) {
     let s = 0, c = 0;
     for (const k of PIXEL_ROWS) { const v = raw[k][i]; if (Number.isFinite(v)) { s += v; c++; } }
     comp[i] = c ? s / c : 50;
   }
-  // scale 9 (gentle → yellow-dominant, bright only at swing extremes); light EMA(3)
-  // keeps the hills smooth without merging them into blocks.
-  const baseOsc = emaSmooth(detrendOsc(comp, slowP, 9), 3).map(clampScore);
+  // Smooth the composite BEFORE detrending → the base wanders smoothly (passes
+  // gradually through yellow, no harsh flips). scale 14 = gentle, so most cells
+  // sit in the 35–65 yellow/orange band and only reach bright green/red at real
+  // swing extremes (matches the reference's yellow-dominant rounded hills).
+  const compSm = emaSmooth(comp, 4);
+  const baseOsc = emaSmooth(detrendOsc(compSm, slowP, 14), 4).map(clampScore);
 
   // ── Step 3: each row → its own detrended oscillator (per-row texture) ──
   const rowOsc: Record<string, number[]> = {};
-  for (const k of PIXEL_ROWS) rowOsc[k] = emaSmooth(detrendOsc(raw[k] ?? new Array(n).fill(50), slowP, 11), 3).map(clampScore);
+  for (const k of PIXEL_ROWS) rowOsc[k] = emaSmooth(detrendOsc(raw[k] ?? new Array(n).fill(50), slowP, 16), 3).map(clampScore);
 
   // ── Step 4: blend — base sets the hue (smooth hills); row adds per-indicator texture ──
-  const TILT = 0.4;
+  const TILT = 0.45;
   const scores: Record<string, number[]> = {};
   for (const k of PIXEL_ROWS) {
     const out = new Array(n);
