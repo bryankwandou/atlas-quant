@@ -603,7 +603,7 @@ function _bandarAD(highs: number[], lows: number[], closes: number[], volumes: n
  *  rolling magnitude so the score stays vivid. >55 accumulation, <45 distribution. */
 function _bandarDetector(opens: number[], highs: number[], lows: number[], closes: number[], volumes: number[], look = 8) {
   const n = closes.length;
-  const { cvd } = _cvd(opens, highs, lows, closes, volumes);
+  const { cvd, delta } = _cvd(opens, highs, lows, closes, volumes);
   const ad  = _accumDist(highs, lows, closes, volumes);
   const obv = _obv(closes, volumes);
   const cmf = _cmf(highs, lows, closes, volumes, 20);
@@ -623,18 +623,41 @@ function _bandarDetector(opens: number[], highs: number[], lows: number[], close
     return out;
   };
 
+  // True range — used to normalize price moves for the divergence term.
+  const tr = closes.map((_, i) => i === 0 ? (highs[i] - lows[i])
+    : Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1])));
+
+  // Price ↔ CVD divergence over a swing window — the strongest "bandar" tell:
+  //  price falling while CVD holds/rises = hidden ACCUMULATION (smart money buying
+  //  the dip); price rising while CVD falls = hidden DISTRIBUTION (selling the rally).
+  const dWin = Math.max(10, look * 3);
+  const diverg = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    const j = Math.max(0, i - dWin);
+    let trSum = 1e-9, dSum = 1e-9;
+    for (let k = j + 1; k <= i; k++) { trSum += tr[k]; dSum += Math.abs(delta[k]); }
+    const pMove = Math.max(-1, Math.min(1, (closes[i] - closes[j]) / trSum)); // -1..1 (in ATRs)
+    const cMove = Math.max(-1, Math.min(1, (cvd[i] - cvd[j]) / dSum));        // -1..1 (in net flow)
+    // flow stronger than price → accumulation (+); price stronger than flow → distribution (−)
+    diverg[i] = Math.max(-1, Math.min(1, cMove - pMove));
+  }
+
   const sCvd = normSlope(cvd), sAd = normSlope(ad), sObv = normSlope(obv);
   const score: number[] = [], phase: string[] = [];
   for (let i = 0; i < n; i++) {
     const cmfN = Math.max(-1, Math.min(1, (cmf[i] || 0) * 4));         // ~-1..1
     const mfiN = Math.max(-1, Math.min(1, ((mfi[i] || 50) - 50) / 50)); // -1..1
-    const blend = 0.3 * sCvd[i] + 0.25 * sAd[i] + 0.15 * sObv[i] + 0.15 * cmfN + 0.15 * mfiN;
-    const sc = Math.max(0, Math.min(100, 50 + blend * 50));
+    const blend = 0.26 * sCvd[i] + 0.16 * sAd[i] + 0.12 * sObv[i]
+                + 0.12 * cmfN + 0.10 * mfiN + 0.24 * diverg[i];
+    // tanh → decisive (saturates toward 0/100 on conviction) instead of hugging 50.
+    const sc = Math.max(0, Math.min(100, 50 + 50 * Math.tanh(blend * 1.9)));
     score.push(sc);
     const up = closes[i] >= (closes[Math.max(0, i - look)] ?? closes[i]);
     phase.push(sc >= 55 ? (up ? 'MARKUP' : 'AKUMULASI') : sc <= 45 ? (up ? 'DISTRIBUSI' : 'MARKDOWN') : 'NETRAL');
   }
-  return { score, phase, signal: _ema(score, 9) };
+  // Light 3-bar smoothing keeps the histogram readable without dulling turns.
+  const smooth = _ema(score, 3);
+  return { score: smooth, phase, signal: _ema(score, 9) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

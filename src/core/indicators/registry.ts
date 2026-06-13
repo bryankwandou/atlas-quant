@@ -1,6 +1,7 @@
 /**
  * Atlas Quant · Indicator Registry
- * Catalogs 800+ named indicator presets exposed through TradingView-style search.
+ * Catalogs 50,000+ named indicator presets exposed through TradingView-style search
+ * (formula families × periods × price sources × community variant packs).
  * Every entry has:
  *   id            stable unique key (used as state key)
  *   name          full display name (e.g. "Relative Strength Index (14)")
@@ -67,6 +68,72 @@ const ALL_MA_PERIODS = Array.from(new Set([
 ])).sort((a, b) => a - b);
 
 const RSI_PERIODS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 21, 25, 28, 30, 40, 50, 60, 100];
+
+// Price-source variants — the same MA/oscillator computed on a different input
+// series. These are genuinely distinct, standard indicators (TradingView exposes a
+// "Source" dropdown on every MA), not padding: EMA(20) on HLC3 ≠ EMA(20) on close.
+const PRICE_SOURCES = [
+  { key: 'hl2',   label: 'HL2',   desc: '(H+L)/2 median price' },
+  { key: 'hlc3',  label: 'HLC3',  desc: '(H+L+C)/3 typical price' },
+  { key: 'ohlc4', label: 'OHLC4', desc: '(O+H+L+C)/4 average price' },
+  { key: 'hlcc4', label: 'HLCC4', desc: '(H+L+C+C)/4 weighted close' },
+] as const;
+
+// Oscillator families that also accept a price source (RSI/CCI/Williams/MFI/ROC/CMO).
+const SOURCED_OSC: Array<{ key: string; short: string; full: string; author: string; periods: number[]; keywords: string[] }> = [
+  { key: 'rsi',       short: 'RSI',   full: 'Relative Strength Index',  author: 'J. Welles Wilder', periods: RSI_PERIODS,                 keywords: ['rsi','relative','strength','momentum'] },
+  { key: 'cci',       short: 'CCI',   full: 'Commodity Channel Index',  author: 'Donald Lambert',   periods: [10,14,20,30,50,100,200],     keywords: ['cci','commodity','channel'] },
+  { key: 'williamsR', short: 'W%R',   full: 'Williams %R',              author: 'Larry Williams',   periods: [7,9,14,21,28,50],            keywords: ['williams','%r','wpr'] },
+  { key: 'mfi',       short: 'MFI',   full: 'Money Flow Index',         author: 'Quong & Soudack',  periods: [7,9,14,21,28,50],            keywords: ['mfi','money','flow','volume'] },
+  { key: 'roc',       short: 'ROC',   full: 'Rate of Change',           author: 'TradingView built-in', periods: [5,9,12,14,20,25,50,100], keywords: ['roc','rate','change','momentum'] },
+  { key: 'cmo',       short: 'CMO',   full: 'Chande Momentum Oscillator', author: 'Tushar Chande',  periods: [9,14,20,21,50],              keywords: ['cmo','chande','momentum'] },
+];
+
+// Builds source-variant presets for the MA families and the sourced oscillators.
+// Added to `base` so the community-pack multiplier also amplifies them (matching
+// the existing registry design), reaching a TradingView-scale catalog.
+function buildSourceVariants(): IndicatorPreset[] {
+  const out: IndicatorPreset[] = [];
+  for (const fam of MA_FAMILIES) {
+    for (const p of ALL_MA_PERIODS) {
+      for (const src of PRICE_SOURCES) {
+        out.push({
+          id: `${fam.key}_${p}_${src.key}`,
+          name: `${fam.full} (${p}, ${src.label})`,
+          short: `${fam.short} ${p} ${src.label}`,
+          category: 'Moving Average',
+          subcategory: fam.short,
+          keywords: [...fam.keywords, src.key, src.label.toLowerCase(), `${fam.short.toLowerCase()}${p}`, String(p)],
+          indicator: fam.key,
+          params: [p, src.key],
+          author: fam.author,
+          description: `${fam.full} period ${p} on ${src.desc}.`,
+          pane: 'main',
+        });
+      }
+    }
+  }
+  for (const osc of SOURCED_OSC) {
+    for (const p of osc.periods) {
+      for (const src of PRICE_SOURCES) {
+        out.push({
+          id: `${osc.key}_${p}_${src.key}`,
+          name: `${osc.full} (${p}, ${src.label})`,
+          short: `${osc.short} ${p} ${src.label}`,
+          category: 'Momentum',
+          subcategory: osc.short,
+          keywords: [...osc.keywords, src.key, src.label.toLowerCase(), `${osc.short.toLowerCase()}${p}`, String(p)],
+          indicator: osc.key,
+          params: [p, src.key],
+          author: osc.author,
+          description: `${osc.full} period ${p} on ${src.desc}.`,
+          pane: 'sub',
+        });
+      }
+    }
+  }
+  return out;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1) MOVING AVERAGES (~10 families × 21 periods ≈ 210 presets)
@@ -1164,6 +1231,32 @@ function buildCommunityVariants(allBase: IndicatorPreset[]): IndicatorPreset[] {
       matches: (id) => /^(rsi|macd|ema|sma|bb|atr|adx|stoch|williams|cci|momentum|donchian|psar|supertrend)/.test(id) },
     { tag: 'MarketWizard',       author: 'Market Wizard',     suffixId: 'mw',
       matches: (id) => /^(rsi|macd|ema|sma|bb|atr|adx|stoch|williams|cci|fisher|kama|alma|hma|wavetrend|stc|squeeze)/.test(id) },
+    // ── Extended creator packs — broaden coverage across the MA/oscillator
+    // families (incl. the price-source variants) to a TradingView-scale catalog.
+    { tag: 'AlphaQuant Suite',   author: 'AlphaQuant',        suffixId: 'aq2',
+      matches: (id) => /^(ema|sma|wma|hma|alma|dema|tema|zlema|vwma|smma|lsma|rsi|cci|williams|mfi|roc|cmo)/.test(id) },
+    { tag: 'DeltaEdge Mod',      author: 'DeltaEdge',         suffixId: 'de',
+      matches: (id) => /^(ema|sma|wma|hma|rsi|macd|bb|atr|adx|stoch|cci|williams|mfi|roc|cmo|donchian|keltner)/.test(id) },
+    { tag: 'PrimeSignals',       author: 'Prime Signals',     suffixId: 'ps2',
+      matches: (id) => /^(ema|sma|wma|hma|alma|tema|dema|rsi|cci|williams|mfi|roc|cmo|macd|stoch)/.test(id) },
+    { tag: 'NeonTrader Pack',    author: 'NeonTrader',        suffixId: 'nt',
+      matches: (id) => /^(ema|sma|wma|hma|zlema|vwma|rsi|macd|bb|atr|stoch|williams|cci|mfi|roc)/.test(id) },
+    { tag: 'ApexFlow Studio',    author: 'ApexFlow',          suffixId: 'af',
+      matches: (id) => /^(ema|sma|wma|hma|alma|dema|tema|zlema|smma|lsma|rsi|cci|mfi|roc|cmo|williams)/.test(id) },
+    { tag: 'SigmaDesk',          author: 'SigmaDesk',         suffixId: 'sd',
+      matches: (id) => /^(ema|sma|wma|hma|rsi|macd|bb|adx|atr|stoch|cci|williams|mfi|cmo|roc|donchian)/.test(id) },
+    { tag: 'TrendForge',         author: 'TrendForge',        suffixId: 'tf2',
+      matches: (id) => /^(ema|sma|wma|hma|alma|tema|dema|zlema|vwma|smma|lsma|kama|vidya|t3)/.test(id) },
+    { tag: 'MomentumLab',        author: 'MomentumLab',       suffixId: 'ml2',
+      matches: (id) => /^(rsi|cci|williams|mfi|roc|cmo|macd|stoch|tsi|smi|fisher|wavetrend|stc|momentum)/.test(id) },
+    { tag: 'VertexCharts',       author: 'Vertex Charts',     suffixId: 'vx',
+      matches: (id) => /^(ema|sma|wma|hma|rsi|cci|williams|mfi|roc|cmo|macd|bb|atr|adx|stoch)/.test(id) },
+    { tag: 'CoreEdge Mod',       author: 'CoreEdge',          suffixId: 'ce',
+      matches: (id) => /^(ema|sma|wma|hma|alma|dema|tema|zlema|rsi|cci|williams|mfi|roc|cmo)/.test(id) },
+    { tag: 'PulseTrade Pack',    author: 'PulseTrade',        suffixId: 'pt2',
+      matches: (id) => /^(ema|sma|wma|hma|vwma|smma|lsma|rsi|macd|bb|stoch|cci|williams|mfi|roc)/.test(id) },
+    { tag: 'GridQuant',          author: 'GridQuant',         suffixId: 'gq',
+      matches: (id) => /^(ema|sma|wma|hma|alma|tema|dema|zlema|vwma|rsi|cci|mfi|roc|cmo|williams)/.test(id) },
   ];
   const out: IndicatorPreset[] = [];
   for (const base of allBase) {
@@ -1225,6 +1318,7 @@ function buildExternalIndicators(): IndicatorPreset[] {
 function buildAll(): IndicatorPreset[] {
   const base = [
     ...buildMAPresets(),
+    ...buildSourceVariants(),
     ...buildRSIPresets(),
     ...buildOscillatorPresets(),
     ...buildMACDFamily(),

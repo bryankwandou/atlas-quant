@@ -680,7 +680,16 @@ select{cursor:pointer;}
 .sb-regime-label.neutral{color:var(--aq-neutral)!important;}
 .sb-warning{color:var(--aq-neutral);font-size:9px;white-space:nowrap;opacity:.9;}
 .sb-tz-btn{background:var(--aq-bg3);border:1px solid var(--aq-border);border-radius:3px;color:var(--aq-text2);font-size:9px;padding:1px 5px;cursor:pointer;font-family:'Roboto Mono',monospace;transition:all .12s;}
-.sb-tz-btn:hover{color:var(--aq-blue);border-color:var(--aq-blue);background:var(--aq-blue-light);}
+.sb-tz-btn:hover,.sb-tz-btn.open{color:var(--aq-blue);border-color:var(--aq-blue);background:var(--aq-blue-light);}
+/* ── TradingView-style timezone picker ──────────────────────── */
+.sb-tz-wrap{position:relative;display:flex;align-items:center;}
+.sb-tz-menu{position:absolute;right:0;bottom:calc(100% + 4px);width:208px;max-height:340px;overflow-y:auto;background:var(--aq-bg2);border:1px solid var(--aq-border2);border-radius:6px;box-shadow:0 -8px 28px rgba(0,0,0,.45);z-index:200;padding:4px;scrollbar-width:thin;}
+.sb-tz-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:4px 8px;border-radius:4px;font-size:11px;color:var(--aq-text);cursor:pointer;transition:background .1s;background:transparent;border:none;}
+.sb-tz-item:hover{background:var(--aq-bg3);}
+.sb-tz-item.active{background:var(--aq-blue-light);}
+.sb-tz-item.active .sb-tz-city{color:var(--aq-blue);font-weight:700;}
+.sb-tz-off{flex-shrink:0;width:62px;font-family:'Roboto Mono',monospace;font-size:9px;color:var(--aq-text3);}
+.sb-tz-city{color:var(--aq-text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
 /* ── Suppress LWC TradingView attribution watermark ─────── */
 .chart-panel a[href*="tradingview"],
