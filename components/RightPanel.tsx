@@ -674,7 +674,7 @@ export default function RightPanel() {
                     { label: 'Top Box', val: tv ? fmt(tv.topBox, 2)       : '—',  pct: tv ? pf(pct(tv.topBox))    : '',           color: '#ff6f00', col: tv ? (pct(tv.topBox) >= 0 ? 'down' : 'up') : '' },
                     { label: 'Btm Box', val: tv ? fmt(tv.btmBox, 2)       : '—',  pct: tv ? pf(pct(tv.btmBox))    : '',           color: '#795548', col: tv ? (pct(tv.btmBox) >= 0 ? 'down' : 'up') : '' },
                     { label: 'Magenta', val: tv ? fmt(tv.magenta, 2)      : '—',  pct: tv ? pf(pct(tv.magenta))   : '',           color: '#e91e63', col: tv ? (pct(tv.magenta) >= 0 ? 'down' : 'up') : '' },
-                    { label: 'Lautar',  val: tv ? fmt(tv.backbone, 2)     : '—',  pct: tv ? pf(pct(tv.backbone))  : '',           color: '#1976d2', col: tv ? (pct(tv.backbone) >= 0 ? 'down' : 'up') : '' },
+                    { label: 'Backbone', val: tv ? fmt(tv.backbone, 2)    : '—',  pct: tv ? pf(pct(tv.backbone))  : '',           color: '#1976d2', col: tv ? (pct(tv.backbone) >= 0 ? 'down' : 'up') : '' },
                     { label: 'PS',      val: tv ? `${tv.ps}`              : '—',  pct: tv ? pf(tv.distPct)        : '',           color: '#26a69a', col: tv ? (tv.distPct >= 0 ? 'up' : 'down') : '' },
                     { label: 'PD',      val: tv ? fmt(tv.pd, 2)           : '—',  pct: '',                                       color: '#ab47bc', col: '' },
                     { label: 'VWAP',    val: iv  ? fmt(iv.vwap, 2)        : '—',  pct: iv ? pf(pct(iv.vwap))      : '',           color: '#00bcd4', col: iv ? (pct(iv.vwap) >= 0 ? 'down' : 'up') : '' },

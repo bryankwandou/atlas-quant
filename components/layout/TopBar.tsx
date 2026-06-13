@@ -6,6 +6,10 @@ import { useLanguage } from '@/hooks/useLanguage';
 import { useChartStore } from '@/store/chartStore';
 import { useMarketPrice, useMarketData } from '@/hooks/useMarketData';
 import { clearSession } from '@/lib/atlas-auth';
+import { TZ_ZONES, tzCity, tzOffset } from '@/lib/timezones';
+
+interface ChartTemplate { id: string; name: string; chartType: string; activeIndicators: string[]; subPanels: string[]; }
+interface PriceAlert { id: string; symbol: string; price: number; dir: 'above' | 'below'; }
 
 // ── Inline SVG icons matching ATLAS-QUANT DARURAT HUKUM icon set ──────────────
 const IconAtlas = ({ size = 18 }: { size?: number }) => (
@@ -82,12 +86,6 @@ const TF_GROUPS = [
   { g: 'months',  tfs: ['1M', '3M', '6M', '12M'] },
 ];
 
-const TZ_OPTIONS = [
-  { id: 'utc',    label: 'UTC +0' },
-  { id: 'gmt+7',  label: 'GMT+7 (WIB)' },
-  { id: 'local',  label: 'Local' },
-] as const;
-
 const WATCHLIST_DEFAULTS = [
   { symbol: 'BTCUSDT',  name: 'Bitcoin',  exchange: 'BINANCE' },
   { symbol: 'ETHUSDT',  name: 'Ethereum', exchange: 'BINANCE' },
@@ -103,7 +101,8 @@ export default function TopBar() {
   const { lang, toggle: toggleLang } = useLanguage();
   const {
     symbol, timeframe, setSymbol, setTimeframe,
-    activeIndicators, openIndicatorModal,
+    activeIndicators, openIndicatorModal, setActiveIndicators,
+    chartType, setChartType, subPanels, setSubPanels,
     superRefresh, toggleSuperRefresh,
     timezone, setTimezone,
   } = useChartStore();
@@ -115,12 +114,67 @@ export default function TopBar() {
   const [showSym, setShowSym]         = useState(false);
   const [showTF, setShowTF]           = useState(false);
   const [showTZ, setShowTZ]           = useState(false);
+  const [showTpl, setShowTpl]         = useState(false);
+  const [showAlerts, setShowAlerts]   = useState(false);
   const [search, setSearch]           = useState('');
   const [searchResults, setResults]   = useState<any[]>(WATCHLIST_DEFAULTS);
+  const [toast, setToast]             = useState('');
+  const [templates, setTemplates]     = useState<ChartTemplate[]>([]);
+  const [alerts, setAlerts]           = useState<PriceAlert[]>([]);
+  const [alertPrice, setAlertPrice]   = useState('');
   const searchRef  = useRef<HTMLInputElement>(null);
   const symRef     = useRef<HTMLDivElement>(null);
   const tfRef      = useRef<HTMLDivElement>(null);
   const tzRef      = useRef<HTMLDivElement>(null);
+  const tplRef     = useRef<HTMLDivElement>(null);
+  const alertRef   = useRef<HTMLDivElement>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flash = (msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(''), 2600);
+  };
+
+  // Load saved templates + alerts from localStorage once
+  useEffect(() => {
+    try { setTemplates(JSON.parse(localStorage.getItem('atlas_templates') || '[]')); } catch {}
+    try { setAlerts(JSON.parse(localStorage.getItem('atlas_alerts') || '[]')); } catch {}
+  }, []);
+
+  const persistTemplates = (next: ChartTemplate[]) => {
+    setTemplates(next);
+    try { localStorage.setItem('atlas_templates', JSON.stringify(next)); } catch {}
+  };
+  const persistAlerts = (next: PriceAlert[]) => {
+    setAlerts(next);
+    try { localStorage.setItem('atlas_alerts', JSON.stringify(next)); } catch {}
+  };
+
+  const saveTemplate = () => {
+    const name = `${symbol} · ${timeframe} · ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+    const tpl: ChartTemplate = { id: `tpl_${Date.now()}`, name, chartType, activeIndicators: [...activeIndicators], subPanels: [...subPanels] };
+    persistTemplates([tpl, ...templates].slice(0, 20));
+    flash(tl('Template tersimpan', 'Template saved'));
+  };
+  const applyTemplate = (t: ChartTemplate) => {
+    setChartType(t.chartType);
+    setActiveIndicators(t.activeIndicators);
+    setSubPanels(t.subPanels);
+    setShowTpl(false);
+    flash(tl(`Terapkan: ${t.name}`, `Applied: ${t.name}`));
+  };
+  const deleteTemplate = (id: string) => persistTemplates(templates.filter(t => t.id !== id));
+
+  const addAlert = () => {
+    const p = parseFloat(alertPrice);
+    if (!Number.isFinite(p) || p <= 0) { flash(tl('Harga tidak valid', 'Invalid price')); return; }
+    const a: PriceAlert = { id: `al_${Date.now()}`, symbol, price: p, dir: p >= price ? 'above' : 'below' };
+    persistAlerts([a, ...alerts]);
+    setAlertPrice('');
+    flash(tl(`Alarm ${a.dir === 'above' ? '≥' : '≤'} ${p} dibuat`, `Alert ${a.dir === 'above' ? '≥' : '≤'} ${p} set`));
+  };
+  const deleteAlert = (id: string) => persistAlerts(alerts.filter(a => a.id !== id));
 
   const lastC  = candles?.length ? candles[candles.length - 1] : null;
   const prevC  = candles?.length > 1 ? candles[candles.length - 2] : null;
@@ -167,10 +221,34 @@ export default function TopBar() {
       if (tzRef.current && !tzRef.current.contains(e.target as Node)) {
         setShowTZ(false);
       }
+      if (tplRef.current && !tplRef.current.contains(e.target as Node)) {
+        setShowTpl(false);
+      }
+      if (alertRef.current && !alertRef.current.contains(e.target as Node)) {
+        setShowAlerts(false);
+      }
     };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
+
+  // Fire price alerts when the live price crosses a target, then clear them.
+  useEffect(() => {
+    if (!price || !alerts.length) return;
+    const hit = alerts.filter(a => a.symbol === symbol &&
+      (a.dir === 'above' ? price >= a.price : price <= a.price));
+    if (!hit.length) return;
+    for (const a of hit) {
+      flash(`🔔 ${a.symbol} ${a.dir === 'above' ? '≥' : '≤'} ${a.price} (${fmt(price)})`);
+      try {
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          new Notification('ATLAS-QUANT', { body: `${a.symbol} ${a.dir === 'above' ? '≥' : '≤'} ${a.price}` });
+        }
+      } catch {}
+    }
+    persistAlerts(alerts.filter(a => !hit.includes(a)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [price, alerts, symbol]);
 
   const selectSym = (s: string) => { setSymbol(s); setShowSym(false); setSearch(''); };
   const fmt = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
@@ -315,27 +393,94 @@ export default function TopBar() {
         <span>{tl('Indikator', 'Indicators')}</span>
       </button>
 
-      <button className="tb-action" title={tl('Bandingkan', 'Compare')}>
+      <button
+        className="tb-action"
+        title={tl('Bandingkan simbol — segera hadir', 'Compare symbol — coming soon')}
+        onClick={() => flash(tl('Bandingkan: segera hadir', 'Compare: coming soon'))}
+      >
         <IconCompare size={13} />
         <span>{tl('Bandingkan', 'Compare')}</span>
       </button>
 
-      <button className="tb-action" title={tl('Peringatan', 'Alerts')}>
-        <Bell size={13} />
-        <span>{tl('Peringatan', 'Alerts')}</span>
-      </button>
+      {/* ── Alerts (Peringatan) — real price alerts (localStorage) ── */}
+      <div style={{ position: 'relative' }} ref={alertRef}>
+        <button
+          className={`tb-action${alerts.length ? ' tb-action-on' : ''}`}
+          title={tl('Peringatan harga', 'Price alerts')}
+          onClick={() => { setShowAlerts(v => !v); try { Notification?.requestPermission?.(); } catch {} }}
+        >
+          <Bell size={13} />
+          <span>{tl('Peringatan', 'Alerts')}{alerts.length ? ` (${alerts.length})` : ''}</span>
+        </button>
+        {showAlerts && (
+          <div className="tb-menu tb-menu-wide">
+            <div className="tb-menu-head">{tl('Alarm harga', 'Price alerts')} · {symbol}</div>
+            <div className="tb-alert-add">
+              <input
+                className="tb-alert-input"
+                type="number"
+                inputMode="decimal"
+                placeholder={tl(`Harga (skrg ${fmt(price)})`, `Price (now ${fmt(price)})`)}
+                value={alertPrice}
+                onChange={e => setAlertPrice(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addAlert(); }}
+              />
+              <button type="button" className="tb-alert-add-btn" onClick={addAlert}>+ {tl('Tambah', 'Add')}</button>
+            </div>
+            {alerts.filter(a => a.symbol === symbol).length === 0 && (
+              <div className="tb-menu-empty">{tl('Belum ada alarm', 'No alerts yet')}</div>
+            )}
+            {alerts.filter(a => a.symbol === symbol).map(a => (
+              <div key={a.id} className="tb-menu-row">
+                <span className={`tb-alert-dir ${a.dir}`}>{a.dir === 'above' ? '▲ ≥' : '▼ ≤'}</span>
+                <span className="tb-alert-px">{fmt(a.price)}</span>
+                <button type="button" className="tb-menu-del" onClick={() => deleteAlert(a.id)} title="Delete"><X size={11} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-      <button className="tb-action" title="Replay">
+      <button
+        className="tb-action"
+        title={tl('Replay bar — segera hadir', 'Bar replay — coming soon')}
+        onClick={() => flash(tl('Replay: segera hadir', 'Replay: coming soon'))}
+      >
         <IconReplay size={13} />
         <span>Replay</span>
       </button>
 
-      <button className="tb-action" title="Template">
-        <IconTemplate size={13} />
-        <span>Template</span>
-      </button>
+      {/* ── Template — save / apply current chart layout (localStorage) ── */}
+      <div style={{ position: 'relative' }} ref={tplRef}>
+        <button className="tb-action" title={tl('Simpan / muat layout', 'Save / load layout')} onClick={() => setShowTpl(v => !v)}>
+          <IconTemplate size={13} />
+          <span>Template</span>
+        </button>
+        {showTpl && (
+          <div className="tb-menu tb-menu-wide">
+            <button type="button" className="tb-menu-save" onClick={saveTemplate}>
+              💾 {tl('Simpan layout saat ini', 'Save current layout')}
+            </button>
+            {templates.length === 0 && (
+              <div className="tb-menu-empty">{tl('Belum ada template', 'No templates yet')}</div>
+            )}
+            {templates.map(t => (
+              <div key={t.id} className="tb-menu-row">
+                <button type="button" className="tb-menu-apply" onClick={() => applyTemplate(t)} title={tl('Terapkan', 'Apply')}>
+                  {t.name}
+                </button>
+                <button type="button" className="tb-menu-del" onClick={() => deleteTemplate(t.id)} title="Delete"><X size={11} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-      <button className="tb-action" title="Pine Script">
+      <button
+        className="tb-action"
+        title={tl('Pine Script editor — segera hadir', 'Pine Script editor — coming soon')}
+        onClick={() => flash(tl('Pine Script: segera hadir', 'Pine Script: coming soon'))}
+      >
         <IconPineScript size={13} />
         <span>Pine Script</span>
       </button>
@@ -383,31 +528,25 @@ export default function TopBar() {
           >
             <Globe size={11} />
             <span style={{ fontSize: 10, fontWeight: 600 }}>
-              {TZ_OPTIONS.find(o => o.id === timezone)?.label ?? 'UTC +0'}
+              {tzOffset(timezone || 'local')}
             </span>
           </button>
           {showTZ && (
-            <div style={{
-              position: 'absolute', top: '100%', right: 0, marginTop: 4,
-              background: 'var(--aq-bg2)', border: '1px solid var(--aq-border)',
-              borderRadius: 6, zIndex: 999, minWidth: 130, boxShadow: '0 4px 16px rgba(0,0,0,.4)',
-            }}>
-              {TZ_OPTIONS.map(opt => (
-                <div
-                  key={opt.id}
-                  onClick={() => { setTimezone(opt.id); setShowTZ(false); }}
-                  style={{
-                    padding: '7px 14px', fontSize: 11, cursor: 'pointer',
-                    color: timezone === opt.id ? 'var(--aq-accent)' : 'var(--aq-text)',
-                    fontWeight: timezone === opt.id ? 700 : 400,
-                    background: timezone === opt.id ? 'rgba(123,97,255,.1)' : 'transparent',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(123,97,255,.08)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = timezone === opt.id ? 'rgba(123,97,255,.1)' : 'transparent')}
-                >
-                  {opt.label}
-                </div>
-              ))}
+            <div className="tb-tz-menu">
+              {TZ_ZONES.map(z => {
+                const active = (timezone || 'local') === z;
+                return (
+                  <button
+                    key={z}
+                    type="button"
+                    className={`tb-tz-item${active ? ' active' : ''}`}
+                    onClick={() => { setTimezone(z); setShowTZ(false); }}
+                  >
+                    <span className="tb-tz-off">{tzOffset(z)}</span>
+                    <span className="tb-tz-city">{tzCity(z)}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -442,6 +581,7 @@ export default function TopBar() {
         </button>
       </div>
 
+      {toast && <div className="tb-toast">{toast}</div>}
     </header>
   );
 }

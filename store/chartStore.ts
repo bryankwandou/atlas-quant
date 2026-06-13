@@ -75,6 +75,7 @@ interface ChartStore {
   toggleIndicator: (id: string) => void;
   addIndicator: (id: string) => void;
   removeIndicator: (id: string) => void;
+  setActiveIndicators: (ids: string[]) => void;
   resetIndicators: () => void;
   setIndicatorParam: (id: string, key: string, value: number | string | boolean) => void;
   setIndicatorParams: (id: string, params: Record<string, number | string | boolean>) => void;
@@ -135,6 +136,7 @@ export const useChartStore = create<ChartStore>()(
       removeIndicator: (id) => set(s => ({
         activeIndicators: s.activeIndicators.filter(i => i !== id),
       })),
+      setActiveIndicators: (ids) => set({ activeIndicators: [...ids] }),
       resetIndicators: () => set({ activeIndicators: [...DEFAULT_INDICATORS_RESET] }),
 
       setIndicatorParam: (id, key, value) => set(s => ({
