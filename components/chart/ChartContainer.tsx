@@ -168,24 +168,32 @@ function computePixelScores(
     ATLAS: closes.map((_, i) => num(bullProb, i, 50)),
   };
 
-  // Slow-trend period scales with history → wide, smooth hills (~20–40 bar cycle).
-  const slowP = Math.max(10, Math.min(34, Math.floor(n / 16)));
+  // Slow-trend period → WIDE hills. Larger = wider, smoother hills (fewer, gentler).
+  const slowP = Math.max(16, Math.min(46, Math.floor(n / 11)));
 
-  // ── Step 2: shared BASE = detrended oscillator of the composite → hills+valleys ──
+  // Reference band: `trend` is clamped 15..85 and never fully saturates, so the
+  // mosaic is yellow/light-dominant and only reaches bright green/red at the hill
+  // peaks/valleys. We compress our oscillator into the same band.
+  const BAND = 34;                                   // 50 ± 34  →  16..84  (≈ reference 15..85)
+  const compress = (v: number) => 50 + (v - 50) / 50 * BAND;
+
+  // ── Step 2: shared BASE = detrended oscillator of composite, HEAVILY smoothed ──
   const comp = new Array(n).fill(50);
   for (let i = 0; i < n; i++) {
     let s = 0, c = 0;
     for (const k of PIXEL_ROWS) { const v = raw[k][i]; if (Number.isFinite(v)) { s += v; c++; } }
     comp[i] = c ? s / c : 50;
   }
-  const baseOsc = emaSmooth(detrendOsc(comp, slowP, 1.1), 3).map(clampScore);
+  // gain 0.8 (gentle, mostly mid-range) → detrend → smooth ~slowP/2 (wide hills) → compress.
+  const baseSmoothP = Math.max(6, Math.floor(slowP / 2));
+  const baseOsc = emaSmooth(detrendOsc(comp, slowP, 0.8), baseSmoothP).map(v => clampScore(compress(v)));
 
-  // ── Step 3: each row → its own detrended oscillator (subtle texture) ──
+  // ── Step 3: each row → its own detrended oscillator, smoothed (per-row texture) ──
   const rowOsc: Record<string, number[]> = {};
-  for (const k of PIXEL_ROWS) rowOsc[k] = emaSmooth(detrendOsc(raw[k] ?? new Array(n).fill(50), slowP, 1.0), 2).map(clampScore);
+  for (const k of PIXEL_ROWS) rowOsc[k] = emaSmooth(detrendOsc(raw[k] ?? new Array(n).fill(50), slowP, 0.7), 4).map(clampScore);
 
-  // ── Step 4: blend — base sets the hue (hills), row nudges ± for per-indicator texture ──
-  const TILT = 0.42;
+  // ── Step 4: blend — base sets the hue (smooth wide hills); row adds ±~11 texture ──
+  const TILT = 0.32;                                 // ±~11 around base, matching reference noise
   const scores: Record<string, number[]> = {};
   for (const k of PIXEL_ROWS) {
     const out = new Array(n);
