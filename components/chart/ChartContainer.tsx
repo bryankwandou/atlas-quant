@@ -100,17 +100,31 @@ function detrendOsc(arr: number[], slowP: number, scale: number): number[] {
   return arr.map((v, i) => (Number.isFinite(v) && Number.isFinite(slow[i]) ? sigScore((v - slow[i]) / scale) : 50));
 }
 
+/** Rolling min-max → forces any signal to use the FULL 0..100 range within `win` bars.
+ *  This is the key trick that makes the pixel match the reference regardless of trend:
+ *  even if RSI stays 55-70 in a bull run, after rollNorm it cycles 0→100 within that range,
+ *  producing the full green↔yellow↔red hill sequence like the reference random walk. */
+function rollNorm(arr: number[], win: number): number[] {
+  return arr.map((v, i) => {
+    const s = Math.max(0, i - win + 1);
+    let mn = arr[s], mx = arr[s];
+    for (let j = s + 1; j <= i; j++) { if (arr[j] < mn) mn = arr[j]; if (arr[j] > mx) mx = arr[j]; }
+    return mx > mn + 0.001 ? clampScore(((v - mn) / (mx - mn)) * 100) : 50;
+  });
+}
+
 /**
- * T1MO Pixel scoring engine — v7 (2026-06-14). Matches T1MO Pixel Showcase.html.
+ * T1MO Pixel scoring engine — v8 (2026-06-14). Final fix to match T1MO Pixel Showcase.html.
  *
- * Reference `generatePixel` uses ONE slow random-walk `trend` per column shared by
- * all 14 rows (+ ±11 per-row noise). Replicating with real data:
- *  1. MASTER = mean of inherently-oscillating indicators (RSI7, RSI14, MFI, %R) —
- *     these naturally cycle 0..100 without detrending, exactly like the random walk.
- *     Double EMA(10) smoothing → slow rounded hills (20–30 bar half-cycle).
- *  2. PER-ROW scores from all 14 real indicators (raw 0..100 bull scores).
- *  3. FINAL cell = 0.72·master + 0.28·rowScore → coherent column hills + real tilt.
- *     TILT kept small so within-column variance stays narrow (like reference ±11 noise).
+ * Root cause of all previous versions failing: in a trending market, every indicator
+ * (RSI, MFI, %R, composite) stays biased above or below 50 → pixel saturates to one color.
+ * The reference `generatePixel` uses a CLAMPED RANDOM WALK that always explores 15..85.
+ *
+ * Fix = ROLLING MIN-MAX NORMALIZATION on the master oscillator mean:
+ *   - Forces the output to use the FULL 0..100 range within any 30-bar window
+ *   - Regardless of whether the market is trending up, down, or ranging
+ *   - Then EMA(8) smoothing → slow rounded hills, yellow→green→yellow→red cadence
+ *   - Per-row tilt (20%) from real indicator scores adds the subtle row-to-row texture
  */
 function computePixelScores(
   ind: any,
@@ -138,7 +152,7 @@ function computePixelScores(
 
   const a = (i: number) => num(atr as any, i, 0) || (closes[i] * 0.01) || 1;
 
-  // ── Step 1: per-row real 0..100 bull scores (identical mapping as before) ──
+  // ── Step 1: per-row real 0..100 bull scores ──
   const raw: Record<string, number[]> = {
     RSI7:  closes.map((_, i) => num(rsi7, i, 50)),
     RSI14: closes.map((_, i) => num(rsi14, i, 50)),
@@ -159,33 +173,31 @@ function computePixelScores(
     ATLAS: closes.map((_, i) => num(bullProb, i, 50)),
   };
 
-  // ── Step 2: MASTER oscillator from pure 0..100 oscillators (inherently cyclical) ──
-  // RSI7, RSI14, MFI, %R(normalized) cycle naturally — no detrending needed,
-  // exactly like the reference's clamped random-walk trend value per column.
+  // ── Step 2: MASTER = rollNorm(composite oscillator mean, 30) → smooth hills ──
+  // Composite mean of pure oscillators (RSI7+RSI14+MFI+%R) = inherently cyclical.
+  // rollNorm(win=30) forces full 0..100 excursion in any market regime.
+  // EMA(8) post-smoothing gives the slow rounded hill cadence of the reference.
   const oscMean = closes.map((_, i) => {
     const vals = [
       num(rsi7, i, NaN),
       num(rsi14, i, NaN),
       num(mfi, i, NaN),
-      clampScore(100 + num(wr, i, NaN)),
+      clampScore(100 + num(wr, i, -50)),
     ].filter(v => Number.isFinite(v));
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 50;
+    return vals.length ? vals.reduce((x, y) => x + y, 0) / vals.length : 50;
   });
-  // Double EMA(10) → slow drift, rounded hills (half-cycle ~15–25 bars = reference cadence)
-  const masterHills = emaSmooth(emaSmooth(oscMean, 10), 10);
+  const masterHills = emaSmooth(rollNorm(oscMean, 30), 8);
 
-  // ── Step 3: blend master with per-row score (small tilt = reference ±11 noise) ──
-  // 0.72 master weight keeps within-column variance tight (all rows same hue per column)
-  // while 0.28 row weight adds the real indicator texture the reference's labels imply.
-  const MASTER_W = 0.72;
-  const ROW_W    = 0.28;
+  // ── Step 3: per-row rollNorm for subtle texture ──
+  const rowNorm: Record<string, number[]> = {};
+  for (const k of PIXEL_ROWS)
+    rowNorm[k] = emaSmooth(rollNorm(raw[k], 30), 5);
+
+  // ── Step 4: blend 80% master (coherent column hue) + 20% row (real indicator tilt) ──
   const scores: Record<string, number[]> = {};
-  for (const k of PIXEL_ROWS) {
-    const rowSm = emaSmooth(raw[k], 5);
-    scores[k] = masterHills.map((m, i) =>
-      clampScore(m * MASTER_W + rowSm[i] * ROW_W)
-    );
-  }
+  for (const k of PIXEL_ROWS)
+    scores[k] = masterHills.map((m, i) => clampScore(m * 0.80 + rowNorm[k][i] * 0.20));
+
   return { scores, active: new Array(n).fill(true) };
 }
 
