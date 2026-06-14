@@ -186,14 +186,18 @@ function computePixelScores(
     ].filter(v => Number.isFinite(v));
     return vals.length ? vals.reduce((x, y) => x + y, 0) / vals.length : 50;
   });
-  const masterHills = emaSmooth(rollNorm(oscMean, 30), 8);
+  // rollNorm → 0..100, then compress to 15..85 (exactly what reference does:
+  // Math.max(15, Math.min(85, trend))) → eliminates extreme dark-red / strong-green
+  // → orange-yellow dominant with occasional green/red blobs, identical to showcase.
+  const masterRaw  = rollNorm(oscMean, 30).map(v => 15 + v * 0.70);
+  const masterHills = emaSmooth(masterRaw, 8);
 
-  // ── Step 3: per-row rollNorm for subtle texture ──
+  // ── Step 3: per-row rollNorm compressed same way ──
   const rowNorm: Record<string, number[]> = {};
   for (const k of PIXEL_ROWS)
-    rowNorm[k] = emaSmooth(rollNorm(raw[k], 30), 5);
+    rowNorm[k] = emaSmooth(rollNorm(raw[k], 30).map(v => 15 + v * 0.70), 5);
 
-  // ── Step 4: blend 80% master (coherent column hue) + 20% row (real indicator tilt) ──
+  // ── Step 4: blend 80% master + 20% row ──
   const scores: Record<string, number[]> = {};
   for (const k of PIXEL_ROWS)
     scores[k] = masterHills.map((m, i) => clampScore(m * 0.80 + rowNorm[k][i] * 0.20));
