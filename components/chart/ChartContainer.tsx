@@ -859,8 +859,11 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
               const xn = ts.logicalToCoordinate((i + 1) as any);
               const barW = Math.max(1, (xn != null ? Math.abs(xn - xc) : 6));
               const s = colScore(i);
-              const h = Math.max(2, (0.08 + 0.92 * ((s - smin) / span)) * usableH);
-              ctx.fillStyle = pixelColorSmooth(s);
+              const norm = (s - smin) / span;                  // 0..1 within the visible window
+              const h = Math.max(2, (0.08 + 0.92 * norm) * usableH);
+              // Colour follows the SAME normalized value as height → multicolour hills
+              // (valleys deep-red → mids yellow → peaks green), not a one-colour block.
+              ctx.fillStyle = pixelColorSmooth(norm * 100);
               ctx.fillRect(xc - barW / 2 + 0.3, baseY - h, Math.max(1, barW - 0.6), h);
             }
 
