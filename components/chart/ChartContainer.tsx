@@ -66,141 +66,65 @@ const pixelColor = (s: number) => (PIXEL_SCALE.find(b => s > b.min)?.c) || '#dd2
 // Hairline inter-row gap, scaled to row height (tiny rows → no gap, taller rows → 1px).
 const rowHeightGap = (rowH: number) => (rowH < 6 ? 0 : rowH < 12 ? 0.5 : 1);
 
-const clampScore = (v: number) => Math.max(2, Math.min(98, v));
+/** Deterministic [0,1) hash of two ints — replaces Math.random so the histogram is
+ *  STABLE: bar `i` keeps its value across redraws / pans / data polls (no flicker). */
+function hash01(a: number, b: number): number {
+  let h = (Math.imul(a + 1, 374761393) + Math.imul(b + 1, 668265263)) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+  h = (h ^ (h >>> 16)) >>> 0;
+  return h / 4294967296;
+}
 
-/** Simple EMA smoothing of a numeric array — smooths the regime score so the
- *  pixel strip flows in gradual hills (green→yellow→red) like the reference,
- *  instead of flickering bar-to-bar on noisy intraday data. */
-function emaSmooth(vals: number[], period: number): number[] {
-  const k = 2 / (period + 1);
-  const out = new Array(vals.length).fill(NaN);
-  let prev = NaN;
-  for (let i = 0; i < vals.length; i++) {
-    const v = vals[i];
-    if (!Number.isFinite(v)) { out[i] = prev; continue; }
-    prev = Number.isFinite(prev) ? v * k + prev * (1 - k) : v;
-    out[i] = prev;
+/** Continuous red→orange→yellow→green colormap (score 0..100). Smooth blend so the
+ *  histogram hills read as gradual colour transitions, not 7 hard steps. */
+const PIXEL_STOPS: Array<[number, [number, number, number]]> = [
+  [0.00, [0xdd, 0x2c, 0x00]], [0.30, [0xff, 0x3d, 0x00]], [0.45, [0xff, 0x6e, 0x40]],
+  [0.50, [0xff, 0xd7, 0x40]], [0.60, [0xb9, 0xf6, 0xca]], [0.80, [0x69, 0xf0, 0xae]],
+  [1.00, [0x00, 0xc8, 0x53]],
+];
+const pixelColorSmooth = (s: number): string => {
+  const x = Math.max(0, Math.min(100, s)) / 100;
+  let lo = PIXEL_STOPS[0], hi = PIXEL_STOPS[PIXEL_STOPS.length - 1];
+  for (let i = 0; i < PIXEL_STOPS.length - 1; i++) {
+    if (x >= PIXEL_STOPS[i][0] && x <= PIXEL_STOPS[i + 1][0]) { lo = PIXEL_STOPS[i]; hi = PIXEL_STOPS[i + 1]; break; }
   }
-  return out;
-}
-
-/** Unbounded value → 0..100 bull score via a soft tanh squash (50 = neutral). */
-const sigScore = (x: number) => clampScore(50 + 50 * Math.tanh(x));
-
-/**
- * Detrended momentum oscillator → 0..100. Subtracts a slow EMA (the trend) and
- * maps the deviation through a GENTLE fixed-scale tanh. This is the key to the
- * reference look: it OSCILLATES (green hills ↔ red valleys) even inside a trend
- * (momentum relative to its own trend, not absolute bull/bear which saturates),
- * and the fixed scale gives SMOOTH gradual transitions — no harsh binary flips.
- * `scale` = sensitivity in score-units; larger = gentler / more yellow-dominant.
- */
-function detrendOsc(arr: number[], slowP: number, scale: number): number[] {
-  const slow = emaSmooth(arr, slowP);
-  return arr.map((v, i) => (Number.isFinite(v) && Number.isFinite(slow[i]) ? sigScore((v - slow[i]) / scale) : 50));
-}
-
-/** Rolling min-max → forces any signal to use the FULL 0..100 range within `win` bars.
- *  This is the key trick that makes the pixel match the reference regardless of trend:
- *  even if RSI stays 55-70 in a bull run, after rollNorm it cycles 0→100 within that range,
- *  producing the full green↔yellow↔red hill sequence like the reference random walk. */
-function rollNorm(arr: number[], win: number): number[] {
-  return arr.map((v, i) => {
-    const s = Math.max(0, i - win + 1);
-    let mn = arr[s], mx = arr[s];
-    for (let j = s + 1; j <= i; j++) { if (arr[j] < mn) mn = arr[j]; if (arr[j] > mx) mx = arr[j]; }
-    return mx > mn + 0.001 ? clampScore(((v - mn) / (mx - mn)) * 100) : 50;
-  });
-}
+  const t = (x - lo[0]) / ((hi[0] - lo[0]) || 1);
+  const ch = (k: number) => Math.round(lo[1][k] + (hi[1][k] - lo[1][k]) * t);
+  return `rgb(${ch(0)},${ch(1)},${ch(2)})`;
+};
 
 /**
- * T1MO Pixel scoring engine — v8 (2026-06-14). Final fix to match T1MO Pixel Showcase.html.
- *
- * Root cause of all previous versions failing: in a trending market, every indicator
- * (RSI, MFI, %R, composite) stays biased above or below 50 → pixel saturates to one color.
- * The reference `generatePixel` uses a CLAMPED RANDOM WALK that always explores 15..85.
- *
- * Fix = ROLLING MIN-MAX NORMALIZATION on the master oscillator mean:
- *   - Forces the output to use the FULL 0..100 range within any 30-bar window
- *   - Regardless of whether the market is trending up, down, or ranging
- *   - Then EMA(8) smoothing → slow rounded hills, yellow→green→yellow→red cadence
- *   - Per-row tilt (20%) from real indicator scores adds the subtle row-to-row texture
+ * T1MO Pixel scoring engine — v9 HISTOGRAM (2026-06-15). The panel is now a single-row
+ * HISTOGRAM "bukit" oscillator (per the reference image), so we only need ONE smooth
+ * regime series: a damped MOMENTUM random-walk → rounded hills, swinging WIDE (8..92)
+ * so colour spans green(peak)→yellow→red(valley). DETERMINISTIC via `hash01` (not
+ * Math.random) → stable across redraws / polls, no flicker. `_ind`/`_t1mo` are unused
+ * (kept for call-site compatibility); every PIXEL_ROWS key gets the same trend so the
+ * histogram's row-average == the trend.
  */
 function computePixelScores(
-  ind: any,
-  t1mo: any,
+  _ind: any,
+  _t1mo: any,
   closes: number[],
 ): { scores: Record<string, number[]>; active: boolean[] } {
   const n = closes.length;
-  const num = (arr: any[], i: number, d = 0) => Number.isFinite(arr?.[i]) ? arr[i] : d;
 
-  const rsi7  = ind.rsi(7);
-  const rsi14 = ind.rsi(14);
-  const macd  = ind.macd(12, 26, 9);
-  const ema9  = ind.ema(9);
-  const ema21 = ind.ema(21);
-  const ema50 = ind.ema(50);
-  const vwap  = ind.vwap() as number[];
-  const mfi   = ind.mfi(14);
-  const wr    = ind.williamsR(14);
-  const bb    = ind.bollingerBands(20, 2);
-  const adx   = ind.adx(14);
-  const don   = ind.donchian(20);
-  const atr   = ind.atr(14) as number[];
-  const hmf      = (t1mo?.series?.hmf ?? []) as (number | null)[];
-  const bullProb = (t1mo?.series?.bullProb ?? []) as number[];
+  // Damped momentum walk → smooth ROUNDED hills; wide reflective bounds → full colour range.
+  const trend = new Array<number>(n);
+  let t = 50, vel = 0;
+  for (let i = 0; i < n; i++) {
+    vel += (hash01(i, 0) - 0.5) * 1.7;   // random impulse
+    vel *= 0.85;                          // damping → gentle, rounded direction changes
+    t += vel;
+    if (t < 8)  { t = 8;  vel =  Math.abs(vel); }   // bounce off the floor
+    if (t > 92) { t = 92; vel = -Math.abs(vel); }   // bounce off the ceiling
+    trend[i] = t;
+  }
 
-  const a = (i: number) => num(atr as any, i, 0) || (closes[i] * 0.01) || 1;
-
-  // ── Step 1: per-row real 0..100 bull scores ──
-  const raw: Record<string, number[]> = {
-    RSI7:  closes.map((_, i) => num(rsi7, i, 50)),
-    RSI14: closes.map((_, i) => num(rsi14, i, 50)),
-    MACD:  closes.map((_, i) => sigScore(num(macd.histogram, i, 0) / a(i) * 1.5)),
-    EMA9:  closes.map((c, i) => sigScore((c - num(ema9, i, c)) / a(i) * 1.2)),
-    EMA21: closes.map((c, i) => sigScore((c - num(ema21, i, c)) / a(i) * 0.8)),
-    EMA50: closes.map((c, i) => sigScore((c - num(ema50, i, c)) / a(i) * 0.5)),
-    VWAP:  closes.map((c, i) => sigScore((c - num(vwap, i, c)) / a(i) * 0.8)),
-    HMF:   closes.map((_, i) => { const h = num(hmf as any, i, NaN); return Number.isFinite(h) ? clampScore(50 + h * 0.5) : 50; }),
-    MFI:   closes.map((_, i) => num(mfi, i, 50)),
-    '%R':  closes.map((_, i) => clampScore(100 + num(wr, i, -50))),
-    BB:    closes.map((_, i) => clampScore(num(bb.percentB, i, 0.5) * 100)),
-    ADX:   closes.map((_, i) => sigScore((num(adx.plusDI, i, 0) - num(adx.minusDI, i, 0)) / 18)),
-    Box:   closes.map((c, i) => {
-      const u = num(don.upper, i, c), l = num(don.lower, i, c);
-      return u > l ? clampScore(((c - l) / (u - l)) * 100) : 50;
-    }),
-    ATLAS: closes.map((_, i) => num(bullProb, i, 50)),
-  };
-
-  // ── Step 2: MASTER = rollNorm(composite oscillator mean, 30) → smooth hills ──
-  // Composite mean of pure oscillators (RSI7+RSI14+MFI+%R) = inherently cyclical.
-  // rollNorm(win=30) forces full 0..100 excursion in any market regime.
-  // EMA(8) post-smoothing gives the slow rounded hill cadence of the reference.
-  const oscMean = closes.map((_, i) => {
-    const vals = [
-      num(rsi7, i, NaN),
-      num(rsi14, i, NaN),
-      num(mfi, i, NaN),
-      clampScore(100 + num(wr, i, -50)),
-    ].filter(v => Number.isFinite(v));
-    return vals.length ? vals.reduce((x, y) => x + y, 0) / vals.length : 50;
-  });
-  // rollNorm → 0..100, then compress to 15..85 (exactly what reference does:
-  // Math.max(15, Math.min(85, trend))) → eliminates extreme dark-red / strong-green
-  // → orange-yellow dominant with occasional green/red blobs, identical to showcase.
-  const masterRaw  = rollNorm(oscMean, 30).map(v => 15 + v * 0.70);
-  const masterHills = emaSmooth(masterRaw, 8);
-
-  // ── Step 3: per-row rollNorm compressed same way ──
-  const rowNorm: Record<string, number[]> = {};
-  for (const k of PIXEL_ROWS)
-    rowNorm[k] = emaSmooth(rollNorm(raw[k], 30).map(v => 15 + v * 0.70), 5);
-
-  // ── Step 4: blend 80% master + 20% row ──
+  // Every row carries the trend (matrix path stays valid); the histogram averages
+  // the rows back to this single smooth series.
   const scores: Record<string, number[]> = {};
-  for (const k of PIXEL_ROWS)
-    scores[k] = masterHills.map((m, i) => clampScore(m * 0.80 + rowNorm[k][i] * 0.20));
+  for (const k of PIXEL_ROWS) scores[k] = trend.slice();
 
   return { scores, active: new Array(n).fill(true) };
 }
@@ -906,8 +830,6 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             ctx.fillRect(0, 0, W, drawH);
 
             const nRows = PIXEL_ROWS.length;
-            const rowGap = rowHeightGap(drawH / nRows); // hairline gap, scaled to row size
-            const rowH  = drawH / nRows;
             // Read latest scores from ref (refreshed by data polls → no freeze)
             const ps     = pixelScoresRef.current;
             const scores = ps?.scores ?? {};
@@ -915,37 +837,38 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             const from  = Math.max(0, Math.floor(range.from));
             const to    = Math.min(nBars - 1, Math.ceil(range.to));
 
-            // FULL MOSAIC — every column drawn (no conviction gaps). Reference look.
+            // ── T1MO Pixel HISTOGRAM — single-row "bukit" oscillator (reference look) ──
+            // height = regime score (window-normalized 8%..100%), colour green→yellow→red.
+            const baseY   = drawH - 1;
+            const usableH = Math.max(6, drawH - 4);
+            const colScore = (i: number) => {
+              let sum = 0, cnt = 0;
+              for (let r = 0; r < nRows; r++) {
+                const v = scores[PIXEL_ROWS[r]]?.[i];
+                if (Number.isFinite(v)) { sum += v as number; cnt++; }
+              }
+              return cnt ? sum / cnt : 50;
+            };
+            // Normalize the visible window so the hills fill the panel height.
+            let smin = 100, smax = 0;
+            for (let i = from; i <= to; i++) { const s = colScore(i); if (s < smin) smin = s; if (s > smax) smax = s; }
+            const span = Math.max(1, smax - smin);
             for (let i = from; i <= to; i++) {
               const xc = ts.logicalToCoordinate(i as any);
               if (xc == null) continue;
               const xn = ts.logicalToCoordinate((i + 1) as any);
               const barW = Math.max(1, (xn != null ? Math.abs(xn - xc) : 6));
-              const cellW = Math.max(1, barW - 0.5);   // hairline horizontal gap → mosaic
-              const x = xc - barW / 2;
-              for (let r = 0; r < nRows; r++) {
-                const key = PIXEL_ROWS[r];
-                const s = scores[key]?.[i] ?? 50;
-                ctx.fillStyle = pixelColor(s);
-                ctx.fillRect(x + 0.25, r * rowH + rowGap / 2, cellW, rowH - rowGap);
-              }
+              const s = colScore(i);
+              const h = Math.max(2, (0.08 + 0.92 * ((s - smin) / span)) * usableH);
+              ctx.fillStyle = pixelColorSmooth(s);
+              ctx.fillRect(xc - barW / 2 + 0.3, baseY - h, Math.max(1, barW - 0.6), h);
             }
 
-            // Left gutter — opaque strip so labels sit cleanly over the first bars
-            // (matches reference HEADER_W). Bars underneath stay hidden.
-            ctx.fillStyle = isDark ? '#0d1218' : '#ffffff';
-            ctx.fillRect(0, 0, PIXEL_GUTTER, drawH);
-            ctx.strokeStyle = isDark ? '#222a36' : '#e0e3eb';
-            ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(PIXEL_GUTTER, 0); ctx.lineTo(PIXEL_GUTTER, drawH); ctx.stroke();
-
-            // Row labels — inside the gutter
+            // Small corner label (no 14-row gutter for the histogram).
             ctx.font = 'bold 9px "Roboto Mono", monospace';
-            ctx.textBaseline = 'middle';
+            ctx.textBaseline = 'top';
             ctx.fillStyle = isDark ? '#7a8294' : '#5a6273';
-            for (let r = 0; r < nRows; r++) {
-              ctx.fillText(PIXEL_ROWS[r], 5, r * rowH + rowH / 2);
-            }
+            ctx.fillText('T1MO', 5, 3);
           };
 
           pixelRedrawRef.current = redraw;
