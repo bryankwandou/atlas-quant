@@ -129,14 +129,19 @@ function computePixelScores(
 ): { scores: Record<string, number[]>; active: boolean[] } {
   const n = closes.length;
 
-  // Slow clamped random-walk trend, shared per column. Gentle amplitude + a narrow
-  // clamp centred on ~54 keep the strip in the warm orange-yellow band with green
-  // hill peaks (the reference look) instead of saturating to deep green/red.
+  // MOMENTUM random-walk trend (shared per column). A damped velocity makes the walk
+  // turn smoothly → ROUNDED hills (not jagged), and a WIDE reflective clamp (8..92)
+  // lets it visit deep green peaks AND red valleys → the multicolour rolling hills of
+  // the reference, instead of a flat warm-orange block. Reflecting off the bounds
+  // (instead of hard-clamping) keeps the hills rounded at the extremes too.
   const trend = new Array<number>(n);
-  let t = 54;
+  let t = 50, vel = 0;
   for (let i = 0; i < n; i++) {
-    t += (hash01(i, 0) - 0.5) * 4;        // gentler walk → broader, rounder hills
-    t = Math.max(34, Math.min(74, t));    // narrow clamp → warm-centred, no saturation
+    vel += (hash01(i, 0) - 0.5) * 1.7;   // random impulse
+    vel *= 0.85;                          // damping → gentle, rounded direction changes
+    t += vel;
+    if (t < 8)  { t = 8;  vel =  Math.abs(vel); }   // bounce off the floor
+    if (t > 92) { t = 92; vel = -Math.abs(vel); }   // bounce off the ceiling
     trend[i] = t;
   }
 
