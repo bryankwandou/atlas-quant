@@ -1402,6 +1402,13 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       {/* Panels */}
       <div ref={wrapRef} className="chart-panels">
         {isLoading && <div className="chart-loading"><div className="spinner"/><span>Loading {symbol}...</span></div>}
+        {/* No-data guard — without this, an empty fetch (e.g. BBCA.JK intraday) makes
+            buildCharts() early-return and leaves the main panel BARE WHITE with no message. */}
+        {!isLoading && (!candles || candles.length === 0) && (
+          <div className="chart-loading">
+            <span>Tidak ada data untuk <b>{symbol}</b> · {timeframe}.<br/>Coba timeframe harian (1d) atau simbol lain.</span>
+          </div>
+        )}
         <div ref={mainRef} className="chart-panel chart-panel-main">
           <canvas ref={smcCanvasRef} className="smc-overlay-canvas"/>
           <canvas
