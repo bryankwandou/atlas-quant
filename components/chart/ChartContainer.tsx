@@ -113,8 +113,9 @@ function computePixelScores(
   const trend = new Array<number>(n);
   let t = 50, vel = 0;
   for (let i = 0; i < n; i++) {
-    vel += (hash01(i, 0) - 0.5) * 1.7;   // random impulse
-    vel *= 0.85;                          // damping → gentle, rounded direction changes
+    vel += (hash01(i, 0) - 0.5) * 2.2;    // random impulse
+    vel += -(t - 50) * 0.014;             // mean-reversion → clear NAIK-TURUN waves around 50
+    vel *= 0.82;                           // damping → rounded hills (damped harmonic, not jagged)
     t += vel;
     if (t < 8)  { t = 8;  vel =  Math.abs(vel); }   // bounce off the floor
     if (t > 92) { t = 92; vel = -Math.abs(vel); }   // bounce off the ceiling
