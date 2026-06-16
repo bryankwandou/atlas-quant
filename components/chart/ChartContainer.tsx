@@ -94,38 +94,58 @@ const pixelColorSmooth = (s: number): string => {
 };
 
 /**
- * T1MO Pixel scoring engine — v9 HISTOGRAM (2026-06-15). The panel is now a single-row
- * HISTOGRAM "bukit" oscillator (per the reference image), so we only need ONE smooth
- * regime series: a damped MOMENTUM random-walk → rounded hills, swinging WIDE (8..92)
- * so colour spans green(peak)→yellow→red(valley). DETERMINISTIC via `hash01` (not
- * Math.random) → stable across redraws / polls, no flicker. `_ind`/`_t1mo` are unused
- * (kept for call-site compatibility); every PIXEL_ROWS key gets the same trend so the
- * histogram's row-average == the trend.
+ * T1MO Pixel scoring engine — v10 (2026-06-16). Rebuilt from the RECOVERED original
+ * `PixelHeatmap_FINAL.tsx`: each candle column draws 3 stacked rounded blocks coloured by
+ * a 5-level signal bucket. This engine emits ONE REAL composite bull score (0..100) per bar
+ * (RSI7/RSI14/MFI/%R/MACD/EMA-dist/ATLAS) — so the heatmap follows ACTUAL price (green in
+ * up-regimes, red in down-regimes) exactly like the recovered reference, not decorative noise.
+ * The draw step derives each column's {bucket, isUp, strength} from this score.
  */
 function computePixelScores(
-  _ind: any,
-  _t1mo: any,
+  ind: any,
+  t1mo: any,
   closes: number[],
 ): { scores: Record<string, number[]>; active: boolean[] } {
   const n = closes.length;
+  const num = (arr: any[], i: number, d = 0) => Number.isFinite(arr?.[i]) ? arr[i] : d;
+  const sig = (x: number) => 50 + 50 * Math.tanh(x);
 
-  // Damped momentum walk → smooth ROUNDED hills; wide reflective bounds → full colour range.
-  const trend = new Array<number>(n);
-  let t = 50, vel = 0;
+  const rsi7  = ind.rsi(7);
+  const rsi14 = ind.rsi(14);
+  const mfi   = ind.mfi(14);
+  const wr    = ind.williamsR(14);
+  const macd  = ind.macd(12, 26, 9);
+  const ema21 = ind.ema(21);
+  const atr   = ind.atr(14) as number[];
+  const bullProb = (t1mo?.series?.bullProb ?? []) as number[];
+  const a = (i: number) => num(atr as any, i, 0) || (closes[i] * 0.01) || 1;
+
+  // Real composite bull score 0..100 per bar.
+  const rawScore = closes.map((c, i) => {
+    const parts = [
+      num(rsi7, i, 50),
+      num(rsi14, i, 50),
+      num(mfi, i, 50),
+      Math.max(2, Math.min(98, 100 + num(wr, i, -50))),
+      sig(num(macd.histogram, i, 0) / a(i) * 1.5),
+      sig((c - num(ema21, i, c)) / a(i) * 0.8),
+      num(bullProb, i, 50),
+    ];
+    return parts.reduce((x, y) => x + y, 0) / parts.length;
+  });
+
+  // EMA(5) smoothing → blocks transition gradually like the reference, not bar-to-bar flicker.
+  const score = new Array<number>(n);
+  const k = 2 / (5 + 1);
+  let prev = Number.isFinite(rawScore[0]) ? rawScore[0] : 50;
   for (let i = 0; i < n; i++) {
-    vel += (hash01(i, 0) - 0.5) * 2.2;    // random impulse
-    vel += -(t - 50) * 0.014;             // mean-reversion → clear NAIK-TURUN waves around 50
-    vel *= 0.82;                           // damping → rounded hills (damped harmonic, not jagged)
-    t += vel;
-    if (t < 8)  { t = 8;  vel =  Math.abs(vel); }   // bounce off the floor
-    if (t > 92) { t = 92; vel = -Math.abs(vel); }   // bounce off the ceiling
-    trend[i] = t;
+    if (Number.isFinite(rawScore[i])) prev = rawScore[i] * k + prev * (1 - k);
+    score[i] = prev;
   }
 
-  // Every row carries the trend (matrix path stays valid); the histogram averages
-  // the rows back to this single smooth series.
+  // All rows carry the same composite score (single-series heatmap; draw reads row 0).
   const scores: Record<string, number[]> = {};
-  for (const k of PIXEL_ROWS) scores[k] = trend.slice();
+  for (const key of PIXEL_ROWS) scores[key] = score;
 
   return { scores, active: new Array(n).fill(true) };
 }
@@ -830,49 +850,59 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             ctx.fillStyle = isDark ? '#0d1218' : '#ffffff';
             ctx.fillRect(0, 0, W, drawH);
 
-            const nRows = PIXEL_ROWS.length;
             // Read latest scores from ref (refreshed by data polls → no freeze)
             const ps     = pixelScoresRef.current;
             const scores = ps?.scores ?? {};
             const nBars  = ps?.nBars ?? 0;
             const from  = Math.max(0, Math.floor(range.from));
             const to    = Math.min(nBars - 1, Math.ceil(range.to));
+            const seriesArr = scores[PIXEL_ROWS[0]] ?? [];
+            const colScore = (i: number) => { const v = seriesArr[i]; return Number.isFinite(v) ? (v as number) : 50; };
 
-            // ── T1MO Pixel HISTOGRAM — single-row "bukit" oscillator (reference look) ──
-            // height = regime score (window-normalized 8%..100%), colour green→yellow→red.
-            const baseY   = drawH - 1;
-            const usableH = Math.max(6, drawH - 4);
-            const colScore = (i: number) => {
-              let sum = 0, cnt = 0;
-              for (let r = 0; r < nRows; r++) {
-                const v = scores[PIXEL_ROWS[r]]?.[i];
-                if (Number.isFinite(v)) { sum += v as number; cnt++; }
-              }
-              return cnt ? sum / cnt : 50;
-            };
-            // Normalize the visible window so the hills fill the panel height.
-            let smin = 100, smax = 0;
-            for (let i = from; i <= to; i++) { const s = colScore(i); if (s < smin) smin = s; if (s > smax) smax = s; }
-            const span = Math.max(1, smax - smin);
+            // ── T1MO Pixel — RECOVERED 3-block-per-column structure (PixelHeatmap_FINAL.tsx) ──
+            // Each candle column = 3 rounded blocks: BASE (at equator) + CENTER square +
+            // DYNAMIC outer block (grows UP if bullish, DOWN if bearish; height ∝ strength).
+            // Colour from a 5-level signal bucket. A faint center reference line at the midline.
+            const midY = drawH / 2;
             for (let i = from; i <= to; i++) {
               const xc = ts.logicalToCoordinate(i as any);
               if (xc == null) continue;
               const xn = ts.logicalToCoordinate((i + 1) as any);
-              const barW = Math.max(1, (xn != null ? Math.abs(xn - xc) : 6));
-              const s = colScore(i);
-              const norm = (s - smin) / span;                  // 0..1 within the visible window
-              // Subtle per-bar HEIGHT jitter → ragged hill tops (reference texture), not glassy.
-              const hJit = 1 + (hash01(i, 9) - 0.5) * 0.16;
-              const h = Math.max(2, (0.08 + 0.92 * norm) * usableH * hJit);
-              // Colour = normalized trend + per-bar jitter (±22) → GRANULAR interleaved
-              // green/yellow/red bars like the reference, while the hill ENVELOPE stays
-              // readable (height drives the shape, jitter only adds colour texture).
-              const cNorm = Math.max(0, Math.min(100, norm * 100 + (hash01(i, 7) - 0.5) * 44));
-              ctx.fillStyle = pixelColorSmooth(cNorm);
-              ctx.fillRect(xc - barW / 2 + 0.3, baseY - h, Math.max(1, barW - 0.6), h);
+              const colW = Math.max(2, (xn != null ? Math.abs(xn - xc) : 6));
+              const x    = xc - colW / 2;
+              const gapX = colW * 0.08;
+              const bW   = Math.max(1, colW - gapX * 2);
+              // Square size — capped so the full 3-block stack (≈6.8·sqH) fits the half-panel.
+              const sqH  = Math.min(bW, (drawH / 2) / 7);
+              const gapY = sqH * 0.15;
+              const rad  = Math.max(1, bW * 0.15);
+
+              const s        = colScore(i);
+              const isUp     = s >= 50;
+              const strength = Math.max(0, Math.min(1, Math.abs(s - 50) / 50));
+              // 5-level bucket colours (exact from recovered BUCKET_COLOR map).
+              ctx.fillStyle = s >= 72 ? '#25a77a' : s >= 57 ? '#85cc7e' : s > 43 ? '#f6c445' : s > 28 ? '#ea7c60' : '#da4b5c';
+
+              const block = (y: number, h: number) => { ctx.beginPath(); (ctx as any).roundRect(x + gapX, y, bW, h, rad); ctx.fill(); };
+
+              const b1y = midY - sqH / 2;
+              block(b1y, sqH);                          // BASE block at the equator
+              const dynH = sqH + strength * (sqH * 4);  // DYNAMIC outer block (min = sqH)
+              if (isUp) {
+                const b2y = b1y - gapY - sqH; block(b2y, sqH);   // CENTER square (upward)
+                block(b2y - gapY - dynH, dynH);                  // DYNAMIC (upward)
+              } else {
+                const b2y = b1y + sqH + gapY; block(b2y, sqH);   // CENTER square (downward)
+                block(b2y + sqH + gapY, dynH);                   // DYNAMIC (downward)
+              }
             }
 
-            // Small corner label (no 14-row gutter for the histogram).
+            // Center reference line (recovered source).
+            ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)';
+            ctx.lineWidth = 0.5;
+            ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(W, midY); ctx.stroke();
+
+            // Corner label.
             ctx.font = 'bold 9px "Roboto Mono", monospace';
             ctx.textBaseline = 'top';
             ctx.fillStyle = isDark ? '#7a8294' : '#5a6273';
