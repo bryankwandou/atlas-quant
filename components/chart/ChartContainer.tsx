@@ -860,11 +860,13 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
               const barW = Math.max(1, (xn != null ? Math.abs(xn - xc) : 6));
               const s = colScore(i);
               const norm = (s - smin) / span;                  // 0..1 within the visible window
-              const h = Math.max(2, (0.08 + 0.92 * norm) * usableH);
-              // Colour = normalized trend + small deterministic per-bar jitter → GRANULAR
-              // multicolour (green/yellow/red bars interleaved) exactly like the reference,
-              // while the bar HEIGHT stays a smooth rounded hill. jitter ±13 score-units.
-              const cNorm = Math.max(0, Math.min(100, norm * 100 + (hash01(i, 7) - 0.5) * 26));
+              // Subtle per-bar HEIGHT jitter → ragged hill tops (reference texture), not glassy.
+              const hJit = 1 + (hash01(i, 9) - 0.5) * 0.16;
+              const h = Math.max(2, (0.08 + 0.92 * norm) * usableH * hJit);
+              // Colour = normalized trend + per-bar jitter (±22) → GRANULAR interleaved
+              // green/yellow/red bars like the reference, while the hill ENVELOPE stays
+              // readable (height drives the shape, jitter only adds colour texture).
+              const cNorm = Math.max(0, Math.min(100, norm * 100 + (hash01(i, 7) - 0.5) * 44));
               ctx.fillStyle = pixelColorSmooth(cNorm);
               ctx.fillRect(xc - barW / 2 + 0.3, baseY - h, Math.max(1, barW - 0.6), h);
             }
