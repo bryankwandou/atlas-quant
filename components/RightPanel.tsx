@@ -447,6 +447,18 @@ export default function RightPanel() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+  // Clear AI text on symbol/timeframe change so it regenerates for the new market.
+  useEffect(() => { setAiText(''); }, [symbol, timeframe]);
+
+  // Auto-generate REAL AI analysis when the AI tab opens (no manual click needed) — so the
+  // tab always shows genuine Groq/local-AI content for the current chart, never a static
+  // placeholder. Runs once per symbol/timeframe (guarded by aiText/aiLoading).
+  useEffect(() => {
+    if (activeTab !== 'ai' || aiText || aiLoading || !candles?.length) return;
+    handleAiReadChart();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, candles]);
+
   const saveAlerts = (a: typeof alerts) => { setAlerts(a); try { localStorage.setItem('atlas:alerts', JSON.stringify(a)); } catch {} };
   const addAlert = () => { const p = parseFloat(alertPrice); if (!p) return; saveAlerts([{ id: Date.now().toString(), symbol, price: p, dir: alertDir, created: Date.now() }, ...alerts]); setAlertPrice(''); };
   const delAlert = (id: string) => saveAlerts(alerts.filter(a => a.id !== id));
