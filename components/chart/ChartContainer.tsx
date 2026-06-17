@@ -7,6 +7,7 @@ import { useChartStore } from '@/store/chartStore';
 import { BarChart2, TrendingUp, Activity, Zap, Layers, Maximize2, X, Plus } from 'lucide-react';
 import { computeIndicators } from '@/core/indicators/client';
 import { t1moCompute } from '@/src/core/indicators/t1mo';
+import { computeT1moScores } from '@/src/core/indicators/t1moPixel';
 import { runPine } from '@/lib/pineLite';
 
 const CandlestickChartIcon = ({ size = 14 }: { size?: number }) => (
@@ -107,50 +108,12 @@ function computePixelScores(
   closes: number[],
 ): { scores: Record<string, number[]>; active: boolean[] } {
   const n = closes.length;
-  const num = (arr: any[], i: number, d = 0) => Number.isFinite(arr?.[i]) ? arr[i] : d;
-  const sig = (x: number) => 50 + 50 * Math.tanh(x);
-
-  const rsi7  = ind.rsi(7);
-  const rsi14 = ind.rsi(14);
-  const mfi   = ind.mfi(14);
-  const wr    = ind.williamsR(14);
-  const macd  = ind.macd(12, 26, 9);
-  const ema21 = ind.ema(21);
-  const atr   = ind.atr(14) as number[];
+  // Canonical real-signal engine (src/core/indicators/t1moPixel.ts) — single source of
+  // truth, in git, no lost-reference dependency. Returns the 0..100 composite per bar.
   const bullProb = (t1mo?.series?.bullProb ?? []) as number[];
-  const a = (i: number) => num(atr as any, i, 0) || (closes[i] * 0.01) || 1;
+  const score = computeT1moScores(ind, closes, bullProb);
 
-  // Weighted composite bull score 0..100 per bar. T1MO bullProb is the PRIMARY driver
-  // (3× weight) so the heatmap is unambiguously the T1MO signal; the oscillators
-  // (RSI7/RSI14/MFI/%R/MACD/EMA21-dist) only CONFIRM it.
-  const rawScore = closes.map((c, i) => {
-    const osc = [
-      num(rsi7, i, 50),
-      num(rsi14, i, 50),
-      num(mfi, i, 50),
-      Math.max(2, Math.min(98, 100 + num(wr, i, -50))),
-      sig(num(macd.histogram, i, 0) / a(i) * 1.5),
-      sig((c - num(ema21, i, c)) / a(i) * 0.8),
-    ];
-    const oscMean = osc.reduce((x, y) => x + y, 0) / osc.length;
-    const t1      = num(bullProb, i, oscMean);          // T1MO signal (primary)
-    const blended = (t1 * 3 + oscMean) / 4;             // T1MO-weighted composite
-    // Amplify deviation from 50 for contrast, but MODERATELY (×1.4) so the score still
-    // passes THROUGH the yellow neutral zone on regime changes (no abrupt red↔green jump).
-    return Math.max(2, Math.min(98, 50 + (blended - 50) * 1.4));
-  });
-
-  // EMA(7) smoothing → blocks transition gradually (more bars linger near neutral → yellow
-  // shows up on regime changes instead of a 1-bar red→green snap).
-  const score = new Array<number>(n);
-  const k = 2 / (7 + 1);
-  let prev = Number.isFinite(rawScore[0]) ? rawScore[0] : 50;
-  for (let i = 0; i < n; i++) {
-    if (Number.isFinite(rawScore[i])) prev = rawScore[i] * k + prev * (1 - k);
-    score[i] = prev;
-  }
-
-  // All rows carry the same composite score (single-series heatmap; draw reads row 0).
+  // All rows carry the same composite score (single-series heatmap; the draw reads row 0).
   const scores: Record<string, number[]> = {};
   for (const key of PIXEL_ROWS) scores[key] = score;
 
@@ -396,6 +359,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   }, [tk, timeframe, timezone, tzName, tzLabel]);
 
   const buildCharts = useCallback(() => {
+   try {
     if (chartsRef.current._obs) chartsRef.current._obs.disconnect();
     Object.entries(chartsRef.current).forEach(([k, c]) => { if (k !== '_obs') try { c.remove(); } catch {} });
     for (const sp of subChartsRef.current) { try { sp.chart.remove(); } catch {} }
@@ -825,8 +789,12 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         // the time axis + crosshair sync); the heatmap is drawn on <canvas>,
         // x-aligned to bars via subChart.timeScale().logicalToCoordinate().
         try {
-          // Hide the sub-chart right price axis for the pixel matrix (no price meaning)
-          try { (subChart as any).priceScale('right').applyOptions({ visible: false }); } catch {}
+          // KEEP the right price axis VISIBLE with the same 78px width as every other
+          // panel (baseOpts.minimumWidth) — hiding it collapsed the plot width by 78px and
+          // shifted the heatmap columns out of 1:1 alignment with the candle bars. The
+          // canvas overlay paints an opaque background over this strip, so no price labels
+          // show; we only need the reserved width so logicalToCoordinate(i) matches the main chart.
+          try { (subChart as any).priceScale('right').applyOptions({ visible: true, minimumWidth: 78 }); } catch {}
 
           const t1moSub = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes, open: closes, time: times } as any, {});
           const { scores } = computePixelScores(ind, t1moSub.meta.ready ? t1moSub : null, closes);
@@ -1152,6 +1120,11 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     });
     if (wrapRef.current) obs.observe(wrapRef.current);
     chartsRef.current._obs = obs;
+   } catch (err) {
+     // A failure anywhere in the build must NOT propagate to React and blank the whole
+     // component (the "white screen"). Log it; the data-update effect re-triggers buildCharts.
+     console.error('[ATLAS] buildCharts failed — will retry on next data tick:', err);
+   }
   // candles removed — reads via candlesRef.current; panelPct removed — reads via panelPctRef.current
   }, [theme, activeIndicators, showSignals, subPanels, baseOpts, symbol, chartType,
       compareSymbols, compareData, pineScripts, replayActive, replayIndex]);
