@@ -120,18 +120,24 @@ function computePixelScores(
   const bullProb = (t1mo?.series?.bullProb ?? []) as number[];
   const a = (i: number) => num(atr as any, i, 0) || (closes[i] * 0.01) || 1;
 
-  // Real composite bull score 0..100 per bar.
+  // Weighted composite bull score 0..100 per bar. T1MO bullProb is the PRIMARY driver
+  // (3× weight) so the heatmap is unambiguously the T1MO signal; the oscillators
+  // (RSI7/RSI14/MFI/%R/MACD/EMA21-dist) only CONFIRM it.
   const rawScore = closes.map((c, i) => {
-    const parts = [
+    const osc = [
       num(rsi7, i, 50),
       num(rsi14, i, 50),
       num(mfi, i, 50),
       Math.max(2, Math.min(98, 100 + num(wr, i, -50))),
       sig(num(macd.histogram, i, 0) / a(i) * 1.5),
       sig((c - num(ema21, i, c)) / a(i) * 0.8),
-      num(bullProb, i, 50),
     ];
-    return parts.reduce((x, y) => x + y, 0) / parts.length;
+    const oscMean = osc.reduce((x, y) => x + y, 0) / osc.length;
+    const t1      = num(bullProb, i, oscMean);          // T1MO signal (primary)
+    const blended = (t1 * 3 + oscMean) / 4;             // T1MO-weighted composite
+    // Amplify deviation from 50 → the score reaches the VIVID strongBuy/strongSell
+    // buckets more often → stronger colour contrast (keeps the exact recovered colours).
+    return Math.max(2, Math.min(98, 50 + (blended - 50) * 1.7));
   });
 
   // EMA(5) smoothing → blocks transition gradually like the reference, not bar-to-bar flicker.
