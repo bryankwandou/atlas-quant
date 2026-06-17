@@ -135,14 +135,15 @@ function computePixelScores(
     const oscMean = osc.reduce((x, y) => x + y, 0) / osc.length;
     const t1      = num(bullProb, i, oscMean);          // T1MO signal (primary)
     const blended = (t1 * 3 + oscMean) / 4;             // T1MO-weighted composite
-    // Amplify deviation from 50 → the score reaches the VIVID strongBuy/strongSell
-    // buckets more often → stronger colour contrast (keeps the exact recovered colours).
-    return Math.max(2, Math.min(98, 50 + (blended - 50) * 1.7));
+    // Amplify deviation from 50 for contrast, but MODERATELY (×1.4) so the score still
+    // passes THROUGH the yellow neutral zone on regime changes (no abrupt red↔green jump).
+    return Math.max(2, Math.min(98, 50 + (blended - 50) * 1.4));
   });
 
-  // EMA(5) smoothing → blocks transition gradually like the reference, not bar-to-bar flicker.
+  // EMA(7) smoothing → blocks transition gradually (more bars linger near neutral → yellow
+  // shows up on regime changes instead of a 1-bar red→green snap).
   const score = new Array<number>(n);
-  const k = 2 / (5 + 1);
+  const k = 2 / (7 + 1);
   let prev = Number.isFinite(rawScore[0]) ? rawScore[0] : 50;
   for (let i = 0; i < n; i++) {
     if (Number.isFinite(rawScore[i])) prev = rawScore[i] * k + prev * (1 - k);
@@ -886,8 +887,10 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
               const s        = colScore(i);
               const isUp     = s >= 50;
               const strength = Math.max(0, Math.min(1, Math.abs(s - 50) / 50));
-              // 5-level bucket colours (exact from recovered BUCKET_COLOR map).
-              ctx.fillStyle = s >= 72 ? '#25a77a' : s >= 57 ? '#85cc7e' : s > 43 ? '#f6c445' : s > 28 ? '#ea7c60' : '#da4b5c';
+              // Smooth colormap (vivid red → orange → YELLOW(50) → green → teal) so every
+              // transition passes through yellow — no abrupt red↔green snap — while the
+              // extremes stay vivid. Replaces the 5 hard buckets that caused the jumps.
+              ctx.fillStyle = pixelColorSmooth(s);
 
               const block = (y: number, h: number) => { ctx.beginPath(); (ctx as any).roundRect(x + gapX, y, bW, h, rad); ctx.fill(); };
 
