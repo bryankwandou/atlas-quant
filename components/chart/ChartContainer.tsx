@@ -4,7 +4,7 @@ import { createChart, ColorType, CandlestickSeries, LineSeries, HistogramSeries,
 import { useTheme } from '@/hooks/useTheme';
 import { useMarketData, useLiveBars } from '@/hooks/useMarketData';
 import { useChartStore } from '@/store/chartStore';
-import { BarChart2, TrendingUp, Activity, Zap, Layers, Maximize2, X, Plus } from 'lucide-react';
+import { BarChart2, TrendingUp, Activity, Zap, Layers, Maximize2, X, Plus, Camera, Expand, Settings, Check, Sun, Moon } from 'lucide-react';
 import { computeIndicators } from '@/core/indicators/client';
 import { t1moCompute } from '@/src/core/indicators/t1mo';
 import { computeT1moScores } from '@/src/core/indicators/t1moPixel';
@@ -181,7 +181,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const smcRedrawRef = useRef<(() => void) | null>(null);
   const smcDataRef   = useRef<{ orderBlocks: any[]; fvg: any[]; series: any } | null>(null);
 
-  const { theme }                        = useTheme();
+  const { theme, toggle: toggleTheme }   = useTheme();
   const { candles, isLoading, marketClosed } = useMarketData(symbol, timeframe);
   const { liveBars } = useLiveBars(symbol, timeframe);
   const { activeIndicators, showSignals, chartType, setChartType, subPanels, addSubPanel, removeSubPanel, timezone,
@@ -199,6 +199,23 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const drawingsRef = useRef(drawings);
   useEffect(() => { drawingsRef.current = drawings; }, [drawings]);
   const [drawCursor, setDrawCursor] = useState(false);
+  // Non-throwing build failure: buildCharts catches its own errors, so a failure used
+  // to leave the panel SILENTLY blank (the "white screen"). Track it → recover SILENTLY
+  // (no user action). `at` makes each failure a new object so the retry effect re-fires
+  // even when the message is identical. Cleared at the start of every build attempt.
+  const [buildError, setBuildError] = useState<{ msg: string; at: number } | null>(null);
+  const buildRetryRef = useRef(0); // silent auto-recovery attempts
+  const dataSigRef  = useRef('');  // skip full data re-feed when candles are unchanged
+  const pixelSigRef = useRef('');  // skip T1MO/pixel recompute when candles are unchanged
+  // Which main-series kind actually rendered (may differ from chartType when OHLC is
+  // unusable and we fall back to a line) → data-update effect must match it.
+  const mainSeriesModeRef = useRef<'line' | 'area' | 'bars' | 'candles'>('candles');
+  // ── Chart settings (TradingView-style gear) ──
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [scaleMode, setScaleMode] = useState(0);  // 0 Normal · 1 Logarithmic · 2 Percent
+  const [showGrid, setShowGrid]   = useState(true);
+  const scaleModeRef = useRef(0);
+  const showGridRef  = useRef(true);
 
   // Stable ref for candles — prevents buildCharts from re-running on every SWR poll
   // (SWR creates a new array reference on each successful fetch even with same data)
@@ -358,8 +375,44 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     };
   }, [tk, timeframe, timezone, tzName, tzLabel]);
 
+  // Apply live settings (price-scale mode + grid) to all existing charts. Reads refs
+  // so it's stable (safe in buildCharts deps) and survives rebuilds.
+  const applyChartSettings = useCallback(() => {
+    const mode = scaleModeRef.current;
+    const gridOpt = { grid: { vertLines: { visible: showGridRef.current }, horzLines: { visible: showGridRef.current } } };
+    try { chartsRef.current.main?.priceScale('right').applyOptions({ mode }); } catch {}
+    try { chartsRef.current.main?.applyOptions(gridOpt); } catch {}
+    try { chartsRef.current.vol?.applyOptions(gridOpt); } catch {}
+    for (const sp of subChartsRef.current) { try { sp.chart.applyOptions(gridOpt); } catch {} }
+  }, []);
+
+  // Export the main pane as a PNG (lightweight-charts takeScreenshot → download).
+  const takeScreenshot = useCallback(() => {
+    try {
+      const canvas = (chartsRef.current.main as any)?.takeScreenshot?.();
+      if (!canvas?.toBlob) return;
+      canvas.toBlob((blob: Blob | null) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `${symbol}_${timeframe}_${Date.now()}.png`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }, 'image/png');
+    } catch {}
+  }, [symbol, timeframe]);
+
+  const toggleFullscreen = useCallback(() => {
+    const el = (wrapRef.current?.closest('.chart-area') as HTMLElement | null) ?? wrapRef.current;
+    try {
+      if (!document.fullscreenElement) el?.requestFullscreen?.();
+      else document.exitFullscreen?.();
+    } catch {}
+  }, []);
+
   const buildCharts = useCallback(() => {
    try {
+    setBuildError(null); // reset; only re-set if this attempt throws
     if (chartsRef.current._obs) chartsRef.current._obs.disconnect();
     Object.entries(chartsRef.current).forEach(([k, c]) => { if (k !== '_obs') try { c.remove(); } catch {} });
     for (const sp of subChartsRef.current) { try { sp.chart.remove(); } catch {} }
@@ -385,6 +438,30 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
 
     if (formatted.length < 2) return;
 
+    // ── Guarantee a drawable main series ───────────────────────────────────────
+    // Some feeds (illiquid / non-crypto tickers) return close-only or malformed OHLC.
+    // A Candlestick/Bar series fed NaN O/H/L draws NOTHING and never throws → a silent
+    // white panel that looks like a crash. Coerce missing O/H/L to close so the body is
+    // always valid; if the set has essentially no real high-low range, fall back to a
+    // Line so SOMETHING always renders. (Also de-NaNs indicator inputs below.)
+    let _ohlcReal = 0;
+    for (const c of formatted as any[]) {
+      if (!Number.isFinite(c.open)  || c.open  <= 0) c.open  = c.close;
+      if (!Number.isFinite(c.close) || c.close <= 0) c.close = c.open;
+      const lo = Number.isFinite(c.low)  && c.low  > 0 ? c.low  : Math.min(c.open, c.close);
+      const hi = Number.isFinite(c.high) && c.high > 0 ? c.high : Math.max(c.open, c.close);
+      c.low  = Math.min(lo, hi, c.open, c.close);
+      c.high = Math.max(lo, hi, c.open, c.close);
+      if (c.high > c.low) _ohlcReal++;
+    }
+    const ohlcOk = _ohlcReal >= formatted.length * 0.2; // ≥20% bars have a real range
+    const mainMode: 'line' | 'area' | 'bars' | 'candles' =
+      chartType === 'area' ? 'area'
+      : chartType === 'line' ? 'line'
+      : (!ohlcOk) ? 'line'                 // OHLC unusable → safe line fallback
+      : chartType === 'bars' ? 'bars' : 'candles';
+    mainSeriesModeRef.current = mainMode;
+
     const closes  = formatted.map((c: any) => c.close);
     const highs   = formatted.map((c: any) => c.high);
     const lows    = formatted.map((c: any) => c.low);
@@ -402,14 +479,14 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     chartsRef.current.main = main;
 
     let candleSeries: any;
-    if (chartType === 'line') {
+    if (mainMode === 'line') {
       candleSeries = (main as any).addSeries(LineSeries, { color: tk.up, lineWidth: 2, priceLineVisible: true, lastValueVisible: true });
       candleSeries.setData(formatted.map((c: any) => ({ time: c.time, value: c.close })));
-    } else if (chartType === 'area') {
+    } else if (mainMode === 'area') {
       // Area: visible gradient fill — topColor must have strong opacity so it's distinct from Line
       candleSeries = (main as any).addSeries(AreaSeries, { topColor: `${tk.up}70`, bottomColor: `${tk.up}08`, lineColor: tk.up, lineWidth: 2 });
       candleSeries.setData(formatted.map((c: any) => ({ time: c.time, value: c.close })));
-    } else if (chartType === 'bars') {
+    } else if (mainMode === 'bars') {
       candleSeries = (main as any).addSeries(BarSeries, { upColor: tk.up, downColor: tk.down });
       candleSeries.setData(formatted.map((c: any) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })));
     } else {
@@ -1120,14 +1197,23 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     });
     if (wrapRef.current) obs.observe(wrapRef.current);
     chartsRef.current._obs = obs;
+    applyChartSettings(); // re-apply scale mode + grid after a fresh build
    } catch (err) {
      // A failure anywhere in the build must NOT propagate to React and blank the whole
      // component (the "white screen"). Log it; the data-update effect re-triggers buildCharts.
-     console.error('[ATLAS] buildCharts failed — will retry on next data tick:', err);
+     console.error('[ATLAS] buildCharts failed — auto-recovering:', err);
+     setBuildError({ msg: err instanceof Error ? err.message : String(err), at: Date.now() });
    }
   // candles removed — reads via candlesRef.current; panelPct removed — reads via panelPctRef.current
   }, [theme, activeIndicators, showSignals, subPanels, baseOpts, symbol, chartType,
-      compareSymbols, compareData, pineScripts, replayActive, replayIndex]);
+      compareSymbols, compareData, pineScripts, replayActive, replayIndex, applyChartSettings]);
+
+  // Sync settings refs + live charts whenever the user changes scale mode / grid.
+  useEffect(() => {
+    scaleModeRef.current = scaleMode;
+    showGridRef.current = showGrid;
+    applyChartSettings();
+  }, [scaleMode, showGrid, applyChartSettings]);
 
   // Full chart rebuild — does NOT destroy chart in cleanup (avoids 60ms blank flash).
   // buildCharts() itself destroys old charts at its start.
@@ -1143,6 +1229,16 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       // intentionally NOT destroying charts here — prevents white flash on every dep change
     };
   }, [buildCharts]);
+
+  // Silent auto-recovery — if a build ever fails, retry it automatically with a tiny
+  // backoff. The user never clicks anything; the chart just comes back. (`buildError.at`
+  // changes per failure so this re-fires even on an identical repeated error.)
+  useEffect(() => {
+    if (!buildError) { buildRetryRef.current = 0; return; }
+    if (buildRetryRef.current >= 6) return; // stop hammering after a persistent failure
+    const id = setTimeout(() => { buildRetryRef.current += 1; buildCharts(); }, 300);
+    return () => clearTimeout(id);
+  }, [buildError, buildCharts]);
 
   // Unmount-only cleanup
   useEffect(() => {
@@ -1170,16 +1266,32 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       return;
     }
 
+    // Skip the heavy re-feed (setData of ~1500 pts + a full t1moCompute) when the candle
+    // data is identical to last poll — SWR hands us a new array reference even when
+    // nothing changed. Only the last bar + length + chartType matter for a redraw.
+    const _lc = candles[candles.length - 1] as any;
+    const _sig = `${candles.length}|${_lc?.open_time}|${_lc?.close}|${_lc?.high}|${_lc?.low}|${_lc?.volume}|${chartType}`;
+    if (_sig === dataSigRef.current) return;
+    dataSigRef.current = _sig;
+
     try {
       const formatted = candles
         .map((c: any) => ({ time: Math.floor(c.open_time / 1000) as any, open: +c.open, high: +c.high, low: +c.low, close: +c.close, volume: +c.volume }))
         .sort((a: any, b: any) => a.time - b.time)
         .filter((c: any) => c.time > 0 && c.close > 0);
       if (formatted.length < 2) return;
-      if (chartType === 'line' || chartType === 'area') {
+      const mode = mainSeriesModeRef.current;
+      if (mode === 'line' || mode === 'area') {
         seriesRef.current.candle.setData(formatted.map((c: any) => ({ time: c.time, value: c.close })));
       } else {
-        seriesRef.current.candle.setData(formatted.map((c: any) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })));
+        // Same OHLC sanitation as buildCharts → candlestick never gets NaN (silent blank).
+        seriesRef.current.candle.setData(formatted.map((c: any) => {
+          const open  = Number.isFinite(c.open)  && c.open  > 0 ? c.open  : c.close;
+          const close = Number.isFinite(c.close) && c.close > 0 ? c.close : open;
+          const low   = Math.min(Number.isFinite(c.low)  && c.low  > 0 ? c.low  : Math.min(open, close), open, close);
+          const high  = Math.max(Number.isFinite(c.high) && c.high > 0 ? c.high : Math.max(open, close), open, close);
+          return { time: c.time, open, high, low, close };
+        }));
       }
       if (seriesRef.current.vol) {
         seriesRef.current.vol.setData(formatted.map((c: any) => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)' })));
@@ -1278,6 +1390,11 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     if (!subPanels.includes('atlas') || !pixelRedrawRef.current) return;
     const src = candlesRef.current;
     if (!src?.length) return;
+    // Recompute 14 indicators + T1MO + pixel scores ONLY when the data actually moved.
+    const _last = src[src.length - 1] as any;
+    const _sig = `${src.length}|${_last?.open_time}|${_last?.close}`;
+    if (_sig === pixelSigRef.current) return;
+    pixelSigRef.current = _sig;
     try {
       const fmtd = src
         .map((c: any) => ({ time: Math.floor(c.open_time / 1000), open: +c.open, high: +c.high, low: +c.low, close: +c.close, volume: +c.volume }))
@@ -1402,6 +1519,31 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           <button className={`chart-toolbar-btn ${showSignals?'active':''}`} onClick={() => useChartStore.getState().toggleSignals()} title="Signals"><Zap size={12}/><span>Signals</span></button>
           <button className={`chart-toolbar-btn ${activeIndicators.includes('SMC_OB')?'active':''}`} onClick={() => useChartStore.getState().toggleIndicator('SMC_OB')} title="SMC"><Layers size={12}/><span>SMC</span></button>
           <button className="chart-toolbar-btn icon-only" onClick={() => chartsRef.current.main?.timeScale().fitContent()} title="Fit"><Maximize2 size={13}/></button>
+          <button className="chart-toolbar-btn icon-only" onClick={takeScreenshot} title="Screenshot (PNG)"><Camera size={13}/></button>
+          <button className="chart-toolbar-btn icon-only" onClick={toggleFullscreen} title="Fullscreen"><Expand size={13}/></button>
+          <div className="chart-settings-wrap">
+            <button className={`chart-toolbar-btn icon-only ${settingsOpen?'active':''}`} onClick={() => setSettingsOpen(o => !o)} title="Chart settings"><Settings size={13}/></button>
+            {settingsOpen && (
+              <>
+                <div className="chart-settings-backdrop" onClick={() => setSettingsOpen(false)} />
+                <div className="chart-settings-menu">
+                  <div className="csm-group-label">Skala Harga</div>
+                  {([['Normal',0],['Logaritmik',1],['Persen',2]] as const).map(([lbl,m]) => (
+                    <button key={lbl} className={`csm-item ${scaleMode===m?'on':''}`} onClick={() => setScaleMode(m)}>
+                      <span>{lbl}</span>{scaleMode===m && <Check size={12}/>}
+                    </button>
+                  ))}
+                  <div className="csm-sep" />
+                  <button className="csm-item" onClick={() => setShowGrid(g => !g)}>
+                    <span>Garis Grid</span><span className={`csm-toggle ${showGrid?'on':''}`} />
+                  </button>
+                  <button className="csm-item" onClick={() => toggleTheme()}>
+                    <span>{theme==='dark'?'Mode Terang':'Mode Gelap'}</span>{theme==='dark'?<Sun size={12}/>:<Moon size={12}/>}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1420,6 +1562,13 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         {!isLoading && (!candles || candles.length === 0) && (
           <div className="chart-loading">
             <span>Tidak ada data untuk <b>{symbol}</b> · {timeframe}.<br/>Coba timeframe harian (1d) atau simbol lain.</span>
+          </div>
+        )}
+        {/* Build hiccup → silent auto-recovery (no button, no scary message). */}
+        {!isLoading && buildError && candles && candles.length > 0 && (
+          <div className="chart-loading chart-build-error">
+            <div className="spinner" />
+            <span className="chart-crash-sub">Menyiapkan chart…</span>
           </div>
         )}
         <div ref={mainRef} className="chart-panel chart-panel-main">

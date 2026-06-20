@@ -60,6 +60,20 @@ body{
   color:var(--aq-text);
 }
 
+/* ── Super-smooth light/dark swap (TradingView-style) ──────────────────────
+   Animate only background/border/colour on the big chrome surfaces so flipping
+   data-theme cross-fades instead of snapping. Scoped to containers (NOT *) so
+   hover/active micro-transitions stay snappy. The chart canvas itself re-themes
+   via lightweight-charts; the surrounding shell fades around it. */
+body,.chart-area,.chart-panels,.chart-panel,.right-panel,.sidebar,
+.sub-panel-slot,.subchart-panel-header,.chart-toolbar,.t1mo-table,.t1mo-sr-section{
+  transition:background-color .22s ease,border-color .22s ease,color .22s ease;
+}
+@media (prefers-reduced-motion: reduce){
+  body,.chart-area,.chart-panels,.chart-panel,.right-panel,.sidebar,
+  .sub-panel-slot,.subchart-panel-header,.chart-toolbar,.t1mo-table,.t1mo-sr-section{transition:none;}
+}
+
 /* ── Utilities ───────────────────────────────────────────── */
 button{background:none;border:none;cursor:pointer;color:inherit;font-family:inherit;font-size:inherit;outline:none;}
 input,select,textarea{font-family:inherit;font-size:inherit;color:inherit;outline:none;background:none;border:none;}
@@ -642,6 +656,36 @@ select{cursor:pointer;}
 .legend-dot{width:8px;height:2px;border-radius:1px;}
 .chart-loading{display:flex;align-items:center;justify-content:center;height:100%;color:var(--aq-text3);font-size:12px;}
 .chart-error{display:flex;align-items:center;justify-content:center;height:100%;color:var(--aq-down);font-size:12px;}
+
+/* ── Chart crash / build-error fallbacks (anti white-screen) ─────────────── */
+.chart-build-error{flex-direction:column;gap:10px;text-align:center;background:rgba(13,18,24,.82);z-index:60;}
+.chart-crash-fallback{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:8px;text-align:center;background:var(--aq-bg2,#0d1218);color:var(--aq-text3,#7a8294);padding:24px;z-index:60;}
+.chart-crash-icon{font-size:26px;line-height:1;}
+.chart-crash-title{font-size:13px;font-weight:700;color:var(--aq-text,#cbd5e1);}
+.chart-crash-msg,.chart-crash-sub{font-size:11px;max-width:420px;word-break:break-word;}
+.chart-crash-sub{opacity:.7;}
+.chart-crash-btn{margin-top:6px;padding:6px 16px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;
+  color:#fff;background:var(--aq-blue,#3b82f6);border:1px solid transparent;transition:filter .12s;}
+.chart-crash-btn:hover{filter:brightness(1.12);}
+
+/* ── Chart Settings gear dropdown (TradingView-style) ───────────────────── */
+.chart-settings-wrap{position:relative;display:inline-flex;}
+.chart-settings-backdrop{position:fixed;inset:0;z-index:90;}
+.chart-settings-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:91;min-width:180px;
+  background:var(--aq-bg2);border:1px solid var(--aq-border);border-radius:7px;box-shadow:var(--aq-shadow,0 8px 28px rgba(0,0,0,.4));
+  padding:5px;display:flex;flex-direction:column;gap:1px;animation:csm-pop .12s ease;}
+@keyframes csm-pop{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:translateY(0);}}
+.csm-group-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--aq-text3);padding:5px 8px 3px;}
+.csm-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 8px;border-radius:5px;
+  font-size:11px;color:var(--aq-text);background:transparent;border:none;cursor:pointer;transition:background .1s;width:100%;text-align:left;}
+.csm-item:hover{background:var(--aq-bg3);}
+.csm-item.on{color:var(--aq-blue,#3b82f6);font-weight:600;}
+.csm-sep{height:1px;background:var(--aq-border);margin:4px 2px;}
+.csm-toggle{width:26px;height:15px;border-radius:8px;background:var(--aq-border2);position:relative;transition:background .15s;flex-shrink:0;}
+.csm-toggle::after{content:'';position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;background:#fff;transition:left .15s;}
+.csm-toggle.on{background:var(--aq-blue,#3b82f6);}
+.csm-toggle.on::after{left:13px;}
 
 /* ════════════════════════════════════════════════════════════
    NEXT.JS COMPONENT CLASS ALIASES

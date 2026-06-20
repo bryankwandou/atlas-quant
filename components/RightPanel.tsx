@@ -428,13 +428,14 @@ export default function RightPanel() {
     try { const s = localStorage.getItem('atlas:alerts'); if (s) setAlerts(JSON.parse(s)); } catch {}
   }, []);
 
-  // Fetch live news when the News tab opens
+  // Fetch live news when the News tab opens — per-pair (refetches when symbol changes).
   useEffect(() => {
-    if (activeTab !== 'news' || news.length || newsLoading) return;
+    if (activeTab !== 'news') return;
     setNewsLoading(true);
-    fetch('/api/market/news').then(r => r.json()).then(d => setNews(d.items || [])).catch(() => {}).finally(() => setNewsLoading(false));
+    fetch(`/api/market/news?symbol=${encodeURIComponent(symbol)}`)
+      .then(r => r.json()).then(d => setNews(d.items || [])).catch(() => {}).finally(() => setNewsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, symbol]);
 
   // Fetch economic calendar when the Calendar tab opens
   useEffect(() => {
@@ -934,14 +935,18 @@ export default function RightPanel() {
         {/* ════ NEWS — live crypto news feed ════ */}
         {activeTab === 'news' && (
           <div style={{ padding: '10px 12px' }}>
-            <div className="section-hdr">News Flow</div>
+            <div className="section-hdr">News Flow · {symbol}{news.length ? ` · ${news.length}` : ''}</div>
             {newsLoading && <div className="rp-loading-row"><div className="rp-spinner" /><span>Memuat berita…</span></div>}
             {!newsLoading && news.length === 0 && <div className="rp-no-data"><span>Berita tidak tersedia</span></div>}
-            {news.map((n) => (
-              <a key={n.id} href={n.url} target="_blank" rel="noopener noreferrer"
+            {news.map((n, i) => (
+              <a key={n.id || i} href={n.url} target="_blank" rel="noopener noreferrer"
                  style={{ display: 'block', padding: '8px 0', borderBottom: '1px solid var(--aq-border)', textDecoration: 'none' }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--aq-text)', lineHeight: 1.35 }}>{n.title}</div>
-                <div style={{ fontSize: 10, color: 'var(--aq-text2)', marginTop: 2 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--aq-text)', lineHeight: 1.35 }}>
+                  {n.pair && <span style={{ fontSize: 8, fontWeight: 700, color: '#fff', background: 'var(--aq-up,#089981)', borderRadius: 3, padding: '1px 4px', marginRight: 5, verticalAlign: 'middle' }}>PAIR</span>}
+                  {n.title}
+                </div>
+                {n.body && <div style={{ fontSize: 10, color: 'var(--aq-text2)', marginTop: 3, lineHeight: 1.4 }}>{n.body}</div>}
+                <div style={{ fontSize: 10, color: 'var(--aq-text3)', marginTop: 3 }}>
                   {n.source} · {n.publishedAt ? new Date(n.publishedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
                 </div>
               </a>
