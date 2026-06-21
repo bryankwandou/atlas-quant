@@ -13,6 +13,7 @@ import IndicatorModalProvider from '@/components/IndicatorModalProvider';
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const appRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLDivElement>(null);
   const leftHandleRef = useRef<HTMLDivElement>(null);
@@ -107,7 +108,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <IndicatorModalProvider>
-      <div ref={appRef} className="atlas-app device-laptop">
+      <div ref={appRef} className={`atlas-app device-laptop${mobilePanelOpen ? ' right-open' : ''}`}>
         <TopBar />
         <Sidebar />
         <div ref={leftHandleRef} className="left-sidebar-handle" onMouseDown={onDragStartLeft} title="Drag to resize sidebar" />
@@ -117,6 +118,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <RightRail />
         <StatusBar />
         <IndicatorModal />
+        {/* Mobile-only: scrim + floating button to open the watchlist/news drawer */}
+        <div className="mobile-scrim" onClick={() => setMobilePanelOpen(false)} />
+        <button
+          type="button"
+          className="mobile-panel-toggle"
+          aria-label={mobilePanelOpen ? 'Tutup panel' : 'Buka watchlist & berita'}
+          onClick={() => setMobilePanelOpen(o => !o)}
+        >
+          {mobilePanelOpen
+            ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>}
+        </button>
       </div>
     </IndicatorModalProvider>
   );

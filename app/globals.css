@@ -101,6 +101,45 @@ select{cursor:pointer;}
 .atlas-app.device-tv{--right-w:360px;--sidebar-w:60px;--rightrail-w:48px;font-size:14px;}
 .atlas-app.device-laptop{--right-w:280px;--sidebar-w:52px;--rightrail-w:40px;}
 .atlas-app.sidebar-expanded{--sidebar-w:148px;}
+
+/* ── Responsive (viewport-driven; overrides the hard-coded device-laptop class) ──
+   On phones/tablets the 4-column grid can't fit. Collapse to a slim sidebar + full
+   chart, make the topbar/status bar horizontally swipeable so every menu is reachable,
+   and turn the right panel (watchlist/news/AI) into a slide-in drawer. */
+.mobile-panel-toggle{display:none;}
+@media (max-width: 820px){
+  .atlas-app{
+    grid-template-columns:44px 1fr !important;
+    grid-template-rows:var(--topbar-h) 1fr var(--status-h);
+    grid-template-areas:"topbar topbar" "sidebar main" "statusbar statusbar" !important;
+    width:100vw;
+  }
+  .right-rail,.left-sidebar-handle,.right-panel-handle{display:none !important;}
+  /* Right panel → slide-in drawer from the right */
+  .right-panel{
+    position:fixed;top:var(--topbar-h);right:0;bottom:0;width:min(86vw,340px);
+    z-index:300;transform:translateX(102%);transition:transform .25s ease;
+    box-shadow:-8px 0 30px rgba(0,0,0,.45);border-left:1px solid var(--aq-border);
+  }
+  .atlas-app.right-open .right-panel{transform:translateX(0);}
+  .mobile-scrim{display:none;}
+  .atlas-app.right-open .mobile-scrim{display:block;position:fixed;inset:var(--topbar-h) 0 0 0;background:rgba(0,0,0,.45);z-index:299;}
+  /* Topbar + status bar: every control reachable by horizontal swipe */
+  .topbar{overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap;scrollbar-width:none;}
+  .topbar::-webkit-scrollbar{display:none;}
+  .topbar>*{flex-shrink:0;}
+  .status-bar{overflow-x:auto;white-space:nowrap;scrollbar-width:none;}
+  .status-bar::-webkit-scrollbar{display:none;}
+  /* Slim icon-only sidebar (no labels) */
+  .atlas-app.sidebar-expanded{--sidebar-w:44px;}
+  .sb-nav-label,.sb-tool-lbl{display:none !important;}
+  /* Floating drawer toggle (watchlist/news) */
+  .mobile-panel-toggle{
+    display:flex !important;position:fixed;right:12px;bottom:36px;z-index:305;
+    width:46px;height:46px;border-radius:50%;align-items:center;justify-content:center;
+    background:var(--aq-blue,#7b61ff);color:#fff;border:none;box-shadow:0 4px 16px rgba(0,0,0,.4);cursor:pointer;
+  }
+}
 .main-area{grid-area:main;display:flex;flex-direction:column;min-height:0;overflow:hidden;}
 
 /* ── Dashboard loading screen ────────────────────────────── */
