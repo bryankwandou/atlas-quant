@@ -216,6 +216,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const [showGrid, setShowGrid]   = useState(true);
   const scaleModeRef = useRef(0);
   const showGridRef  = useRef(true);
+  // Temporary on-screen diagnostic for the blank-chart investigation.
+  const [chartDiag, setChartDiag] = useState('');
 
   // Stable ref for candles — prevents buildCharts from re-running on every SWR poll
   // (SWR creates a new array reference on each successful fetch even with same data)
@@ -1198,6 +1200,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     if (wrapRef.current) obs.observe(wrapRef.current);
     chartsRef.current._obs = obs;
     applyChartSettings(); // re-apply scale mode + grid after a fresh build
+    setChartDiag(`OK · ${formatted.length} bar · ${mainMode} · main:${chartsRef.current.main ? 'y' : 'n'} candle:${seriesRef.current.candle ? 'y' : 'n'}`);
+    // eslint-disable-next-line no-console
+    console.log('[ATLAS-DIAG] chart built', { bars: formatted.length, mode: mainMode, mainW: mainRef.current?.clientWidth, mainH: mainRef.current?.clientHeight });
    } catch (err) {
      // A failure anywhere in the build must NOT propagate to React and blank the whole
      // component (the "white screen"). Log it; the data-update effect re-triggers buildCharts.
@@ -1572,6 +1577,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           </div>
         )}
         <div ref={mainRef} className="chart-panel chart-panel-main">
+          {chartDiag && <div className="chart-diag-badge" title="diagnostic">{chartDiag}</div>}
           <canvas ref={smcCanvasRef} className="smc-overlay-canvas"/>
           <canvas
             ref={drawCanvasRef}

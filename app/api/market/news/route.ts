@@ -119,6 +119,45 @@ function matches(item: NewsItem, terms: string[]): boolean {
   });
 }
 
+// ── GDELT (free, no key) for NON-crypto pairs (stocks/forex/index) so every pair
+// gets its own news. GDELT ArtList returns title + url + domain + date (no body).
+const ASSET_NAMES: Record<string, string> = {
+  'ANTM.JK': 'Aneka Tambang', 'BBCA.JK': 'Bank Central Asia', 'BBRI.JK': 'Bank Rakyat Indonesia',
+  'BMRI.JK': 'Bank Mandiri', 'TLKM.JK': 'Telkom Indonesia', 'ASII.JK': 'Astra International',
+  'GOTO.JK': 'GoTo Gojek Tokopedia', 'UNVR.JK': 'Unilever Indonesia', 'ADRO.JK': 'Adaro Energy',
+  'PGAS.JK': 'Perusahaan Gas Negara', 'INCO.JK': 'Vale Indonesia',
+  'AAPL': 'Apple', 'TSLA': 'Tesla', 'NVDA': 'Nvidia', 'MSFT': 'Microsoft', 'AMZN': 'Amazon',
+  'GOOGL': 'Google', 'META': 'Meta', 'AMD': 'AMD',
+  '^GSPC': 'S&P 500', '^IXIC': 'Nasdaq', '^DJI': 'Dow Jones', 'GC=F': 'Gold price', 'CL=F': 'Crude oil',
+};
+function gdeltQueryFor(symbol: string): string {
+  const up = symbol.toUpperCase();
+  if (ASSET_NAMES[up]) return ASSET_NAMES[up];
+  if (symbol.endsWith('=X')) { const p = symbol.replace('=X', ''); return `${p.slice(0, 3)} ${p.slice(3, 6)}`.trim(); }
+  return symbol.replace(/\.[A-Z]+$/, '').replace(/[\^=]/g, '').trim() || symbol;
+}
+async function getGdeltArticles(query: string, max = 75): Promise<NewsItem[]> {
+  try {
+    const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(query)}&mode=ArtList&format=json&maxrecords=${max}&sort=DateDesc`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 7000);
+    const res = await fetch(url, { next: { revalidate: 300 }, signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const arts = (data?.articles ?? []) as any[];
+    return arts.map((a) => {
+      const sd = String(a.seendate || ''); // e.g. 20260620T173800Z
+      const ts = sd.length >= 15
+        ? Date.UTC(+sd.slice(0, 4), +sd.slice(4, 6) - 1, +sd.slice(6, 8), +sd.slice(9, 11), +sd.slice(11, 13), +sd.slice(13, 15))
+        : Date.now();
+      return { id: a.url, title: decode(a.title || ''), url: a.url, source: a.domain || 'GDELT', body: '', publishedAt: ts || Date.now() };
+    }).filter((n) => n.title && n.url);
+  } catch {
+    return [];
+  }
+}
+
 export async function GET(req: NextRequest) {
   const symbol = req.nextUrl.searchParams.get('symbol') || '';
   try {
@@ -141,6 +180,17 @@ export async function GET(req: NextRequest) {
       const fill = merged.filter((n) => !pair.some((p) => p.id === n.id)).slice(0, 80).map((n) => ({ ...n, pair: false }));
       const items = [...pair, ...fill];
       return NextResponse.json({ symbol, base: derived.base, pairCount: pair.length, count: items.length, items, ts: Date.now() });
+    }
+
+    // Non-crypto (stock/forex/index): crypto RSS has no coverage → use GDELT per-pair.
+    if (symbol && /[.^=]/.test(symbol)) {
+      const q = gdeltQueryFor(symbol);
+      const gd = await getGdeltArticles(q, 75);
+      const gseen = new Set(gd.map((g) => (g.url || g.title).toLowerCase()));
+      const pair = gd.map((n) => ({ ...n, pair: true }));
+      const fill = merged.filter((n) => !gseen.has((n.url || n.title).toLowerCase())).slice(0, 60).map((n) => ({ ...n, pair: false }));
+      const items = [...pair, ...fill];
+      return NextResponse.json({ symbol, base: q, pairCount: pair.length, count: items.length, items, ts: Date.now() });
     }
 
     return NextResponse.json({ symbol, base: null, pairCount: 0, count: merged.length, items: merged, ts: Date.now() });

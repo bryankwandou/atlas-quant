@@ -687,6 +687,10 @@ select{cursor:pointer;}
 .csm-toggle.on{background:var(--aq-blue,#3b82f6);}
 .csm-toggle.on::after{left:13px;}
 
+/* Temporary blank-chart diagnostic badge */
+.chart-diag-badge{position:absolute;left:6px;bottom:6px;z-index:30;background:rgba(123,97,255,.92);color:#fff;
+  font-size:9px;font-family:'Roboto Mono',monospace;padding:2px 6px;border-radius:3px;pointer-events:none;letter-spacing:.3px;}
+
 /* ════════════════════════════════════════════════════════════
    NEXT.JS COMPONENT CLASS ALIASES
    Bridge between Next.js component class names and DARURAT HUKUM CSS.
