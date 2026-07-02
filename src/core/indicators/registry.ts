@@ -18,6 +18,8 @@
 
 export type IndicatorPane = 'main' | 'sub';
 
+import { VELO_PRESETS } from './velo-pack';
+
 export type IndicatorCategory =
   | 'Moving Average'
   | 'Momentum'
@@ -1331,7 +1333,9 @@ function buildAll(): IndicatorPreset[] {
   ];
   const sweeps = buildParameterSweeps();
   const community = buildCommunityVariants([...base, ...sweeps]);
-  return dedupeById([...base, ...sweeps, ...community]);
+  // Velo Crypto Pack — 250+ metrik kuant crypto (CVD/funding/basis/liq/vol),
+  // computed for real from OHLCV; rendered generically by ChartContainer.
+  return dedupeById([...base, ...sweeps, ...community, ...VELO_PRESETS]);
 }
 
 function dedupeById(list: IndicatorPreset[]): IndicatorPreset[] {

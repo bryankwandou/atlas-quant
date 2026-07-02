@@ -8,6 +8,7 @@ import { BarChart2, TrendingUp, Activity, Zap, Layers, Maximize2, X, Plus, Camer
 import { computeIndicators } from '@/core/indicators/client';
 import { t1moCompute } from '@/src/core/indicators/t1mo';
 import { computeT1moHorizons } from '@/src/core/indicators/t1moPixel';
+import { computeVeloPreset } from '@/src/core/indicators/velo-pack';
 import { runPine } from '@/lib/pineLite';
 
 const CandlestickChartIcon = ({ size = 14 }: { size?: number }) => (
@@ -531,6 +532,33 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       addLine(bb.upper, tk.bb, 'BB Upper', 0, 0.8);
       addLine(bb.middle, tk.bb, 'BB Mid',   2, 0.8);
       addLine(bb.lower, tk.bb, 'BB Lower',  0, 0.8);
+    }
+
+    // ── Velo Crypto Pack — generic renderer (250+ presets, id 'velo_*') ──
+    // main-pane presets overlay as price lines; sub-pane presets render on a
+    // dedicated bottom price scale (TradingView "overlay oscillator" style).
+    {
+      const veloIds = activeIndicators.filter((id: string) => id.startsWith('velo_'));
+      if (veloIds.length) {
+        const vctx = { open: formatted.map((c: any) => c.open), high: highs, low: lows, close: closes, volume: volumes };
+        for (const vid of veloIds) {
+          const res = computeVeloPreset(vid, vctx);
+          if (!res) continue;
+          for (const plot of res.plots) {
+            const opts = res.pane === 'main'
+              ? { priceScaleId: 'right' }
+              : { priceScaleId: 'velo-osc' };
+            if (plot.type === 'hist') {
+              const s = (main as any).addSeries(HistogramSeries, { ...opts, color: plot.color, priceLineVisible: false, lastValueVisible: false, title: plot.label });
+              s.setData(times.map((t: number, i: number) => ({ time: t, value: plot.values[i], color: (plot.values[i] ?? 0) >= 0 ? plot.color : '#f23645' })).filter((d: any) => Number.isFinite(d.value)));
+            } else {
+              const s = (main as any).addSeries(LineSeries, { ...opts, color: plot.color, lineWidth: res.pane === 'main' ? 1.5 : 1, priceLineVisible: false, lastValueVisible: res.pane === 'main', title: plot.label });
+              s.setData(times.map((t: number, i: number) => ({ time: t, value: plot.values[i] })).filter((d: any) => Number.isFinite(d.value)));
+            }
+          }
+        }
+        try { (main as any).priceScale('velo-osc').applyOptions({ scaleMargins: { top: 0.78, bottom: 0.02 }, visible: false }); } catch { /* no sub plots */ }
+      }
     }
 
     // HMA, ALMA, DEMA, TEMA, ZLEMA
