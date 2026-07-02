@@ -131,6 +131,10 @@ export const t1moCompute = (
   const bullProb: number[] = [];
   // Feature weights (logistic-regression style). Tuned for trend+momentum+location.
   const W = { dist: 0.9, slope: 1.1, hmf: 1.3, pos: 1.0, struct: 0.7 };
+  // Calibration temperature (Platt-style). Without it the 5-feature z easily hits ±3..5
+  // and prob saturates at 95-99% for whole trends — every pixel goes max green/red.
+  // T≈2.2 keeps probabilities graded (60-85% in normal trends) like the v1 reference.
+  const Z_TEMP = 2.2;
   for (let i = 0; i < n; i++) {
     const c = ctx.close[i];
     const bb = backbone[i] ?? c;
@@ -143,7 +147,7 @@ export const t1moCompute = (
     const z =
       W.dist * dist + W.slope * slope + W.hmf * (hmf[i] ?? 0) +
       W.pos * (positionPct[i] - 0.5) * 2 + W.struct * struct;
-    const prob = logistic(z);                                    // 0..1 bullish probability
+    const prob = logistic(z / Z_TEMP);                           // 0..1 bullish probability (temperature-calibrated)
     bullProb.push(prob);
     const conviction = Math.abs(prob - 0.5) * 20;                // 0..10
     regimeStrengthRaw.push(conviction < 0.5 ? 0.5 : conviction);

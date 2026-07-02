@@ -7,7 +7,7 @@ import { useChartStore } from '@/store/chartStore';
 import { BarChart2, TrendingUp, Activity, Zap, Layers, Maximize2, X, Plus, Camera, Expand, Settings, Check, Sun, Moon } from 'lucide-react';
 import { computeIndicators } from '@/core/indicators/client';
 import { t1moCompute } from '@/src/core/indicators/t1mo';
-import { computeT1moScores } from '@/src/core/indicators/t1moPixel';
+import { computeT1moHorizons } from '@/src/core/indicators/t1moPixel';
 import { runPine } from '@/lib/pineLite';
 
 const CandlestickChartIcon = ({ size = 14 }: { size?: number }) => (
@@ -78,10 +78,12 @@ function hash01(a: number, b: number): number {
 
 /** Continuous red→orange→yellow→green colormap (score 0..100). Smooth blend so the
  *  histogram hills read as gradual colour transitions, not 7 hard steps. */
+// v1-parity stops: broad amber/orange midband, saturated red/green only at the extremes
+// (old stops went vivid green at 0.80 → whole trends rendered as one solid slab).
 const PIXEL_STOPS: Array<[number, [number, number, number]]> = [
-  [0.00, [0xdd, 0x2c, 0x00]], [0.30, [0xff, 0x3d, 0x00]], [0.45, [0xff, 0x6e, 0x40]],
-  [0.50, [0xff, 0xd7, 0x40]], [0.60, [0xb9, 0xf6, 0xca]], [0.80, [0x69, 0xf0, 0xae]],
-  [1.00, [0x00, 0xc8, 0x53]],
+  [0.00, [0xc6, 0x28, 0x28]], [0.20, [0xe5, 0x39, 0x35]], [0.38, [0xf5, 0x7c, 0x00]],
+  [0.46, [0xff, 0xb3, 0x00]], [0.50, [0xff, 0xd7, 0x40]], [0.56, [0xd4, 0xe1, 0x57]],
+  [0.66, [0x9c, 0xcc, 0x65]], [0.82, [0x66, 0xbb, 0x6a]], [1.00, [0x2e, 0x7d, 0x32]],
 ];
 const pixelColorSmooth = (s: number): string => {
   const x = Math.max(0, Math.min(100, s)) / 100;
@@ -108,14 +110,16 @@ function computePixelScores(
   closes: number[],
 ): { scores: Record<string, number[]>; active: boolean[] } {
   const n = closes.length;
-  // Canonical real-signal engine (src/core/indicators/t1moPixel.ts) — single source of
-  // truth, in git, no lost-reference dependency. Returns the 0..100 composite per bar.
+  // Canonical multi-horizon engine (src/core/indicators/t1moPixel.ts) — v1 semantics:
+  // 3 blocks per candle = LONG / MEDIUM / SHORT trend, each independently scored.
   const bullProb = (t1mo?.series?.bullProb ?? []) as number[];
-  const score = computeT1moScores(ind, closes, bullProb);
+  const hz = computeT1moHorizons(ind, closes, bullProb);
 
-  // All rows carry the same composite score (single-series heatmap; the draw reads row 0).
-  const scores: Record<string, number[]> = {};
-  for (const key of PIXEL_ROWS) scores[key] = score;
+  const scores: Record<string, number[]> = {
+    long: hz.long, medium: hz.medium, short: hz.short, composite: hz.composite,
+  };
+  // Legacy rows keep the composite so any old reader stays functional.
+  for (const key of PIXEL_ROWS) scores[key] = hz.composite;
 
   return { scores, active: new Array(n).fill(true) };
 }
@@ -216,9 +220,6 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   const [showGrid, setShowGrid]   = useState(true);
   const scaleModeRef = useRef(0);
   const showGridRef  = useRef(true);
-  // Temporary on-screen diagnostic for the blank-chart investigation.
-  const [chartDiag, setChartDiag] = useState('');
-
   // Stable ref for candles — prevents buildCharts from re-running on every SWR poll
   // (SWR creates a new array reference on each successful fetch even with same data)
   const candlesRef = useRef<typeof candles>([]);
@@ -910,8 +911,11 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             const nBars  = ps?.nBars ?? 0;
             const from  = Math.max(0, Math.floor(range.from));
             const to    = Math.min(nBars - 1, Math.ceil(range.to));
-            const seriesArr = scores[PIXEL_ROWS[0]] ?? [];
-            const colScore = (i: number) => { const v = seriesArr[i]; return Number.isFinite(v) ? (v as number) : 50; };
+            const sLong  = scores['long'] ?? scores[PIXEL_ROWS[0]] ?? [];
+            const sMed   = scores['medium'] ?? sLong;
+            const sShort = scores['short'] ?? sLong;
+            const sComp  = scores['composite'] ?? sLong;
+            const at = (arr: number[], i: number) => { const v = arr[i]; return Number.isFinite(v) ? (v as number) : 50; };
 
             // ── T1MO Pixel — RECOVERED 3-block-per-column structure (PixelHeatmap_FINAL.tsx) ──
             // Each candle column = 3 rounded blocks: BASE (at equator) + CENTER square +
@@ -931,25 +935,32 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
               const gapY = sqH * 0.15;
               const rad  = Math.max(1, bW * 0.15);
 
-              const s        = colScore(i);
-              const isUp     = s >= 50;
-              const strength = Math.max(0, Math.min(1, Math.abs(s - 50) / 50));
-              // Smooth colormap (vivid red → orange → YELLOW(50) → green → teal) so every
-              // transition passes through yellow — no abrupt red↔green snap — while the
-              // extremes stay vivid. Replaces the 5 hard buckets that caused the jumps.
-              ctx.fillStyle = pixelColorSmooth(s);
+              // Multi-horizon (v1 semantics): each of the 3 blocks carries its OWN
+              // trend score — BASE=LONG, CENTER=MEDIUM, OUTER=SHORT — locked 1:1 to
+              // the candle. Stack direction from the weighted composite; the dynamic
+              // OUTER height is the SHORT-trend conviction. Colours via the smooth
+              // red→orange→YELLOW→green colormap (transitions pass through yellow).
+              const long   = at(sLong, i);
+              const med    = at(sMed, i);
+              const short  = at(sShort, i);
+              const comp   = at(sComp, i);
+              const isUp     = comp >= 50;
+              const strength = Math.max(0, Math.min(1, Math.abs(short - 50) / 50));
 
-              const block = (y: number, h: number) => { ctx.beginPath(); (ctx as any).roundRect(x + gapX, y, bW, h, rad); ctx.fill(); };
+              const block = (y: number, h: number, sc: number) => {
+                ctx.fillStyle = pixelColorSmooth(sc);
+                ctx.beginPath(); (ctx as any).roundRect(x + gapX, y, bW, h, rad); ctx.fill();
+              };
 
               const b1y = midY - sqH / 2;
-              block(b1y, sqH);                          // BASE block at the equator
+              block(b1y, sqH, long);                    // BASE = LONG trend (equator)
               const dynH = sqH + strength * (sqH * 4);  // DYNAMIC outer block (min = sqH)
               if (isUp) {
-                const b2y = b1y - gapY - sqH; block(b2y, sqH);   // CENTER square (upward)
-                block(b2y - gapY - dynH, dynH);                  // DYNAMIC (upward)
+                const b2y = b1y - gapY - sqH; block(b2y, sqH, med);   // CENTER = MEDIUM (up)
+                block(b2y - gapY - dynH, dynH, short);                // OUTER = SHORT (up)
               } else {
-                const b2y = b1y + sqH + gapY; block(b2y, sqH);   // CENTER square (downward)
-                block(b2y + sqH + gapY, dynH);                   // DYNAMIC (downward)
+                const b2y = b1y + sqH + gapY; block(b2y, sqH, med);   // CENTER = MEDIUM (down)
+                block(b2y + sqH + gapY, dynH, short);                 // OUTER = SHORT (down)
               }
             }
 
@@ -1200,9 +1211,6 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     if (wrapRef.current) obs.observe(wrapRef.current);
     chartsRef.current._obs = obs;
     applyChartSettings(); // re-apply scale mode + grid after a fresh build
-    setChartDiag(`OK · ${formatted.length} bar · ${mainMode} · main:${chartsRef.current.main ? 'y' : 'n'} candle:${seriesRef.current.candle ? 'y' : 'n'}`);
-    // eslint-disable-next-line no-console
-    console.log('[ATLAS-DIAG] chart built', { bars: formatted.length, mode: mainMode, mainW: mainRef.current?.clientWidth, mainH: mainRef.current?.clientHeight });
    } catch (err) {
      // A failure anywhere in the build must NOT propagate to React and blank the whole
      // component (the "white screen"). Log it; the data-update effect re-triggers buildCharts.
@@ -1577,7 +1585,6 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           </div>
         )}
         <div ref={mainRef} className="chart-panel chart-panel-main">
-          {chartDiag && <div className="chart-diag-badge" title="diagnostic">{chartDiag}</div>}
           <canvas ref={smcCanvasRef} className="smc-overlay-canvas"/>
           <canvas
             ref={drawCanvasRef}
