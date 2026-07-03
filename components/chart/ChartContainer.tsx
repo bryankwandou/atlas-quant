@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, useCallback, useLayoutEffect, useMemo } from 'react';
-import { createChart, ColorType, CandlestickSeries, LineSeries, HistogramSeries, BarSeries, AreaSeries } from 'lightweight-charts';
+import { createChart, ColorType, CandlestickSeries, LineSeries, HistogramSeries, BarSeries, AreaSeries, createSeriesMarkers } from 'lightweight-charts';
 import { useTheme } from '@/hooks/useTheme';
 import { useMarketData, useLiveBars } from '@/hooks/useMarketData';
 import { useChartStore } from '@/store/chartStore';
@@ -537,29 +537,44 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     // ── Velo Crypto Pack — generic renderer (250+ presets, id 'velo_*') ──
     // main-pane presets overlay as price lines; sub-pane presets render on a
     // dedicated bottom price scale (TradingView "overlay oscillator" style).
-    {
+    try {
       const veloIds = activeIndicators.filter((id: string) => id.startsWith('velo_'));
       if (veloIds.length) {
         const vctx = { open: formatted.map((c: any) => c.open), high: highs, low: lows, close: closes, volume: volumes };
+        // Guard the candle scale: a 'main' overlay may only share the candle
+        // 'right' price scale when its values actually live in price range.
+        // Anything off-scale (z-scores, cumulative volume, ratios) would blow up
+        // the shared autoscale and squash the candles into an invisible sliver
+        // (silent white main panel). Such series get their own hidden overlay scale.
+        const loP = Math.min(...lows.filter(Number.isFinite));
+        const hiP = Math.max(...highs.filter(Number.isFinite));
+        const inPriceRange = (vals: number[]) => {
+          const fin = vals.filter((v) => Number.isFinite(v));
+          if (!fin.length) return true;
+          const lo = Math.min(...fin), hi = Math.max(...fin);
+          return lo >= loP * 0.2 && hi <= hiP * 5; // generous band around price
+        };
         for (const vid of veloIds) {
-          const res = computeVeloPreset(vid, vctx);
+          let res: ReturnType<typeof computeVeloPreset> | null = null;
+          try { res = computeVeloPreset(vid, vctx); } catch { res = null; }
           if (!res) continue;
           for (const plot of res.plots) {
-            const opts = res.pane === 'main'
-              ? { priceScaleId: 'right' }
-              : { priceScaleId: 'velo-osc' };
-            if (plot.type === 'hist') {
-              const s = (main as any).addSeries(HistogramSeries, { ...opts, color: plot.color, priceLineVisible: false, lastValueVisible: false, title: plot.label });
-              s.setData(times.map((t: number, i: number) => ({ time: t, value: plot.values[i], color: (plot.values[i] ?? 0) >= 0 ? plot.color : '#f23645' })).filter((d: any) => Number.isFinite(d.value)));
-            } else {
-              const s = (main as any).addSeries(LineSeries, { ...opts, color: plot.color, lineWidth: res.pane === 'main' ? 1.5 : 1, priceLineVisible: false, lastValueVisible: res.pane === 'main', title: plot.label });
-              s.setData(times.map((t: number, i: number) => ({ time: t, value: plot.values[i] })).filter((d: any) => Number.isFinite(d.value)));
-            }
+            const onPrice = res.pane === 'main' && inPriceRange(plot.values);
+            const opts = onPrice ? { priceScaleId: 'right' } : { priceScaleId: 'velo-osc' };
+            try {
+              if (plot.type === 'hist') {
+                const s = (main as any).addSeries(HistogramSeries, { ...opts, color: plot.color, priceLineVisible: false, lastValueVisible: false, title: plot.label });
+                s.setData(times.map((t: number, i: number) => ({ time: t, value: plot.values[i], color: (plot.values[i] ?? 0) >= 0 ? plot.color : '#f23645' })).filter((d: any) => Number.isFinite(d.value)));
+              } else {
+                const s = (main as any).addSeries(LineSeries, { ...opts, color: plot.color, lineWidth: onPrice ? 1.5 : 1, priceLineVisible: false, lastValueVisible: onPrice, title: plot.label });
+                s.setData(times.map((t: number, i: number) => ({ time: t, value: plot.values[i] })).filter((d: any) => Number.isFinite(d.value)));
+              }
+            } catch { /* per-plot render error — non-fatal */ }
           }
         }
         try { (main as any).priceScale('velo-osc').applyOptions({ scaleMargins: { top: 0.78, bottom: 0.02 }, visible: false }); } catch { /* no sub plots */ }
       }
-    }
+    } catch { /* Velo pack error — never abort the candle build */ }
 
     // HMA, ALMA, DEMA, TEMA, ZLEMA
     if (activeIndicators.includes('HMA'))    addLine(ind.hma(14),  '#ff6b35', 'HMA(14)', 0, 1.5);
@@ -754,7 +769,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           const posArr = (t1moResult.series.positionPct ?? []) as number[];
           const markers = computeT1moSignalMarkers(bpArr, posArr, formatted);
           if (markers.length) {
-            try { candleSeries.setMarkers(markers); } catch {}
+            // lightweight-charts v5 removed series.setMarkers → use createSeriesMarkers.
+            try { createSeriesMarkers(candleSeries, markers); } catch {}
           }
         }
       }
@@ -839,6 +855,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         } catch {}
       }
     }
+    // Final guard: force the candle price scale to autoscale to the candles so no
+    // overlay added above can ever leave the candles framed off-screen (blank panel).
+    try { candleSeries.priceScale().applyOptions({ autoScale: true }); } catch {}
 
     // ── VOLUME CHART ──────────────────────────────────────────
     const volChart = createChart(volRef.current!, { ...(baseOpts(volRef.current!) as any), timeScale: { ...baseOpts(volRef.current!).timeScale, visible: false } });
