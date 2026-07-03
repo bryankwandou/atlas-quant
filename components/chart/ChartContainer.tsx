@@ -35,7 +35,15 @@ const SUB_PANELS = [
   { id: 'bandar',   label: 'Bandar Detect' },
   { id: 'bandarad', label: 'Bandar A/D'    },
   { id: 'cvd',      label: 'CVD Flow'      },
+  // ── Relative Strength (rebuild fitur v1 "Strength to BTCUSD / Index") ──
+  { id: 'rs_btc',   label: 'Strength/BTC'  },
+  { id: 'rs_idx',   label: 'Strength/IHSG' },
 ];
+// Benchmark symbol per RS panel (IHSG = Jakarta Composite via provider alias).
+const RS_BENCH: Record<string, { sym: string; label: string }> = {
+  rs_btc: { sym: 'BTCUSDT',   label: 'Strength to BTCUSD' },
+  rs_idx: { sym: 'COMPOSITE', label: 'Strength to Index'  },
+};
 const SUB_PANEL_LABEL: Record<string, string> =
   Object.fromEntries(SUB_PANELS.map(p => [p.id, p.label]));
 
@@ -119,6 +127,17 @@ function computePixelScores(
   const scores: Record<string, number[]> = {
     long: hz.long, medium: hz.medium, short: hz.short, composite: hz.composite,
   };
+  // Anti-spike: the OUTER-block HEIGHT driver is EMA(7)-smoothed conviction, so
+  // heights rise/fall as gradual hills (v1 character) instead of jumping
+  // long→short bar-to-bar. Colour still follows the responsive short score.
+  {
+    const k = 2 / (7 + 1); let prev = 0;
+    scores['strengthSm'] = hz.short.map((s) => {
+      const v = Number.isFinite(s) ? Math.abs(s - 50) / 50 : prev;
+      prev = v * k + prev * (1 - k);
+      return prev;
+    });
+  }
   // Legacy rows keep the composite so any old reader stays functional.
   for (const key of PIXEL_ROWS) scores[key] = hz.composite;
 
@@ -250,6 +269,31 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     return () => { alive = false; clearInterval(iv); };
   }, [compareSymbols, timeframe]);
 
+  // ── Fetch benchmark histories for the Relative Strength panels (BTC / IHSG) ──
+  const [benchData, setBenchData] = useState<Record<string, Array<{ time: number; close: number }>>>({});
+  useEffect(() => {
+    const need = subPanels.filter((p) => RS_BENCH[p]).map((p) => RS_BENCH[p].sym);
+    if (!need.length) { setBenchData({}); return; }
+    let alive = true;
+    const load = async () => {
+      const next: Record<string, Array<{ time: number; close: number }>> = {};
+      await Promise.all([...new Set(need)].map(async (bs) => {
+        try {
+          const res = await fetch(`/api/market/ohlcv?symbol=${bs}&timeframe=${timeframe}&limit=1500`);
+          const j = await res.json();
+          next[bs] = ((j?.data || []) as any[])
+            .map((c) => ({ time: Math.floor(+c.open_time / 1000), close: +c.close }))
+            .filter((c) => c.time > 0 && c.close > 0)
+            .sort((a, b) => a.time - b.time);
+        } catch { next[bs] = []; }
+      }));
+      if (alive) setBenchData(next);
+    };
+    load();
+    const iv = setInterval(load, 60_000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [subPanels, timeframe]);
+
   const [panelPct, setPanelPct] = useState([52, 10, 38]);
   const panelPctRef    = useRef([52, 10, 38]);
   const buildPendingRef = useRef(false);
@@ -359,11 +403,16 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       crosshair: { mode: 1, vertLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true }, horzLine: { color: tk.crosshair, width: 1, style: 3, labelVisible: true } },
       // Fixed minimum width so every stacked panel's price axis is the same width →
       // their time columns line up exactly (pixel-locked panes, TradingView-style).
-      rightPriceScale: { borderColor: tk.border, textColor: tk.text2, minimumWidth: 78 },
+      // Phones: shrink the axis uniformly (same value on EVERY pane keeps the 1:1
+      // lock) so a 390px screen doesn't lose 20% of its width to the price scale.
+      rightPriceScale: { borderColor: tk.border, textColor: tk.text2, minimumWidth: (typeof window !== 'undefined' && window.innerWidth <= 520) ? 46 : 78 },
       timeScale: {
         borderColor: tk.border, textColor: tk.text2,
         timeVisible: showTime, secondsVisible: showSecs,
-        rightOffset: 10, lockVisibleTimeRangeOnResize: true,
+        // TradingView behavior on resize: keep BAR SPACING constant and trim the
+        // window (lock=false). With lock=true the whole time range is preserved and
+        // the bars compress on every expand→minimize — the "auto zoom out" defect.
+        rightOffset: 10, lockVisibleTimeRangeOnResize: false,
         tickMarkFormatter: (t: number, tickMarkType: number) => {
           // TickMarkType: 0=Year, 1=Month, 2=Day, 3=Time, 4=TimeWithSeconds
           if (tickMarkType <= 2) return fmtDate(t);
@@ -921,7 +970,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           // shifted the heatmap columns out of 1:1 alignment with the candle bars. The
           // canvas overlay paints an opaque background over this strip, so no price labels
           // show; we only need the reserved width so logicalToCoordinate(i) matches the main chart.
-          try { (subChart as any).priceScale('right').applyOptions({ visible: true, minimumWidth: 78 }); } catch {}
+          // NOTE: must match baseOpts' responsive axis width (46 phone / 78 desktop) — 1:1 lock.
+          try { (subChart as any).priceScale('right').applyOptions({ visible: true, minimumWidth: (typeof window !== 'undefined' && window.innerWidth <= 520) ? 46 : 78 }); } catch {}
 
           const t1moSub = t1moCompute({ close: closes, high: highs, low: lows, volume: volumes, open: closes, time: times } as any, {});
           const { scores } = computePixelScores(ind, t1moSub.meta.ready ? t1moSub : null, closes);
@@ -962,6 +1012,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             const sMed   = scores['medium'] ?? sLong;
             const sShort = scores['short'] ?? sLong;
             const sComp  = scores['composite'] ?? sLong;
+            const sStrH  = scores['strengthSm'] ?? null; // smoothed height driver (anti-spike)
             const at = (arr: number[], i: number) => { const v = arr[i]; return Number.isFinite(v) ? (v as number) : 50; };
 
             // ── T1MO Pixel — RECOVERED 3-block-per-column structure (PixelHeatmap_FINAL.tsx) ──
@@ -992,7 +1043,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
               const short  = at(sShort, i);
               const comp   = at(sComp, i);
               const isUp     = comp >= 50;
-              const strength = Math.max(0, Math.min(1, Math.abs(short - 50) / 50));
+              const strength = Math.max(0, Math.min(1,
+                sStrH && Number.isFinite(sStrH[i]) ? sStrH[i] : Math.abs(short - 50) / 50));
 
               const block = (y: number, h: number, sc: number) => {
                 ctx.fillStyle = pixelColorSmooth(sc);
@@ -1027,6 +1079,31 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           subChart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
           requestAnimationFrame(() => { redraw(); requestAnimationFrame(redraw); });
         } catch { /* T1MO pixel compute error — non-fatal */ }
+      } else if (subPanel === 'rs_btc' || subPanel === 'rs_idx') {
+        // ── Relative Strength vs benchmark (rebuild fitur v1 "Strength to BTCUSD/Index").
+        // RS = close/benchClose aligned per-bar, dinormalisasi 100 di bar pertama yang
+        // overlap. >100 & naik = outperform benchmark; <100 & turun = underperform.
+        const bench = benchData[RS_BENCH[subPanel].sym] ?? [];
+        const bmap = new Map(bench.map((b) => [b.time, b.close]));
+        const rsRaw = times.map((t: number, i: number) => {
+          const b = bmap.get(t);
+          return b && b > 0 ? closes[i] / b : NaN;
+        });
+        const firstFin = rsRaw.find((v: number) => Number.isFinite(v));
+        const rs = rsRaw.map((v: number) => (Number.isFinite(v) && firstFin ? (v / firstFin) * 100 : NaN));
+        const rsMa = (() => { // SMA(20) of RS as the signal line
+          const o: number[] = []; let s = 0; const q: number[] = [];
+          for (const v of rs) {
+            if (!Number.isFinite(v)) { o.push(NaN); continue; }
+            q.push(v); s += v; if (q.length > 20) s -= q.shift()!;
+            o.push(q.length === 20 ? s / 20 : NaN);
+          }
+          return o;
+        })();
+        addSubLine(rs,   '#7b61ff', RS_BENCH[subPanel].label, 1.5);
+        addSubLine(rsMa, '#ff9800', 'MA20', 1);
+        addLevel(100, 'rgba(255,255,255,0.15)');
+        if (!bench.length) addSubLine(times.map(() => NaN), '#555', 'Benchmark data loading…');
       } else if (subPanel === 'rsi') {
         addSubLine(ind.rsi(7), '#7e57c2', 'RSI(7)');
         [[30, 'rgba(8,153,129,0.3)'], [50, 'rgba(255,255,255,0.08)'], [70, 'rgba(242,54,69,0.3)']].forEach(([v, c]) => addLevel(v as number, c as string));
@@ -1257,6 +1334,24 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     });
     if (wrapRef.current) obs.observe(wrapRef.current);
     chartsRef.current._obs = obs;
+
+    // ── GPU canvas-loss self-heal ────────────────────────────────────────────
+    // On phones / low-VRAM devices the browser kills the LARGEST canvas on the
+    // page under memory pressure (the main price pane) — the chart object stays
+    // alive and reports success, but the canvas shows the ☹ placeholder / blank
+    // white while the smaller VOL/T1MO canvases survive. Listen for 2D context
+    // loss and route it into the existing silent-rebuild path (no button).
+    try {
+      const heal = () => setBuildError({ msg: 'canvas-context-lost', at: Date.now() });
+      const allPanes = [mainRef.current, volRef.current, subRef.current];
+      for (const pane of allPanes) {
+        if (!pane) continue;
+        for (const cv of Array.from(pane.querySelectorAll('canvas'))) {
+          cv.addEventListener('contextlost', heal, { once: true });
+        }
+      }
+    } catch {}
+
     applyChartSettings(); // re-apply scale mode + grid after a fresh build
    } catch (err) {
      // A failure anywhere in the build must NOT propagate to React and blank the whole
@@ -1266,7 +1361,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
    }
   // candles removed — reads via candlesRef.current; panelPct removed — reads via panelPctRef.current
   }, [theme, activeIndicators, showSignals, subPanels, baseOpts, symbol, chartType,
-      compareSymbols, compareData, pineScripts, replayActive, replayIndex, applyChartSettings]);
+      compareSymbols, compareData, benchData, pineScripts, replayActive, replayIndex, applyChartSettings]);
 
   // Sync settings refs + live charts whenever the user changes scale mode / grid.
   useEffect(() => {
@@ -1299,6 +1394,49 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     const id = setTimeout(() => { buildRetryRef.current += 1; buildCharts(); }, 300);
     return () => clearTimeout(id);
   }, [buildError, buildCharts]);
+
+  const blankProbesRef = useRef(0); // consecutive uniform-paint probes
+  // Canvas watchdog — when the tab becomes visible again (the classic moment a
+  // mobile browser reclaims GPU canvases) and every 7s, probe the main pane's
+  // canvases; a lost 2D context or a vanished canvas → silent rebuild.
+  useEffect(() => {
+    const probe = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!chartsRef.current.main || !mainRef.current) return;
+      try {
+        const cvs = Array.from(mainRef.current.querySelectorAll('.tv-lightweight-charts canvas')) as HTMLCanvasElement[];
+        if (!cvs.length) { setBuildError({ msg: 'canvas-missing', at: Date.now() }); return; }
+        for (const cv of cvs) {
+          const ctx = cv.getContext('2d') as (CanvasRenderingContext2D & { isContextLost?: () => boolean }) | null;
+          if (ctx?.isContextLost?.()) { setBuildError({ msg: 'canvas-context-lost', at: Date.now() }); return; }
+        }
+        // BLANK-PAINT check (kasus layar putih user: canvas hidup tapi polos).
+        // Sampel canvas terbesar; kalau ada data candle tapi SEMUA pixel seragam
+        // pada 2 probe berturut-turut (≥14s) → rebuild via buildError path.
+        if (candlesRef.current?.length) {
+          const big = cvs.sort((a, b) => b.width * b.height - a.width * a.height)[0];
+          const c2 = big?.getContext('2d');
+          if (big && c2 && big.width > 0 && big.height > 0) {
+            const w = Math.min(320, big.width), h = Math.min(240, big.height);
+            const d = c2.getImageData(0, 0, w, h).data;
+            let varied = false;
+            for (let i = 4; i < d.length; i += 32) {
+              if (Math.abs(d[i] - d[0]) > 6 || Math.abs(d[i + 1] - d[1]) > 6 || Math.abs(d[i + 2] - d[2]) > 6) { varied = true; break; }
+            }
+            if (varied) { blankProbesRef.current = 0; }
+            else if (++blankProbesRef.current >= 2) {
+              blankProbesRef.current = 0;
+              console.warn('[ATLAS] watchdog: canvas utama blank → force rebuild');
+              setBuildError({ msg: 'canvas-blank-paint', at: Date.now() });
+            }
+          }
+        }
+      } catch { /* probe must never crash the app */ }
+    };
+    document.addEventListener('visibilitychange', probe);
+    const iv = setInterval(probe, 7000);
+    return () => { document.removeEventListener('visibilitychange', probe); clearInterval(iv); };
+  }, []);
 
   // Unmount-only cleanup
   useEffect(() => {

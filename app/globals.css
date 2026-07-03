@@ -130,6 +130,10 @@ select{cursor:pointer;}
   .topbar>*{flex-shrink:0;}
   .status-bar{overflow-x:auto;white-space:nowrap;scrollbar-width:none;}
   .status-bar::-webkit-scrollbar{display:none;}
+  /* Chart toolbar + range bar: swipeable rows, controls never wrap or clip */
+  .chart-toolbar,.chart-range-bar{overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap;scrollbar-width:none;}
+  .chart-toolbar::-webkit-scrollbar,.chart-range-bar::-webkit-scrollbar{display:none;}
+  .chart-toolbar>*,.chart-range-bar>*{flex-shrink:0;}
   /* Slim icon-only sidebar (no labels) */
   .atlas-app.sidebar-expanded{--sidebar-w:44px;}
   .sb-nav-label,.sb-tool-lbl{display:none !important;}
