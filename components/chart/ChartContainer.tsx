@@ -752,8 +752,10 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           const canvas = smcCanvasRef.current;
           const data = smcDataRef.current;
           if (!canvas || !data || !chartsRef.current.main) return;
-          const W = canvas.clientWidth, H = canvas.clientHeight;
-          if (W < 2 || H < 2) return;
+          // Ukur dari panel induk (anti feedback-loop canvas×DPR — lihat drawOverlay).
+          const W = canvas.parentElement?.clientWidth ?? canvas.clientWidth;
+          const H = canvas.parentElement?.clientHeight ?? canvas.clientHeight;
+          if (W < 2 || H < 2 || W > 8192 || H > 8192) return;
           const dpr = window.devicePixelRatio || 1;
           canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
           const ctx = canvas.getContext('2d');
@@ -982,8 +984,11 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             const canvas = pixelCanvasRef.current;
             const sc = subChart;
             if (!canvas || !sc) return;
-            const W = canvas.clientWidth, H = canvas.clientHeight;
-            if (W < 2 || H < 2) return;
+            // Ukur dari slot induk (anti feedback-loop canvas×DPR — lihat drawOverlay).
+            // Tinggi = slot − 18px header (CSS: height:calc(100% - 18px)).
+            const W = canvas.parentElement?.clientWidth ?? canvas.clientWidth;
+            const H = canvas.parentElement ? Math.max(0, canvas.parentElement.clientHeight - 18) : canvas.clientHeight;
+            if (W < 2 || H < 2 || W > 8192 || H > 8192) return;
             const dpr = window.devicePixelRatio || 1;
             canvas.width = Math.round(W * dpr);
             canvas.height = Math.round(H * dpr);
@@ -1252,8 +1257,13 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     const drawOverlay = () => {
       const canvas = drawCanvasRef.current;
       if (!canvas || !chartsRef.current.main) return;
-      const W = canvas.clientWidth, H = canvas.clientHeight;
-      if (W < 2 || H < 2) return;
+      // Ukur dari PANEL INDUK, bukan dari canvas sendiri. Canvas = replaced element:
+      // bila CSS gagal mengunci ukurannya, clientWidth mengikuti atribut → menulis
+      // clientWidth×DPR kembali ke atribut = pertumbuhan eksponensial ×DPR per redraw
+      // (17-juta-px di HP) → browser bunuh semua canvas → layar putih ☹.
+      const W = canvas.parentElement?.clientWidth ?? canvas.clientWidth;
+      const H = canvas.parentElement?.clientHeight ?? canvas.clientHeight;
+      if (W < 2 || H < 2 || W > 8192 || H > 8192) return;
       const dpr = window.devicePixelRatio || 1;
       canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
       const ctx = canvas.getContext('2d'); if (!ctx) return;
