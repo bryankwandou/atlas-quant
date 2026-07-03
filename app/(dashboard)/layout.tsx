@@ -27,6 +27,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Anti "layar putih abadi" — stale-deploy recovery ──────────────────────
+  // Saat Vercel deploy baru, HTML lama di cache browser menunjuk chunk JS yang
+  // sudah tidak ada → ChunkLoadError → React blank permanen sampai hard-refresh.
+  // Failsafe: deteksi error itu dan reload SEKALI otomatis (guard sessionStorage
+  // agar tidak reload-loop); guard dibersihkan setelah 15 detik sesi sehat.
+  useEffect(() => {
+    const KEY = 'atlas:chunk-reloaded';
+    const isChunkErr = (s: string) =>
+      /ChunkLoadError|Loading chunk .* failed|dynamically imported module|Importing a module script failed|text\/html.*module/i.test(s);
+    const recover = (msg: string) => {
+      if (!isChunkErr(msg)) return;
+      try {
+        if (sessionStorage.getItem(KEY)) return;
+        sessionStorage.setItem(KEY, '1');
+      } catch { /* storage blocked → still try one reload */ }
+      window.location.reload();
+    };
+    const onError = (e: ErrorEvent) => recover(String(e?.message ?? ''));
+    const onRejection = (e: PromiseRejectionEvent) => recover(String((e?.reason as any)?.message ?? e?.reason ?? ''));
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+    const healthy = setTimeout(() => { try { sessionStorage.removeItem(KEY); } catch {} }, 15_000);
+    return () => {
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+      clearTimeout(healthy);
+    };
+  }, []);
+
   // Restore persisted panel widths (so they aren't "static" between sessions)
   useEffect(() => {
     if (!ready) return;
