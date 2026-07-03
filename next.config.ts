@@ -28,6 +28,16 @@ const nextConfig: NextConfig = {
           { key: 'Referrer-Policy',            value: 'strict-origin-when-cross-origin' },
         ],
       },
+      {
+        // HTML tidak boleh di-cache browser: shell HTML lama menunjuk chunk JS
+        // yang sudah dihapus setelah deploy → ChunkLoadError → layar putih
+        // permanen sampai hard-refresh manual. Aset /_next/static ber-hash
+        // immutable dan tetap memakai caching bawaannya sendiri.
+        source: '/((?!api|_next/static|_next/image|favicon.ico).*)',
+        headers: [
+          { key: 'Cache-Control', value: 'no-store, must-revalidate' },
+        ],
+      },
     ];
   },
 };
