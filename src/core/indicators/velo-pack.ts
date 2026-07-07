@@ -302,6 +302,79 @@ const FAMILIES: Record<string, Fam> = {
     });
     return { pane: 'sub', plots: [hist(W > 1 ? emaA(s, W) : s, `Streak e${W}`, C.trend)] };
   },
+  /** Rolling Skewness — asimetri distribusi return window W (− = tail risk turun). */
+  skewr: (x, [W]) => {
+    const r = logRet(x.close);
+    const v = r.map((_, i) => {
+      if (i < W) return NaN;
+      const win = r.slice(i - W + 1, i + 1).filter(Number.isFinite) as number[];
+      if (win.length < W * 0.9) return NaN;
+      const m = win.reduce((a, b) => a + b, 0) / win.length;
+      let s2 = 0, s3 = 0;
+      for (const q of win) { const d = q - m; s2 += d * d; s3 += d * d * d; }
+      const sd = Math.sqrt(s2 / win.length);
+      return sd > 0 ? (s3 / win.length) / (sd ** 3) : NaN;
+    });
+    return { pane: 'sub', plots: [line(v, `Skew ${W}`, C.stat)] };
+  },
+  /** Rolling Excess Kurtosis — fat-tail meter window W (>0 = tail events dominan). */
+  kurtr: (x, [W]) => {
+    const r = logRet(x.close);
+    const v = r.map((_, i) => {
+      if (i < W) return NaN;
+      const win = r.slice(i - W + 1, i + 1).filter(Number.isFinite) as number[];
+      if (win.length < W * 0.9) return NaN;
+      const m = win.reduce((a, b) => a + b, 0) / win.length;
+      let s2 = 0, s4 = 0;
+      for (const q of win) { const d = q - m; s2 += d * d; s4 += d * d * d * d; }
+      const va = s2 / win.length;
+      return va > 0 ? (s4 / win.length) / (va * va) - 3 : NaN;
+    });
+    return { pane: 'sub', plots: [line(v, `Kurt ${W}`, C.stat)] };
+  },
+  /** VPIN Proxy — |Σ signed vol| / Σ vol rolling W (0 seimbang → 1 order-flow toxic). */
+  vpin: (x, [W]) => {
+    const sv = signedVol(x);
+    const v = sv.map((_, i) => {
+      if (i < W) return NaN;
+      let s = 0, tot = 0;
+      for (let j = i - W + 1; j <= i; j++) { s += sv[j]; tot += x.volume[j]; }
+      return tot > 0 ? Math.abs(s) / tot : NaN;
+    });
+    return { pane: 'sub', plots: [line(v, `VPIN ${W}`, C.flow)] };
+  },
+  /** Absorption — volume relatif / |Δclose|·ATR⁻¹, EMA S. Tinggi = volume besar diserap tanpa gerak (dinding bandar). */
+  absorb: (x, [S]) => {
+    const atr = emaA(trArr(x), 14); const vm = smaA(x.volume, 50);
+    const a = x.close.map((c, i) => {
+      if (i === 0 || !(vm[i] > 0) || !(atr[i] > 0)) return NaN;
+      const mv = Math.abs(c - x.close[i - 1]) / atr[i];
+      return (x.volume[i] / vm[i]) / Math.max(0.15, mv);
+    });
+    return { pane: 'sub', plots: [line(emaA(a, S), `Absorb e${S}`, C.flow)] };
+  },
+  /** BB Width Percentile — persentil lebar Bollinger(W) dalam lookback L (0 = tersempit → breakout watch). */
+  bbwp: (x, [W, L]) => {
+    const sd = rollStd(x.close, W); const m = smaA(x.close, W);
+    const bw = sd.map((s, i) => (m[i] > 0 && Number.isFinite(s) ? (4 * s) / m[i] : NaN));
+    const p = bw.map((v, i) => {
+      if (i < L || !Number.isFinite(v)) return NaN;
+      let c = 0, n = 0;
+      for (let j = i - L + 1; j <= i; j++) if (Number.isFinite(bw[j])) { n++; if (bw[j] <= v) c++; }
+      return n > 0 ? (c / n) * 100 : NaN;
+    });
+    return { pane: 'sub', plots: [line(p, `BBWP ${W}/${L}`, C.vol)] };
+  },
+  /** Wick Sentiment — (lowerWick − upperWick)/range, EMA S (+ = buyer menolak harga bawah). */
+  wickr: (x, [S]) => {
+    const v = x.close.map((c, i) => {
+      const rng = x.high[i] - x.low[i];
+      if (!(rng > 0)) return 0;
+      const upW = x.high[i] - Math.max(x.open[i], c), dnW = Math.min(x.open[i], c) - x.low[i];
+      return (dnW - upW) / rng;
+    });
+    return { pane: 'sub', plots: [hist(emaA(v, S), `Wick e${S}`, C.liq)] };
+  },
 };
 
 // ── PRESET GRID ──────────────────────────────────────────────────────────────
@@ -363,6 +436,18 @@ const G: Grid[] = [
     grids: [[14], [28], [56]] },                                                                                                       // 3
   { fam: 'streak', cat: 'Momentum',       sub: 'Streak',         name: (p) => `Up/Down Streak · EMA ${p[0]}`, kw: ['streak','consecutive','runs'], pane: 'sub',
     grids: [[1], [3], [5], [8]] },                                                                                                     // 4
+  { fam: 'skewr',  cat: 'Statistical',    sub: 'Skewness',       name: (p) => `Return Skew ${p[0]}`, kw: ['skew','skewness','tail','distribution','velo'], pane: 'sub',
+    grids: [[30], [60], [90], [180]] },                                                                                                // 4
+  { fam: 'kurtr',  cat: 'Statistical',    sub: 'Kurtosis',       name: (p) => `Excess Kurtosis ${p[0]}`, kw: ['kurtosis','fat','tail','distribution','velo'], pane: 'sub',
+    grids: [[30], [60], [90], [180]] },                                                                                                // 4
+  { fam: 'vpin',   cat: 'Microstructure', sub: 'VPIN',           name: (p) => `VPIN Toxicity ${p[0]}`, kw: ['vpin','toxicity','informed','flow','velo'], pane: 'sub',
+    grids: [[20], [50], [100], [200]] },                                                                                               // 4
+  { fam: 'absorb', cat: 'Microstructure', sub: 'Absorption',     name: (p) => `Volume Absorption · EMA ${p[0]}`, kw: ['absorption','wall','bandar','iceberg','velo'], pane: 'sub',
+    grids: [[5], [9], [14], [21]] },                                                                                                   // 4
+  { fam: 'bbwp',   cat: 'Volatility',     sub: 'BB Width %ile',  name: (p) => `BB Width Percentile ${p[0]}/${p[1]}`, kw: ['bbwp','bollinger','width','percentile','squeeze','velo'], pane: 'sub',
+    grids: [20, 34].flatMap((w) => [100, 200, 365].map((l) => [w, l])) },                                                              // 6
+  { fam: 'wickr',  cat: 'Sentiment',      sub: 'Wick Sentiment', name: (p) => `Wick Sentiment · EMA ${p[0]}`, kw: ['wick','rejection','sentiment','candle','velo'], pane: 'sub',
+    grids: [[5], [9], [14], [21]] },                                                                                                   // 4
 ];
 
 export const VELO_PRESETS: IndicatorPreset[] = G.flatMap((g) =>

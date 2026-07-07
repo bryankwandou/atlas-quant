@@ -183,6 +183,36 @@ function computeT1moSignalMarkers(
   return out;
 }
 
+/** rAF-coalesced wrapper — pan/zoom fires dozens of visible-range events per frame;
+ *  painting the canvas overlays synchronously on EACH event was the main pan lag.
+ *  This guarantees at most one repaint per animation frame. */
+function rafThrottle(fn: () => void): () => void {
+  let scheduled = false;
+  return () => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => { scheduled = false; fn(); });
+  };
+}
+
+/** Shallow equality for the compare/benchmark history maps — the pollers used to
+ *  setState a NEW object every 30–60s even when nothing changed, which re-fired
+ *  buildCharts (a FULL chart teardown+rebuild) on a timer: periodic lag + flash. */
+function sameSeriesMap(
+  a: Record<string, Array<{ time: number; close: number }>>,
+  b: Record<string, Array<{ time: number; close: number }>>,
+): boolean {
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  for (const k of kb) {
+    const x = a[k], y = b[k];
+    if (!x || x.length !== y.length) return false;
+    const n = y.length;
+    if (n && (x[n - 1].time !== y[n - 1].time || x[n - 1].close !== y[n - 1].close)) return false;
+  }
+  return true;
+}
+
 interface Props { symbol: string; timeframe: string; }
 
 export default function ChartContainer({ symbol, timeframe }: Props) {
@@ -244,6 +274,10 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   // (SWR creates a new array reference on each successful fetch even with same data)
   const candlesRef = useRef<typeof candles>([]);
   useEffect(() => { candlesRef.current = candles; }, [candles]);
+  // Replay index by REF — buildCharts must NOT depend on replayIndex, otherwise every
+  // 700ms playback tick tears down and recreates every chart (the replay lag).
+  const replayIndexRef = useRef(replayIndex);
+  const t1moLiveAtRef = useRef(0); // throttle live-tick t1mo recompute (superRefresh 1s)
 
   // ── Fetch compare-symbol histories (own SWR-free poll; aligned in buildCharts) ──
   useEffect(() => {
@@ -262,7 +296,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             .sort((a, b) => a.time - b.time);
         } catch { next[cs] = []; }
       }));
-      if (alive) setCompareData(next);
+      // Keep the SAME reference when nothing changed → no re-render, no rebuild.
+      if (alive) setCompareData(prev => (sameSeriesMap(prev, next) ? prev : next));
     };
     load();
     const iv = setInterval(load, 30_000);
@@ -287,7 +322,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             .sort((a, b) => a.time - b.time);
         } catch { next[bs] = []; }
       }));
-      if (alive) setBenchData(next);
+      // Same-reference guard — a 60s poll must never trigger a full chart rebuild.
+      if (alive) setBenchData(prev => (sameSeriesMap(prev, next) ? prev : next));
     };
     load();
     const iv = setInterval(load, 60_000);
@@ -485,11 +521,16 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     // Bar-replay: truncate the visible history to the paused index so the chart
     // "plays back" candle-by-candle (TradingView-style). Indicators recompute on
     // the truncated set, exactly as if those future bars hadn't printed yet.
-    const formatted = (replayActive && replayIndex >= 2 && replayIndex < fmtAll.length)
-      ? fmtAll.slice(0, replayIndex)
+    const rIdx = replayIndexRef.current;
+    const formatted = (replayActive && rIdx >= 2 && rIdx < fmtAll.length)
+      ? fmtAll.slice(0, rIdx)
       : fmtAll;
 
     if (formatted.length < 2) return;
+    // O(1) time→index lookup — the crosshair used findIndex over ~1500 bars on every
+    // mousemove (visible cursor lag on long histories).
+    const timeIdxMap = new Map<any, number>();
+    for (let i = 0; i < formatted.length; i++) timeIdxMap.set((formatted[i] as any).time, i);
 
     // ── Guarantee a drawable main series ───────────────────────────────────────
     // Some feeds (illiquid / non-crypto tickers) return close-only or malformed OHLC.
@@ -782,8 +823,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           for (const f of data.fvg) drawZone(f.idx, f.top, f.bottom, f.type === 'bullish', f.type === 'bullish' ? 'FVG ▲' : 'FVG ▼');
           for (const ob of data.orderBlocks) drawZone(ob.idx, ob.high, ob.low, ob.type === 'bullish', ob.type === 'bullish' ? 'Bull OB' : 'Bear OB');
         };
-        smcRedrawRef.current = drawSMC;
-        main.timeScale().subscribeVisibleLogicalRangeChange(drawSMC);
+        const drawSMCThrottled = rafThrottle(drawSMC);
+        smcRedrawRef.current = drawSMCThrottled;
+        main.timeScale().subscribeVisibleLogicalRangeChange(drawSMCThrottled);
         requestAnimationFrame(() => { drawSMC(); requestAnimationFrame(drawSMC); });
       } catch { /* SMC compute error — non-fatal */ }
     }
@@ -914,6 +956,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     const volChart = createChart(volRef.current!, { ...(baseOpts(volRef.current!) as any), timeScale: { ...baseOpts(volRef.current!).timeScale, visible: false } });
     chartsRef.current.vol = volChart;
     const volSeries = (volChart as any).addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: 'right' });
+    seriesRef.current.vol = volSeries; // was never stored → volume pane froze on data polls
     volSeries.setData(formatted.map((c: any) => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)' })));
     if (activeIndicators.includes('VOLUME')) {
       const vsma = ind.sma(20);
@@ -1080,8 +1123,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             ctx.fillText('T1MO', 5, 3);
           };
 
-          pixelRedrawRef.current = redraw;
-          subChart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
+          const redrawThrottled = rafThrottle(redraw);
+          pixelRedrawRef.current = redrawThrottled;
+          subChart.timeScale().subscribeVisibleLogicalRangeChange(redrawThrottled);
           requestAnimationFrame(() => { redraw(); requestAnimationFrame(redraw); });
         } catch { /* T1MO pixel compute error — non-fatal */ }
       } else if (subPanel === 'rs_btc' || subPanel === 'rs_idx') {
@@ -1213,7 +1257,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       if (xhairSyncing) return;
       xhairSyncing = true;
       try {
-        const idx = param?.time ? formatted.findIndex((c: any) => c.time === param.time) : -1;
+        const idx = param?.time ? (timeIdxMap.get(param.time) ?? -1) : -1;
         const targets = [
           { ch: main,                  s: candleSeries, v: idx >= 0 ? formatted[idx]?.close  : 0 },
           { ch: chartsRef.current.vol, s: volSeries,    v: idx >= 0 ? formatted[idx]?.volume : 0 },
@@ -1234,7 +1278,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       else {
         const cd = param.seriesData?.get(candleSeries);
         if (cd) {
-          const idx = formatted.findIndex((c: any) => c.time === param.time);
+          const idx = timeIdxMap.get(param.time) ?? -1;
           // For line/area, cd has .value not .open/.high/.low/.close
           const candle = (chartType === 'line' || chartType === 'area')
             ? { open: cd.value, high: cd.value, low: cd.value, close: cd.value }
@@ -1317,8 +1361,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         drawOne({ ...draftRef.current, color: '#2962ff' } as any, true);
       }
     };
-    drawRedrawRef.current = drawOverlay;
-    main.timeScale().subscribeVisibleLogicalRangeChange(drawOverlay);
+    const drawOverlayThrottled = rafThrottle(drawOverlay);
+    drawRedrawRef.current = drawOverlayThrottled;
+    main.timeScale().subscribeVisibleLogicalRangeChange(drawOverlayThrottled);
     requestAnimationFrame(() => { drawOverlay(); requestAnimationFrame(drawOverlay); });
 
     // ResizeObserver — absolute layout: update top+height for all panels + splitters
@@ -1370,8 +1415,10 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
      setBuildError({ msg: err instanceof Error ? err.message : String(err), at: Date.now() });
    }
   // candles removed — reads via candlesRef.current; panelPct removed — reads via panelPctRef.current
+  // replayIndex removed — read via replayIndexRef; scrubbing re-slices series in place
+  // (the old full rebuild per 700ms replay tick was the replay lag+flash).
   }, [theme, activeIndicators, showSignals, subPanels, baseOpts, symbol, chartType,
-      compareSymbols, compareData, benchData, pineScripts, replayActive, replayIndex, applyChartSettings]);
+      compareSymbols, compareData, benchData, pineScripts, replayActive, applyChartSettings]);
 
   // Sync settings refs + live charts whenever the user changes scale mode / grid.
   useEffect(() => {
@@ -1427,7 +1474,9 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           const big = cvs.sort((a, b) => b.width * b.height - a.width * a.height)[0];
           const c2 = big?.getContext('2d');
           if (big && c2 && big.width > 0 && big.height > 0) {
-            const w = Math.min(320, big.width), h = Math.min(240, big.height);
+            // Small sample region — getImageData forces a GPU→CPU readback; big reads
+            // every probe caused a visible periodic stutter.
+            const w = Math.min(192, big.width), h = Math.min(144, big.height);
             const d = c2.getImageData(0, 0, w, h).data;
             let varied = false;
             for (let i = 4; i < d.length; i += 32) {
@@ -1444,7 +1493,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       } catch { /* probe must never crash the app */ }
     };
     document.addEventListener('visibilitychange', probe);
-    const iv = setInterval(probe, 7000);
+    const iv = setInterval(probe, 10_000);
     return () => { document.removeEventListener('visibilitychange', probe); clearInterval(iv); };
   }, []);
 
@@ -1460,9 +1509,57 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     };
   }, []);
 
+  // ── Replay scrub — LIGHTWEIGHT fast-path ────────────────────────────────────
+  // Re-slices the EXISTING series in place on every index change instead of tearing
+  // down and recreating every chart per 700ms playback tick (the old replay lag).
+  // T1MO overlays + pixel heatmap are recomputed on the truncated history (pure array
+  // math, a few ms) so playback stays honest; the full rebuild happens only when
+  // replay is toggled on/off.
+  useEffect(() => {
+    replayIndexRef.current = replayIndex;
+    if (!replayActive || replayIndex < 2) return;
+    const src = candlesRef.current;
+    if (!src?.length || !seriesRef.current.candle) return;
+    try {
+      const fmt = src
+        .map((c: any) => ({ time: Math.floor(c.open_time / 1000) as any, open: +c.open, high: +c.high, low: +c.low, close: +c.close, volume: +c.volume }))
+        .sort((a: any, b: any) => a.time - b.time)
+        .filter((c: any) => c.time > 0 && c.close > 0)
+        .slice(0, replayIndex);
+      if (fmt.length < 2) return;
+      const mode = mainSeriesModeRef.current;
+      if (mode === 'line' || mode === 'area') {
+        seriesRef.current.candle.setData(fmt.map((c: any) => ({ time: c.time, value: c.close })));
+      } else {
+        seriesRef.current.candle.setData(fmt.map((c: any) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })));
+      }
+      seriesRef.current.vol?.setData(fmt.map((c: any) => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(8,153,129,0.55)' : 'rgba(242,54,69,0.55)' })));
+      const mc = fmt.map((c: any) => c.close), mh = fmt.map((c: any) => c.high), ml = fmt.map((c: any) => c.low), mv = fmt.map((c: any) => c.volume), mt = fmt.map((c: any) => c.time);
+      const r = t1moCompute({ close: mc, high: mh, low: ml, volume: mv, open: mc, time: mt } as any, {});
+      if (r.meta.ready) {
+        const feed = (key: string, arr: any[]) => {
+          const s = seriesRef.current[key];
+          if (s && arr) s.setData(mt.map((t: number, i: number) => ({ time: t, value: arr[i] })).filter((d: any) => d.value != null && isFinite(d.value)));
+        };
+        feed('t1moBB', r.series.backbone as any); feed('t1moMG', r.series.magenta as any);
+        feed('t1moTop', r.series.topBox as any);  feed('t1moBtm', r.series.btmBox as any);
+      }
+      if (subPanels.includes('atlas')) {
+        const ind2 = computeIndicators(mc, mh, ml, mv);
+        const { scores } = computePixelScores(ind2, r.meta.ready ? r : null, mc);
+        pixelScoresRef.current = { scores, nBars: fmt.length };
+      }
+      requestAnimationFrame(() => { pixelRedrawRef.current?.(); smcRedrawRef.current?.(); drawRedrawRef.current?.(); });
+    } catch { /* series mid-rebuild — next tick recovers */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replayActive, replayIndex]);
+
   // Lightweight data update — or trigger rebuild when data arrives after chart was cleared
   useEffect(() => {
     if (!candles?.length) return;
+    // During replay the scrub effect owns the series data — a poll refeed here would
+    // instantly un-truncate the playback back to full history.
+    if (replayActive) return;
 
     if (!seriesRef.current.candle || !chartsRef.current.main) {
       // Chart not yet built (data arrived after buildCharts returned early).
@@ -1562,7 +1659,10 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       // Move the T1MO overlay lines in lock-step with the live candle so they never
       // detach (the "deviating line" defect). Recompute on the live-merged tail and
       // update only each line's last point — cheap O(n) array math, once per poll.
-      if (seriesRef.current.t1moBB || seriesRef.current.t1moTop) {
+      // Throttled to ≥1.5s — with superRefresh (1s poll) this was a FULL t1moCompute
+      // over the entire history every second, the main "live mode" jank.
+      if ((seriesRef.current.t1moBB || seriesRef.current.t1moTop) && Date.now() - t1moLiveAtRef.current > 1500) {
+        t1moLiveAtRef.current = Date.now();
         const base = candlesRef.current || [];
         if (base.length) {
           const byTime = new Map<number, any>();
@@ -1800,7 +1900,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             </div>
           )}
           {drawings.length > 0 && (
-            <button type="button" className="draw-clear-btn" title="Clear all drawings" onClick={() => clearDrawings()}>
+            <button type="button" className="draw-clear-btn" title="Clear all drawings"
+              onClick={() => { if (window.confirm(`Hapus semua ${drawings.length} gambar di chart?`)) clearDrawings(); }}>
               <X size={11} /> {drawings.length}
             </button>
           )}
