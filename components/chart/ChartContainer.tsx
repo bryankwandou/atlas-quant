@@ -170,9 +170,11 @@ function computeT1moSignalMarkers(
 ): any[] {
   const out: any[] = [];
   const n = Math.min(bullProbArr.length, posArr.length, formatted.length);
-  const HOLD = 3, COOLDOWN = 15;
-  const shortLabel = (badge: string, dir: 'up' | 'down') =>
-    badge === 'Hawk1 Detected' ? 'Strong Buy' : dir === 'up' ? 'Buy' : 'Sell';
+  const HOLD = 3, COOLDOWN = 20;
+  // TV-style: panah polos untuk sinyal biasa; TEKS hanya untuk sinyal terkuat —
+  // di TF detik teks "Buy"/"Sell" pun masih saling tindih (keluhan "tertimpa").
+  const shortLabel = (badge: string, dir: 'up' | 'down'): string | undefined =>
+    badge === 'Hawk1 Detected' ? 'Strong Buy' : badge === 'Short Setup' ? 'Sell' : undefined;
   let prevBadge = '';
   const lastMarkIdx: Record<string, number> = {};
   for (let i = Math.max(0, n - 300); i < n; i++) {   // last ~300 bars keeps it readable
@@ -194,7 +196,7 @@ function computeT1moSignalMarkers(
       position: sig.dir === 'up' ? 'belowBar' : 'aboveBar',
       color: sig.color,
       shape: sig.dir === 'up' ? 'arrowUp' : 'arrowDown',
-      text: shortLabel(badge, sig.dir),
+      ...(shortLabel(badge, sig.dir) ? { text: shortLabel(badge, sig.dir) } : {}),
       size: 1,
     });
   }

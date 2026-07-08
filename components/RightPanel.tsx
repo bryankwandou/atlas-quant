@@ -420,7 +420,7 @@ export default function RightPanel() {
     ? ((lastC.high - lastC.low) / (prevC.high - prevC.low) * 100 - 100)
     : null;
 
-  const VALID_TABS = ['signal', 'watchlist', 'ai', 'risk', 'data', 'calendar', 'news', 'alerts', 'plan', 'objects', 'pine', 'keyboard', 'help'];
+  const VALID_TABS = ['signal', 'screener', 'watchlist', 'ai', 'risk', 'data', 'calendar', 'news', 'alerts', 'plan', 'objects', 'pine', 'keyboard', 'help'];
   const activeTab = VALID_TABS.includes(rightPanelTab) ? rightPanelTab : 'signal';
 
   // Load saved price alerts once
@@ -448,6 +448,40 @@ export default function RightPanel() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+  // ── SCREENER TAB — TradingView CEX-Screener style, powered by the Arbiter
+  // Bridge batch endpoint (real T1MO computation per symbol, refresh 60s).
+  const [scrRows, setScrRows] = useState<any[]>([]);
+  const [scrLoading, setScrLoading] = useState(false);
+  useEffect(() => {
+    if (activeTab !== 'screener') return;
+    let alive = true;
+    const UNIV = ['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT','ADAUSDT','DOGEUSDT','LINKUSDT','AVAXUSDT','DOTUSDT','LTCUSDT'];
+    const cur = symbol.toUpperCase();
+    const syms = [cur, ...UNIV.filter(s => s !== cur)].slice(0, 12);
+    // T1MO butuh riwayat panjang — TF detik tak cukup barnya, pakai 15m sebagai basis rating.
+    const tfSafe = ['1s','5s','10s','15s','30s','45s','1m'].includes(timeframe) ? '15m' : timeframe;
+    const load = async () => {
+      try {
+        const r = await fetch(`/api/arbiter/signal?symbols=${syms.join(',')}&tf=${tfSafe}`, { signal: AbortSignal.timeout(25000) });
+        const j = await r.json();
+        if (alive && Array.isArray(j?.signals)) setScrRows(j.signals.filter((s: any) => !s.error));
+      } catch {}
+      if (alive) setScrLoading(false);
+    };
+    setScrLoading(true); load();
+    const iv = setInterval(load, 60_000);
+    return () => { alive = false; clearInterval(iv); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, symbol, timeframe]);
+
+  // bullProb (0..100) → TradingView-style tech rating.
+  const scrRating = (bp: number) =>
+    bp >= 72 ? { label: 'Strong Buy',  color: '#00c853', arrow: '↑' } :
+    bp >= 58 ? { label: 'Buy',         color: '#26a69a', arrow: '↑' } :
+    bp >  42 ? { label: 'Neutral',     color: '#787b86', arrow: '–' } :
+    bp >  20 ? { label: 'Sell',        color: '#f23645', arrow: '↓' } :
+               { label: 'Strong Sell', color: '#dd2c00', arrow: '↓' };
+
   // Clear AI text on symbol/timeframe change so it regenerates for the new market.
   useEffect(() => { setAiText(''); }, [symbol, timeframe]);
 
@@ -466,6 +500,7 @@ export default function RightPanel() {
 
   const tabs = [
     { id: 'signal',    label: 'Sinyal'   },
+    { id: 'screener',  label: 'Screener' },
     { id: 'watchlist', label: 'Pantauan' },
     { id: 'ai',        label: 'AI'       },
     { id: 'risk',      label: 'Risiko'   },
@@ -726,6 +761,80 @@ export default function RightPanel() {
         {/* ════════════════════════════════════════════════════════════════
             WATCHLIST TAB
         ════════════════════════════════════════════════════════════════ */}
+        {/* ════════════════════════════════════════════════════════════════
+            SCREENER TAB — TradingView CEX-Screener + Technicals gauge
+        ════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'screener' && (
+          <>
+            <div className="section-hdr">TECHNICALS · {symbol}</div>
+            {(() => {
+              const cur = scrRows.find((r: any) => r.symbol === symbol.toUpperCase());
+              const bp = Math.max(0, Math.min(100, cur?.bullProb ?? 50));
+              const rt = scrRating(bp);
+              // Semicircle gauge: 5 zona warna + jarum dari bullProb (0=kiri, 100=kanan).
+              const cx = 100, cy = 92, R = 74;
+              const P = (aDeg: number, r: number) => {
+                const a = (Math.PI * (180 - aDeg)) / 180;
+                return `${cx + r * Math.cos(a)},${cy - r * Math.sin(a)}`;
+              };
+              const arc = (a0: number, a1: number, color: string) =>
+                <path key={a0} d={`M ${P(a0, R)} A ${R} ${R} 0 0 1 ${P(a1, R)}`} stroke={color} strokeWidth="11" fill="none" strokeLinecap="butt" />;
+              const needleA = (bp / 100) * 180;
+              return (
+                <div style={{ padding: '4px 10px 0' }}>
+                  <svg viewBox="0 0 200 104" style={{ width: '100%', display: 'block' }}>
+                    {arc(0, 36, '#dd2c00')}{arc(36, 76, '#f23645')}{arc(76, 104, '#787b86')}{arc(104, 144, '#26a69a')}{arc(144, 180, '#00c853')}
+                    <line x1={cx} y1={cy} x2={P(needleA, R - 20).split(',')[0]} y2={P(needleA, R - 20).split(',')[1]}
+                      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                    <circle cx={cx} cy={cy} r="4" fill="currentColor" />
+                    <text x="14"  y="100" fontSize="8" fill="#787b86">Strong sell</text>
+                    <text x="152" y="100" fontSize="8" fill="#787b86">Strong buy</text>
+                    <text x="30"  y="42"  fontSize="8" fill="#787b86">Sell</text>
+                    <text x="158" y="42"  fontSize="8" fill="#787b86">Buy</text>
+                    <text x="88"  y="14"  fontSize="8" fill="#787b86">Neutral</text>
+                  </svg>
+                  <div style={{ textAlign: 'center', fontWeight: 700, fontSize: 15, color: rt.color, marginTop: -2 }}>{rt.label}</div>
+                  <div style={{ textAlign: 'center', fontSize: 10, color: '#787b86', marginBottom: 8 }}>
+                    T1MO bullProb {bp.toFixed(0)} · {cur?.badge ?? '…'}
+                  </div>
+                </div>
+              );
+            })()}
+            <div className="section-hdr">CEX SCREENER · TOP PAIRS</div>
+            {scrLoading && !scrRows.length && (
+              <div className="rp-loading-row"><div className="rp-spinner" /><span>Memindai 12 pair…</span></div>
+            )}
+            <div style={{ padding: '0 6px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '2px 8px', fontSize: 10, color: '#787b86', padding: '2px 6px' }}>
+                <span>Symbol</span><span style={{ textAlign: 'right' }}>Price</span><span style={{ textAlign: 'right' }}>Tech rating</span>
+              </div>
+              {scrRows.map((r: any) => {
+                const rt = scrRating(r.bullProb ?? 50);
+                const active = r.symbol === symbol.toUpperCase();
+                return (
+                  <button key={r.symbol} type="button" onClick={() => setSymbol(r.symbol)}
+                    style={{
+                      display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '2px 8px', width: '100%',
+                      alignItems: 'center', padding: '5px 6px', border: 'none', cursor: 'pointer', textAlign: 'left',
+                      background: active ? 'rgba(123,97,255,0.10)' : 'transparent', borderRadius: 4,
+                      borderLeft: active ? '2px solid #7b61ff' : '2px solid transparent', color: 'inherit',
+                    }}>
+                    <span style={{ fontWeight: 600, fontSize: 11 }}>{r.symbol}</span>
+                    <span className="mono" style={{ fontSize: 11, textAlign: 'right' }}>{r.price}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: rt.color, textAlign: 'right', whiteSpace: 'nowrap' }}>{rt.arrow} {rt.label}</span>
+                  </button>
+                );
+              })}
+              {!scrLoading && !scrRows.length && (
+                <div className="rp-no-data"><span>Screener kosong — coba lagi sebentar.</span></div>
+              )}
+              <div style={{ fontSize: 9, color: '#787b86', padding: '8px 6px' }}>
+                Rating dihitung nyata oleh mesin T1MO per pair (endpoint Arbiter Bridge) · refresh 60s · klik baris untuk buka chart.
+              </div>
+            </div>
+          </>
+        )}
+
         {activeTab === 'watchlist' && (
           <>
             <div className="section-hdr">Watchlist</div>
