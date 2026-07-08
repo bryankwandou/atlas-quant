@@ -157,28 +157,46 @@ function classifyT1moSignal(bp: number, pos: number): T1moSig | null {
   return null; // NEUTRAL / Weak — no chart marker (avoids clutter)
 }
 
-/** Scan the full T1MO history and emit a marker ONLY where the signal CHANGES
- *  (discrete events, like the reference screener — not one arrow per bar). */
+/** TradingView-style signal markers — CLEAN, not spammy.
+ *  The old version printed the full badge text on EVERY signal flip; on small TFs
+ *  (1s/15s) signals flip constantly → overlapping text everywhere (the "ambigu"
+ *  complaint). Rules now:
+ *   1. PERSISTENCE — a signal must hold for 3 consecutive bars before it marks
+ *      (kills the 1-bar flicker noise entirely).
+ *   2. COOLDOWN — the same badge can't repeat within 15 bars.
+ *   3. SHORT LABELS — TradingView-style "Buy"/"Sell"; only Hawk1 gets "Strong Buy". */
 function computeT1moSignalMarkers(
   bullProbArr: number[], posArr: number[], formatted: any[],
 ): any[] {
   const out: any[] = [];
-  let prevBadge = '';
   const n = Math.min(bullProbArr.length, posArr.length, formatted.length);
+  const HOLD = 3, COOLDOWN = 15;
+  const shortLabel = (badge: string, dir: 'up' | 'down') =>
+    badge === 'Hawk1 Detected' ? 'Strong Buy' : dir === 'up' ? 'Buy' : 'Sell';
+  let prevBadge = '';
+  const lastMarkIdx: Record<string, number> = {};
   for (let i = Math.max(0, n - 300); i < n; i++) {   // last ~300 bars keeps it readable
     const sig = classifyT1moSignal(bullProbArr[i] ?? 50, posArr[i] ?? 50);
     const badge = sig?.badge ?? '';
-    if (sig && badge !== prevBadge) {
-      out.push({
-        time: formatted[i].time,
-        position: sig.dir === 'up' ? 'belowBar' : 'aboveBar',
-        color: sig.color,
-        shape: sig.dir === 'up' ? 'arrowUp' : 'arrowDown',
-        text: sig.badge,
-        size: 1,
-      });
-    }
+    if (!sig || badge === prevBadge) { prevBadge = badge; continue; }
     prevBadge = badge;
+    // persistence — the SAME badge must survive the next HOLD-1 bars
+    let stable = true;
+    for (let j = i + 1; j < Math.min(n, i + HOLD); j++) {
+      const s2 = classifyT1moSignal(bullProbArr[j] ?? 50, posArr[j] ?? 50);
+      if ((s2?.badge ?? '') !== badge) { stable = false; break; }
+    }
+    if (!stable) continue;
+    if (i - (lastMarkIdx[badge] ?? -1e9) < COOLDOWN) continue;
+    lastMarkIdx[badge] = i;
+    out.push({
+      time: formatted[i].time,
+      position: sig.dir === 'up' ? 'belowBar' : 'aboveBar',
+      color: sig.color,
+      shape: sig.dir === 'up' ? 'arrowUp' : 'arrowDown',
+      text: shortLabel(badge, sig.dir),
+      size: 1,
+    });
   }
   return out;
 }
@@ -1340,6 +1358,50 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           }
           ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
           if (!draft) { ctx.beginPath(); ctx.arc(x0, y0, 3, 0, 7); ctx.arc(x1, y1, 3, 0, 7); ctx.fill(); }
+        } else if (d.type === 'rectangle' && p0 && p1) {
+          const x0 = X(p0.time), y0 = Y(p0.price), x1 = X(p1.time), y1 = Y(p1.price);
+          if (x0 == null || y0 == null || x1 == null || y1 == null) { ctx.restore(); return; }
+          const xa = Math.min(x0, x1), ya = Math.min(y0, y1);
+          ctx.globalAlpha = 0.14; ctx.fillRect(xa, ya, Math.abs(x1 - x0), Math.abs(y1 - y0));
+          ctx.globalAlpha = 1;    ctx.strokeRect(xa, ya, Math.abs(x1 - x0), Math.abs(y1 - y0));
+        } else if ((d.type === 'long' || d.type === 'short') && p0 && p1) {
+          // ── TradingView Long/Short Position tool ──────────────────────────────
+          // Click 1 = ENTRY, click 2 = TARGET. Stop is auto-placed at R/R 1.5
+          // (reward = |target−entry|, risk = reward/1.5, mirrored across entry).
+          // Green zone = profit, red zone = risk, entry dashed, prices + % labeled.
+          const isLong = d.type === 'long';
+          const entry = p0.price;
+          const target = p1.price;
+          const reward = Math.abs(target - entry);
+          if (!(reward > 0)) { ctx.restore(); return; }
+          const stop = isLong ? entry - reward / 1.5 : entry + reward / 1.5;
+          const x0r = X(p0.time), x1r = X(p1.time);
+          const xa = Math.min(x0r ?? 40, x1r ?? 40);
+          const xb = Math.max(xa + 110, Math.max(x0r ?? 0, x1r ?? 0)); // min width agar label muat
+          const yE = Y(entry), yT = Y(target), yS = Y(stop);
+          if (yE == null || yT == null || yS == null) { ctx.restore(); return; }
+          // profit zone (hijau) & risk zone (merah)
+          ctx.globalAlpha = 0.16;
+          ctx.fillStyle = 'rgba(8,153,129,1)';
+          ctx.fillRect(xa, Math.min(yE, yT), xb - xa, Math.abs(yT - yE));
+          ctx.fillStyle = 'rgba(242,54,69,1)';
+          ctx.fillRect(xa, Math.min(yE, yS), xb - xa, Math.abs(yS - yE));
+          ctx.globalAlpha = 1;
+          // garis entry putus-putus + border zona
+          ctx.strokeStyle = 'rgba(120,123,134,0.9)'; ctx.setLineDash([5, 4]);
+          ctx.beginPath(); ctx.moveTo(xa, yE); ctx.lineTo(xb, yE); ctx.stroke();
+          ctx.setLineDash(draft ? [4, 3] : []);
+          ctx.strokeStyle = 'rgba(8,153,129,0.8)';  ctx.strokeRect(xa, Math.min(yE, yT), xb - xa, Math.abs(yT - yE));
+          ctx.strokeStyle = 'rgba(242,54,69,0.8)';  ctx.strokeRect(xa, Math.min(yE, yS), xb - xa, Math.abs(yS - yE));
+          // label harga + % (gaya TradingView)
+          const pct = (a: number, b: number) => `${(((a - b) / b) * 100 >= 0 ? '+' : '')}${(((a - b) / b) * 100).toFixed(2)}%`;
+          ctx.font = 'bold 10px "Roboto Mono", monospace'; ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#089981';
+          ctx.fillText(`TP ${target.toFixed(2)} (${pct(target, entry)})`, xa + 5, yT + (yT < yE ? 8 : -8));
+          ctx.fillStyle = '#f23645';
+          ctx.fillText(`SL ${stop.toFixed(2)} (${pct(stop, entry)})`, xa + 5, yS + (yS > yE ? -8 : 8));
+          ctx.fillStyle = isDark ? '#d1d4dc' : '#131722';
+          ctx.fillText(`${isLong ? 'LONG' : 'SHORT'} ${entry.toFixed(2)} · R/R 1.5`, xa + 5, yE + (isLong ? 10 : -10));
         } else if (d.type === 'fib' && p0 && p1) {
           const x0 = X(p0.time), x1 = X(p1.time);
           const hi = Math.max(p0.price, p1.price), lo = Math.min(p0.price, p1.price);
@@ -1739,7 +1801,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   }, [candles, subPanels]);
 
   // ── Drawing interaction ─────────────────────────────────────────────────────
-  const DRAW_TOOLS = ['trendline', 'ray', 'hline', 'vline', 'fib'];
+  const DRAW_TOOLS = ['trendline', 'ray', 'hline', 'vline', 'fib', 'rectangle', 'long', 'short'];
   const isDrawingTool = DRAW_TOOLS.includes(drawingTool);
 
   const getChartPoint = useCallback((clientX: number, clientY: number) => {

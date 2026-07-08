@@ -33,7 +33,7 @@ export interface FibConfig {
  *  time + price) so they stay pinned to the data as the user pans/zooms. */
 export interface Drawing {
   id: string;
-  type: 'trendline' | 'ray' | 'hline' | 'vline' | 'fib';
+  type: 'trendline' | 'ray' | 'hline' | 'vline' | 'fib' | 'rectangle' | 'long' | 'short';
   points: { time: number; price: number }[];
   color: string;
 }
