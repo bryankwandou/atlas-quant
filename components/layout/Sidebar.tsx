@@ -78,7 +78,7 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { drawingTool, setDrawingTool } = useChartStore();
+  const { drawingTool, setDrawingTool, magnetSnap, toggleMagnetSnap } = useChartStore();
   const { lang } = useLanguage();
   const [fibOpen, setFibOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -135,10 +135,12 @@ export default function Sidebar() {
               <button
                 key={id}
                 type="button"
-                className={`sb-tool-btn ${drawingTool === id ? 'active' : ''}`}
+                className={`sb-tool-btn ${(id === 'magnet' ? magnetSnap : drawingTool === id) ? 'active' : ''}`}
                 title={tip}
                 onDoubleClick={() => { if (id === 'fib' || id === 'rr') setFibOpen(true); }}
                 onClick={() => {
+                  // Magnet is a MODE (snap anchors ke OHLC), bukan tool — toggle saja.
+                  if (id === 'magnet') { toggleMagnetSnap(); return; }
                   setDrawingTool(id);
                   if (id === 'fib' || id === 'rr') setFibOpen(true);
                 }}

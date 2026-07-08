@@ -33,9 +33,13 @@ export interface FibConfig {
  *  time + price) so they stay pinned to the data as the user pans/zooms. */
 export interface Drawing {
   id: string;
-  type: 'trendline' | 'ray' | 'hline' | 'vline' | 'fib' | 'rectangle' | 'long' | 'short';
+  type: 'trendline' | 'ray' | 'hline' | 'vline' | 'fib' | 'rectangle' | 'long' | 'short'
+      | 'rr' | 'channel' | 'pitchfork' | 'triangle' | 'ellipse'
+      | 'text' | 'pricelabel' | 'anchornote' | 'brush' | 'highlighter';
   points: { time: number; price: number }[];
   color: string;
+  /** Label content for text / anchornote drawings. */
+  text?: string;
 }
 
 /** A saved Pine-lite script. `code` is interpreted by the in-app mini engine
@@ -79,6 +83,8 @@ interface ChartStore {
   showSignals: boolean;
   chartType: string;
   drawingTool: string;
+  /** TradingView-style magnet: snap drawing anchors to the nearest bar's OHLC. */
+  magnetSnap: boolean;
   rightPanelTab: string;
   /** Stacked oscillator panels (TradingView-style). Each id renders its own sub-chart,
    *  stacked top→bottom and individually removable. 'atlas' = the T1MO Pixel matrix. */
@@ -117,6 +123,7 @@ interface ChartStore {
   toggleSignals: () => void;
   setChartType: (t: string) => void;
   setDrawingTool: (t: string) => void;
+  toggleMagnetSnap: () => void;
   setRightPanelTab: (tab: string) => void;
   /** Add an oscillator panel to the stack (no-op if already present). */
   addSubPanel: (p: string) => void;
@@ -161,6 +168,7 @@ export const useChartStore = create<ChartStore>()(
       showSignals: true,
       chartType: 'candlestick',
       drawingTool: 'cursor',
+      magnetSnap: false,
       rightPanelTab: 'signal',
       subPanels: ['atlas'],
       showIndicatorModal: false,
@@ -223,6 +231,7 @@ export const useChartStore = create<ChartStore>()(
       toggleSignals: () => set(s => ({ showSignals: !s.showSignals })),
       setChartType:  (chartType)   => set({ chartType }),
       setDrawingTool: (drawingTool) => set({ drawingTool }),
+      toggleMagnetSnap: () => set(s => ({ magnetSnap: !s.magnetSnap })),
       setRightPanelTab: (rightPanelTab) => set({ rightPanelTab }),
       addSubPanel: (p) => set(s => ({
         subPanels: s.subPanels.includes(p) ? s.subPanels : [...s.subPanels, p],

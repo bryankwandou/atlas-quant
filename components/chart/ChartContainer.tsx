@@ -1336,7 +1336,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       if (!ser) return;
       const X = (t: number) => ts.timeToCoordinate(t as any);
       const Y = (p: number) => ser.priceToCoordinate(p);
-      const drawOne = (d: { type: string; points: { time: number; price: number }[]; color: string }, draft = false) => {
+      const drawOne = (d: { type: string; points: { time: number; price: number }[]; color: string; text?: string }, draft = false) => {
         ctx.save();
         ctx.strokeStyle = d.color; ctx.fillStyle = d.color;
         ctx.lineWidth = 1.5; ctx.setLineDash(draft ? [4, 3] : []);
@@ -1364,12 +1364,99 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           const xa = Math.min(x0, x1), ya = Math.min(y0, y1);
           ctx.globalAlpha = 0.14; ctx.fillRect(xa, ya, Math.abs(x1 - x0), Math.abs(y1 - y0));
           ctx.globalAlpha = 1;    ctx.strokeRect(xa, ya, Math.abs(x1 - x0), Math.abs(y1 - y0));
-        } else if ((d.type === 'long' || d.type === 'short') && p0 && p1) {
+        } else if (d.type === 'ellipse' && p0 && p1) {
+          const x0 = X(p0.time), y0 = Y(p0.price), x1 = X(p1.time), y1 = Y(p1.price);
+          if (x0 == null || y0 == null || x1 == null || y1 == null) { ctx.restore(); return; }
+          ctx.beginPath();
+          ctx.ellipse((x0 + x1) / 2, (y0 + y1) / 2, Math.abs(x1 - x0) / 2, Math.abs(y1 - y0) / 2, 0, 0, Math.PI * 2);
+          ctx.globalAlpha = 0.12; ctx.fill(); ctx.globalAlpha = 1; ctx.stroke();
+        } else if (d.type === 'triangle' && p0 && p1) {
+          const p2 = d.points[2] ?? p1;
+          const xs = [p0, p1, p2].map(p => X(p.time)), ys = [p0, p1, p2].map(p => Y(p.price));
+          if (xs.some(v => v == null) || ys.some(v => v == null)) { ctx.restore(); return; }
+          ctx.beginPath(); ctx.moveTo(xs[0]!, ys[0]!); ctx.lineTo(xs[1]!, ys[1]!); ctx.lineTo(xs[2]!, ys[2]!); ctx.closePath();
+          ctx.globalAlpha = 0.12; ctx.fill(); ctx.globalAlpha = 1; ctx.stroke();
+        } else if (d.type === 'channel' && p0 && p1) {
+          // Parallel channel: p0→p1 garis dasar; p2 menentukan offset garis paralel.
+          const x0 = X(p0.time), y0 = Y(p0.price), x1 = X(p1.time), y1 = Y(p1.price);
+          if (x0 == null || y0 == null || x1 == null || y1 == null) { ctx.restore(); return; }
+          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+          const p2 = d.points[2];
+          if (p2) {
+            const x2 = X(p2.time), y2 = Y(p2.price);
+            if (x2 != null && y2 != null && x1 !== x0) {
+              const slope = (y1 - y0) / (x1 - x0);
+              const off = y2 - (y0 + slope * (x2 - x0));
+              ctx.beginPath(); ctx.moveTo(x0, y0 + off); ctx.lineTo(x1, y1 + off); ctx.stroke();
+              ctx.globalAlpha = 0.08;
+              ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x1, y1 + off); ctx.lineTo(x0, y0 + off); ctx.closePath(); ctx.fill();
+              ctx.globalAlpha = 1;
+            }
+          }
+        } else if (d.type === 'pitchfork' && p0 && p1) {
+          const p2 = d.points[2];
+          const x0 = X(p0.time), y0 = Y(p0.price), x1 = X(p1.time), y1 = Y(p1.price);
+          if (x0 == null || y0 == null || x1 == null || y1 == null) { ctx.restore(); return; }
+          if (!p2) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); ctx.restore(); return; }
+          const x2 = X(p2.time), y2 = Y(p2.price);
+          if (x2 == null || y2 == null) { ctx.restore(); return; }
+          // Median line: p0 → midpoint(p1,p2), extended to the right edge.
+          const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+          const dx = mx - x0, dy = my - y0;
+          const ext = dx !== 0 ? (W - x0) / dx : 1;
+          const exd = (xx: number, yy: number) => { ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx + dx * ext, yy + dy * ext); ctx.stroke(); };
+          exd(x0, y0);            // median
+          exd(x1, y1);            // tine atas
+          exd(x2, y2);            // tine bawah
+          ctx.globalAlpha = 0.06;
+          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 + dx * ext, y1 + dy * ext); ctx.lineTo(x2 + dx * ext, y2 + dy * ext); ctx.lineTo(x2, y2); ctx.closePath(); ctx.fill();
+          ctx.globalAlpha = 1;
+        } else if ((d.type === 'brush' || d.type === 'highlighter') && p0) {
+          ctx.lineWidth = d.type === 'highlighter' ? 9 : 2;
+          ctx.globalAlpha = d.type === 'highlighter' ? 0.35 : 1;
+          ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+          ctx.beginPath();
+          let started = false;
+          for (const p of d.points) {
+            const x = X(p.time), y = Y(p.price);
+            if (x == null || y == null) continue;
+            if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+          }
+          ctx.stroke(); ctx.globalAlpha = 1;
+        } else if (d.type === 'text' && p0) {
+          const x = X(p0.time), y = Y(p0.price);
+          if (x == null || y == null) { ctx.restore(); return; }
+          ctx.font = 'bold 12px "Roboto Mono", monospace'; ctx.textBaseline = 'middle';
+          ctx.fillText(d.text || 'Text', x, y);
+        } else if (d.type === 'anchornote' && p0) {
+          const x = X(p0.time), y = Y(p0.price);
+          if (x == null || y == null) { ctx.restore(); return; }
+          const label = d.text || 'Note';
+          ctx.font = '11px "Roboto Mono", monospace'; ctx.textBaseline = 'middle';
+          const tw = ctx.measureText(label).width;
+          ctx.globalAlpha = 0.92; ctx.fillStyle = '#2962ff';
+          ctx.beginPath(); (ctx as any).roundRect(x + 8, y - 11, tw + 26, 22, 4); ctx.fill();
+          ctx.globalAlpha = 1; ctx.fillStyle = '#fff';
+          ctx.fillText('📝 ' + label, x + 13, y);
+          ctx.strokeStyle = '#2962ff'; ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.stroke();
+        } else if (d.type === 'pricelabel' && p0) {
+          const x = X(p0.time), y = Y(p0.price);
+          if (x == null || y == null) { ctx.restore(); return; }
+          const label = p0.price.toFixed(2);
+          ctx.font = 'bold 11px "Roboto Mono", monospace'; ctx.textBaseline = 'middle';
+          const tw = ctx.measureText(label).width;
+          ctx.fillStyle = d.color;
+          ctx.beginPath();
+          ctx.moveTo(x, y); ctx.lineTo(x + 8, y - 10); ctx.lineTo(x + tw + 18, y - 10);
+          ctx.lineTo(x + tw + 18, y + 10); ctx.lineTo(x + 8, y + 10); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#fff'; ctx.fillText(label, x + 12, y);
+        } else if ((d.type === 'long' || d.type === 'short' || d.type === 'rr') && p0 && p1) {
           // ── TradingView Long/Short Position tool ──────────────────────────────
           // Click 1 = ENTRY, click 2 = TARGET. Stop is auto-placed at R/R 1.5
           // (reward = |target−entry|, risk = reward/1.5, mirrored across entry).
           // Green zone = profit, red zone = risk, entry dashed, prices + % labeled.
-          const isLong = d.type === 'long';
+          // 'rr' (Risk/Reward) = position tool generik: arah mengikuti klik target.
+          const isLong = d.type === 'long' || (d.type === 'rr' && p1.price >= p0.price);
           const entry = p0.price;
           const target = p1.price;
           const reward = Math.abs(target - entry);
@@ -1800,9 +1887,17 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, subPanels]);
 
-  // ── Drawing interaction ─────────────────────────────────────────────────────
-  const DRAW_TOOLS = ['trendline', 'ray', 'hline', 'vline', 'fib', 'rectangle', 'long', 'short'];
+  // ── Drawing interaction — TradingView-complete tool set ─────────────────────
+  const DRAW_TOOLS = ['trendline', 'ray', 'hline', 'vline', 'fib', 'rectangle', 'long', 'short',
+    'rr', 'channel', 'pitchfork', 'triangle', 'ellipse', 'text', 'pricelabel', 'anchornote',
+    'brush', 'highlighter', 'eraser'];
+  // Jumlah titik klik per tool (default 2). channel/pitchfork/triangle = 3 klik (TV-style).
+  const TOOL_POINTS: Record<string, number> = {
+    hline: 1, vline: 1, text: 1, pricelabel: 1, anchornote: 1,
+    channel: 3, pitchfork: 3, triangle: 3,
+  };
   const isDrawingTool = DRAW_TOOLS.includes(drawingTool);
+  const freehandRef = useRef(false); // brush/highlighter drag in progress
 
   const getChartPoint = useCallback((clientX: number, clientY: number) => {
     const main = chartsRef.current.main; const ser = seriesRef.current.candle; const canvas = drawCanvasRef.current;
@@ -1811,32 +1906,121 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     const time = main.timeScale().coordinateToTime(clientX - rect.left);
     const price = ser.coordinateToPrice(clientY - rect.top);
     if (time == null || price == null) return null;
-    return { time: Number(time), price: Number(price) };
+    let t = Number(time), p = Number(price);
+    // ── Magnet snap (TradingView-style): tarik anchor ke OHLC bar terdekat ──
+    if (useChartStore.getState().magnetSnap) {
+      try {
+        const src = candlesRef.current || [];
+        let best: any = null, bd = Infinity;
+        for (const c of src) {
+          const ct = Math.floor(+c.open_time / 1000);
+          const d2 = Math.abs(ct - t);
+          if (d2 < bd) { bd = d2; best = c; }
+        }
+        if (best) {
+          t = Math.floor(+best.open_time / 1000);
+          const lvls = [+best.open, +best.high, +best.low, +best.close].filter(v => v > 0);
+          let bp = p, bpd = Infinity;
+          for (const v of lvls) {
+            const y1 = ser.priceToCoordinate(v), y2 = ser.priceToCoordinate(p);
+            const dpx = y1 != null && y2 != null ? Math.abs(y1 - y2) : Infinity;
+            if (dpx < bpd) { bpd = dpx; bp = v; }
+          }
+          if (bpd <= 20) p = bp; // snap hanya bila cukup dekat (≤20px), seperti TV "weak magnet"
+        }
+      } catch {}
+    }
+    return { time: t, price: p };
   }, []);
+
+  // Eraser — klik dekat sebuah drawing (≤10px dari segmen/anchor-nya) menghapusnya.
+  const eraseAt = useCallback((clientX: number, clientY: number) => {
+    const main = chartsRef.current.main; const ser = seriesRef.current.candle; const canvas = drawCanvasRef.current;
+    if (!main || !ser || !canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const px = clientX - rect.left, py = clientY - rect.top;
+    const ts = main.timeScale();
+    const X = (t: number) => ts.timeToCoordinate(t as any);
+    const Y = (p: number) => ser.priceToCoordinate(p);
+    const segDist = (x0: number, y0: number, x1: number, y1: number) => {
+      const dx = x1 - x0, dy = y1 - y0;
+      const L2 = dx * dx + dy * dy;
+      const tt = L2 > 0 ? Math.max(0, Math.min(1, ((px - x0) * dx + (py - y0) * dy) / L2)) : 0;
+      return Math.hypot(px - (x0 + tt * dx), py - (y0 + tt * dy));
+    };
+    let bestId: string | null = null, bestD = 10; // threshold 10px
+    for (const d of drawingsRef.current) {
+      let dist = Infinity;
+      if (d.type === 'hline') { const y = Y(d.points[0]?.price); if (y != null) dist = Math.abs(py - y); }
+      else if (d.type === 'vline') { const x = X(d.points[0]?.time); if (x != null) dist = Math.abs(px - x); }
+      else {
+        const pts = d.points.map(p => ({ x: X(p.time), y: Y(p.price) })).filter(p => p.x != null && p.y != null) as { x: number; y: number }[];
+        for (const p of pts) dist = Math.min(dist, Math.hypot(px - p.x, py - p.y));
+        for (let i = 0; i + 1 < pts.length; i++) dist = Math.min(dist, segDist(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y));
+      }
+      if (dist < bestD) { bestD = dist; bestId = d.id; }
+    }
+    if (bestId) { removeDrawing(bestId); drawRedrawRef.current?.(); }
+  }, [removeDrawing]);
 
   const onDrawPointerDown = useCallback((e: React.PointerEvent) => {
     if (!isDrawingTool) return;
+    if (drawingTool === 'eraser') { eraseAt(e.clientX, e.clientY); return; }
     const pt = getChartPoint(e.clientX, e.clientY); if (!pt) return;
     const color = '#2962ff';
     const newId = `dr_${Date.now()}`;
-    if (drawingTool === 'hline' || drawingTool === 'vline') {
-      addDrawing({ id: newId, type: drawingTool as any, points: [pt], color });
+    // Freehand (brush/highlighter): kumpulkan titik selama drag, commit di pointer-up.
+    if (drawingTool === 'brush' || drawingTool === 'highlighter') {
+      draftRef.current = { type: drawingTool, points: [pt] };
+      freehandRef.current = true;
+      try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch {}
+      return;
+    }
+    const need = TOOL_POINTS[drawingTool] ?? 2;
+    if (need === 1) {
+      let text: string | undefined;
+      if (drawingTool === 'text' || drawingTool === 'anchornote') {
+        text = window.prompt(drawingTool === 'text' ? 'Teks:' : 'Catatan:') || '';
+        if (!text) { setDrawingTool('cursor'); return; }
+      }
+      addDrawing({ id: newId, type: drawingTool as any, points: [pt], color, ...(text ? { text } : {}) });
       draftRef.current = null; setDrawingTool('cursor');
     } else if (!draftRef.current) {
-      draftRef.current = { type: drawingTool, points: [pt] };
+      // Klik pertama: 1 titik terkunci + 1 titik preview (digeser oleh pointer-move).
+      draftRef.current = { type: drawingTool, points: [pt, { ...pt }] };
     } else {
-      addDrawing({ id: newId, type: draftRef.current.type as any, points: [draftRef.current.points[0], pt], color });
-      draftRef.current = null; setDrawingTool('cursor');
+      // Klik berikutnya: kunci titik preview; commit saat jumlah titik lengkap,
+      // atau tambah titik preview baru (channel/pitchfork/triangle = 3 klik).
+      const pts = draftRef.current.points;
+      pts[pts.length - 1] = pt;
+      if (pts.length >= need) {
+        addDrawing({ id: newId, type: draftRef.current.type as any, points: pts, color });
+        draftRef.current = null; setDrawingTool('cursor');
+      } else {
+        pts.push({ ...pt });
+      }
     }
     drawRedrawRef.current?.();
-  }, [isDrawingTool, drawingTool, getChartPoint, addDrawing, setDrawingTool]);
+  }, [isDrawingTool, drawingTool, getChartPoint, addDrawing, setDrawingTool, eraseAt]);
 
   const onDrawPointerMove = useCallback((e: React.PointerEvent) => {
     if (!draftRef.current) return;
     const pt = getChartPoint(e.clientX, e.clientY); if (!pt) return;
-    draftRef.current.points[1] = pt;
+    if (freehandRef.current) draftRef.current.points.push(pt);       // freehand trail
+    else draftRef.current.points[draftRef.current.points.length - 1] = pt; // preview titik terakhir
     drawRedrawRef.current?.();
   }, [getChartPoint]);
+
+  const onDrawPointerUp = useCallback(() => {
+    if (!freehandRef.current || !draftRef.current) return;
+    freehandRef.current = false;
+    const d = draftRef.current; draftRef.current = null;
+    if (d.points.length >= 3) {
+      addDrawing({ id: `dr_${Date.now()}`, type: d.type as any, points: d.points, color: d.type === 'highlighter' ? '#ffd740' : '#2962ff' });
+    }
+    // Brush tetap aktif (gaya TradingView) — pilih cursor untuk berhenti.
+    drawRedrawRef.current?.();
+  }, [addDrawing]);
 
   // Escape cancels an in-progress drawing
   useEffect(() => {
@@ -1967,6 +2151,8 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             className={`draw-overlay-canvas${isDrawingTool ? ' active' : ''}`}
             onPointerDown={onDrawPointerDown}
             onPointerMove={onDrawPointerMove}
+            onPointerUp={onDrawPointerUp}
+            onPointerLeave={onDrawPointerUp}
           />
           {/* Compare-symbol chips (top-left of the price pane) */}
           {compareSymbols.length > 0 && (
