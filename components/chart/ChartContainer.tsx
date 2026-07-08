@@ -1447,7 +1447,12 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   // changes per failure so this re-fires even on an identical repeated error.)
   useEffect(() => {
     if (!buildError) { buildRetryRef.current = 0; return; }
-    if (buildRetryRef.current >= 6) return; // stop hammering after a persistent failure
+    if (buildRetryRef.current >= 6) {
+      // Persistent failure: do NOT give up forever (the old cap left the pane dead
+      // until manual refresh). Cool down 30s, reset the counter, try again.
+      const cool = setTimeout(() => { buildRetryRef.current = 0; buildCharts(); }, 30_000);
+      return () => clearTimeout(cool);
+    }
     const id = setTimeout(() => { buildRetryRef.current += 1; buildCharts(); }, 300);
     return () => clearTimeout(id);
   }, [buildError, buildCharts]);
@@ -1464,8 +1469,11 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         const cvs = Array.from(mainRef.current.querySelectorAll('.tv-lightweight-charts canvas')) as HTMLCanvasElement[];
         if (!cvs.length) { setBuildError({ msg: 'canvas-missing', at: Date.now() }); return; }
         for (const cv of cvs) {
+          // Killed canvas variants (the ☹ glyph): zero-sized buffer, lost context, or a
+          // context that throws on read. Any of them → immediate silent rebuild.
+          if (cv.width === 0 || cv.height === 0) { setBuildError({ msg: 'canvas-zero-size', at: Date.now() }); return; }
           const ctx = cv.getContext('2d') as (CanvasRenderingContext2D & { isContextLost?: () => boolean }) | null;
-          if (ctx?.isContextLost?.()) { setBuildError({ msg: 'canvas-context-lost', at: Date.now() }); return; }
+          if (!ctx || ctx.isContextLost?.()) { setBuildError({ msg: 'canvas-context-lost', at: Date.now() }); return; }
         }
         // BLANK-PAINT check (kasus layar putih user: canvas hidup tapi polos).
         // Sampel canvas terbesar; kalau ada data candle tapi SEMUA pixel seragam
@@ -1477,13 +1485,24 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
             // Small sample region — getImageData forces a GPU→CPU readback; big reads
             // every probe caused a visible periodic stutter.
             const w = Math.min(192, big.width), h = Math.min(144, big.height);
-            const d = c2.getImageData(0, 0, w, h).data;
-            let varied = false;
+            let d: Uint8ClampedArray | null = null;
+            try { d = c2.getImageData(0, 0, w, h).data; }
+            catch { // read failed = buffer gone (killed canvas) → rebuild NOW, no strikes
+              setBuildError({ msg: 'canvas-read-failed', at: Date.now() }); return;
+            }
+            let varied = false, allZero = true;
             for (let i = 4; i < d.length; i += 32) {
+              if (d[i] || d[i + 1] || d[i + 2] || d[i + 3]) allZero = false;
               if (Math.abs(d[i] - d[0]) > 6 || Math.abs(d[i + 1] - d[1]) > 6 || Math.abs(d[i + 2] - d[2]) > 6) { varied = true; break; }
             }
             if (varied) { blankProbesRef.current = 0; }
-            else if (++blankProbesRef.current >= 2) {
+            else if (allZero && !d[3]) {
+              // Fully transparent-black buffer = the browser discarded the canvas
+              // memory (the ☹ case) — one strike is enough, recover immediately.
+              blankProbesRef.current = 0;
+              console.warn('[ATLAS] watchdog: buffer canvas dibuang browser → rebuild segera');
+              setBuildError({ msg: 'canvas-buffer-discarded', at: Date.now() });
+            } else if (++blankProbesRef.current >= 2) {
               blankProbesRef.current = 0;
               console.warn('[ATLAS] watchdog: canvas utama blank → force rebuild');
               setBuildError({ msg: 'canvas-blank-paint', at: Date.now() });
