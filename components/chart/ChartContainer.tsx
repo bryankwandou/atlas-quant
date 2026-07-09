@@ -804,9 +804,12 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     if (activeIndicators.includes('SMC_OB')) {
       try {
         const smc = ind.detectSMC();
+        // Detector now returns only FRESH (unmitigated) structural zones spread across
+        // the lookback, so we can show more without clutter — they no longer pile up
+        // at the right edge. 6 OBs + 4 FVGs covers the visible history properly.
         smcDataRef.current = {
-          orderBlocks: (smc.orderBlocks ?? []).slice(-3),  // last 3 only — restraint
-          fvg:         (smc.fvg ?? []).slice(-2),
+          orderBlocks: (smc.orderBlocks ?? []).slice(-6),
+          fvg:         (smc.fvg ?? []).slice(-4),
           series:      candleSeries,
         };
         const drawSMC = () => {

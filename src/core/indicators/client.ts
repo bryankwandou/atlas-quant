@@ -797,30 +797,115 @@ function _squeezeMomentum(highs: number[], lows: number[], closes: number[], vol
 // SMC (Smart Money Concepts)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function _detectSMC(closes: number[], highs: number[], lows: number[]) {
-  const orderBlocks: Array<{ type: 'bullish' | 'bearish'; high: number; low: number; idx: number }> = [];
+/**
+ * Smart-Money Concept detector — proper structural version (2026-07-09 rewrite).
+ *
+ * The OLD detector fired an "order block" on every 3-bar micro-pivot, so hundreds
+ * clustered densely and the render's `.slice(-3)` always landed inside the last few
+ * bars ("SMC only reads the last 10 minutes" bug). This version follows real SMC:
+ *
+ *   1. Pivots  — swing high/low over ±`L` bars (structural, not micro).
+ *   2. BOS     — a close that breaks the most-recent opposite swing = Break of
+ *                Structure (trend continuation event).
+ *   3. OB      — the LAST opposite-direction candle before the impulse that caused
+ *                the BOS. Filtered by strength: the impulse leg must be ≥1.5×ATR
+ *                (kills noise pivots entirely).
+ *   4. Mitigation — an OB is dropped once price later trades back through its zone;
+ *                only FRESH (unmitigated) zones survive. These naturally spread
+ *                across the whole lookback instead of piling up at the right edge.
+ *
+ * `lookback` bounds how far back OBs stay relevant (default 250 bars → "reads 200+
+ * candles of any timeframe", matching the user's expectation).
+ */
+function _detectSMC(
+  closes: number[], highs: number[], lows: number[], lookback = 250,
+) {
+  const n = closes.length;
+  const orderBlocks: Array<{ type: 'bullish' | 'bearish'; high: number; low: number; idx: number; breakIdx: number }> = [];
   const fvg: Array<{ type: 'bullish' | 'bearish'; top: number; bottom: number; idx: number }> = [];
   const bos: Array<{ type: 'bullish' | 'bearish'; level: number; idx: number }> = [];
+  if (n < 20) return { orderBlocks, fvg, bos };
 
-  for (let i = 3; i < closes.length - 1; i++) {
-    const isBull = closes[i] > closes[i-1] && closes[i-1] < closes[i-2] && closes[i+1] > closes[i];
-    const isBear = closes[i] < closes[i-1] && closes[i-1] > closes[i-2] && closes[i+1] < closes[i];
-    if (isBull) orderBlocks.push({ type: 'bullish', high: highs[i-1], low: lows[i-1], idx: i-1 });
-    if (isBear) orderBlocks.push({ type: 'bearish', high: highs[i-1], low: lows[i-1], idx: i-1 });
-    // Fair Value Gaps
-    if (i >= 2) {
-      if (lows[i] > highs[i-2])  fvg.push({ type: 'bullish', top: lows[i], bottom: highs[i-2], idx: i });
-      if (highs[i] < lows[i-2])  fvg.push({ type: 'bearish', top: lows[i-2], bottom: highs[i], idx: i });
+  // ATR(14) for the significance filter (Wilder EMA of true range).
+  const atr = new Array<number>(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    const tr = i === 0 ? highs[i] - lows[i]
+      : Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1]));
+    atr[i] = i === 0 ? tr : (atr[i - 1] * 13 + tr) / 14;
+  }
+
+  // Swing pivots over ±L bars (structural highs/lows).
+  const L = 3;
+  const isHigh = new Array<boolean>(n).fill(false);
+  const isLow  = new Array<boolean>(n).fill(false);
+  for (let i = L; i < n - L; i++) {
+    let hi = true, lo = true;
+    for (let j = i - L; j <= i + L; j++) {
+      if (j === i) continue;
+      if (highs[j] >= highs[i]) hi = false;
+      if (lows[j]  <= lows[i])  lo = false;
+    }
+    isHigh[i] = hi; isLow[i] = lo;
+  }
+
+  // Walk forward; on each BOS, find the originating order block.
+  let lastSwingHigh: { level: number; idx: number } | null = null;
+  let lastSwingLow:  { level: number; idx: number } | null = null;
+  const dir = (j: number) => (j > 0 ? closes[j] - closes[j - 1] : 0); // close-to-close candle direction
+  for (let i = L; i < n; i++) {
+    if (isHigh[i]) lastSwingHigh = { level: highs[i], idx: i };
+    if (isLow[i])  lastSwingLow  = { level: lows[i],  idx: i };
+
+    // Bullish BOS — close breaks the last swing high.
+    if (lastSwingHigh && i > lastSwingHigh.idx && closes[i] > lastSwingHigh.level) {
+      let obIdx = -1;
+      for (let j = i - 1; j >= Math.max(0, i - 20); j--) { if (dir(j) < 0) { obIdx = j; break; } }
+      if (obIdx >= 0 && closes[i] - lows[obIdx] >= atr[i] * 1.5) {
+        orderBlocks.push({ type: 'bullish', high: highs[obIdx], low: lows[obIdx], idx: obIdx, breakIdx: i });
+        bos.push({ type: 'bullish', level: lastSwingHigh.level, idx: i });
+      }
+      lastSwingHigh = null; // consumed — wait for a new structural high
+    }
+
+    // Bearish BOS — close breaks the last swing low.
+    if (lastSwingLow && i > lastSwingLow.idx && closes[i] < lastSwingLow.level) {
+      let obIdx = -1;
+      for (let j = i - 1; j >= Math.max(0, i - 20); j--) { if (dir(j) > 0) { obIdx = j; break; } }
+      if (obIdx >= 0 && highs[obIdx] - closes[i] >= atr[i] * 1.5) {
+        orderBlocks.push({ type: 'bearish', high: highs[obIdx], low: lows[obIdx], idx: obIdx, breakIdx: i });
+        bos.push({ type: 'bearish', level: lastSwingLow.level, idx: i });
+      }
+      lastSwingLow = null;
     }
   }
-  // Break of Structure
-  for (let i = 5; i < closes.length; i++) {
-    const prevHigh = Math.max(...highs.slice(i-5, i));
-    const prevLow  = Math.min(...lows.slice(i-5, i));
-    if (highs[i] > prevHigh) bos.push({ type: 'bullish', level: prevHigh, idx: i });
-    if (lows[i]  < prevLow)  bos.push({ type: 'bearish', level: prevLow,  idx: i });
+
+  // Keep only UNMITIGATED order blocks within the lookback (fresh zones spread out
+  // across history, not micro-pivots crammed at the right edge).
+  const minIdx = Math.max(0, n - lookback);
+  const freshOB = orderBlocks.filter((ob) => {
+    if (ob.idx < minIdx) return false;
+    for (let j = ob.breakIdx + 1; j < n; j++) {
+      if (ob.type === 'bullish' && lows[j]  <= ob.high) return false; // price returned into the zone
+      if (ob.type === 'bearish' && highs[j] >= ob.low)  return false;
+    }
+    return true;
+  });
+
+  // Fair Value Gaps (3-candle imbalance) with a size filter; keep unmitigated only.
+  for (let i = 2; i < n; i++) {
+    if (i < minIdx) continue;
+    if (lows[i] > highs[i - 2] && lows[i] - highs[i - 2] >= atr[i] * 0.3) fvg.push({ type: 'bullish', top: lows[i], bottom: highs[i - 2], idx: i });
+    if (highs[i] < lows[i - 2] && lows[i - 2] - highs[i] >= atr[i] * 0.3) fvg.push({ type: 'bearish', top: lows[i - 2], bottom: highs[i], idx: i });
   }
-  return { orderBlocks: orderBlocks.slice(-10), fvg: fvg.slice(-8), bos: bos.slice(-6) };
+  const freshFvg = fvg.filter((g) => {
+    for (let j = g.idx + 1; j < n; j++) {
+      if (g.type === 'bullish' && lows[j]  <= g.bottom) return false;
+      if (g.type === 'bearish' && highs[j] >= g.top)    return false;
+    }
+    return true;
+  });
+
+  return { orderBlocks: freshOB.slice(-12), fvg: freshFvg.slice(-8), bos: bos.slice(-8) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
