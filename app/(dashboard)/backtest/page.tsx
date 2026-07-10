@@ -21,6 +21,21 @@ export default function BacktestPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // ── T1MO Verify — audit sinyal T1MO historis (endpoint /api/backtest/verify) ──
+  const [vResult, setVResult] = useState<any>(null);
+  const [vLoading, setVLoading] = useState(false);
+  const [vError, setVError] = useState('');
+  const handleVerify = async () => {
+    setVLoading(true); setVError(''); setVResult(null);
+    try {
+      const res = await fetch(`/api/backtest/verify?symbol=${config.symbol}&tf=${config.timeframe}&limit=1500&horizon=100`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Verify failed');
+      setVResult(data);
+    } catch (e: any) { setVError(e.message); } finally { setVLoading(false); }
+  };
+  const fmtT = (ms: number) => new Date(ms).toISOString().replace('T', ' ').slice(0, 16);
+
   const handleRun = async () => {
     setLoading(true); setError(''); setResult(null);
     try {
@@ -128,6 +143,66 @@ export default function BacktestPage() {
                   return <polyline points={d.replace('L', 'M').replace(/ L /g, ' ')} fill="none" stroke={color} strokeWidth="1.5" />;
                 })()}
               </svg>
+            </div>
+          </>
+        )}
+
+        {/* ── T1MO VERIFY — audit sinyal T1MO nyata, trade-per-trade ── */}
+        <div className="bt-results-title" style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span>T1MO Verify — audit sinyal historis</span>
+          <button type="button" onClick={handleVerify} disabled={vLoading} className="panel-action-btn primary">
+            {vLoading ? 'Auditing…' : '🔬 Audit T1MO'}
+          </button>
+        </div>
+        <div style={{ fontSize: 10.5, color: '#787b86', margin: '4px 0 10px' }}>
+          Walk-forward di {config.symbol} · {config.timeframe}: classifier &amp; rencana ATR yang SAMA dengan chart/Arbiter
+          (persistence 3 bar, cooldown 20, SL 1.5×ATR, TP 2.5×ATR, SL diprioritaskan bila ambigu). Setiap baris bisa
+          dicocokkan bar-per-bar dengan chart — bukan angka janji.
+        </div>
+        {vError && <div className="error-msg">{vError}</div>}
+        {vResult && (
+          <>
+            <div className="bt-stats-grid">
+              {[
+                { label: 'Trades',        value: vResult.metrics.totalTrades, color: undefined },
+                { label: 'Win Rate',      value: `${vResult.metrics.winRatePct}%`, color: vResult.metrics.winRatePct >= 50 ? 'var(--buy)' : 'var(--sell)' },
+                { label: 'Profit Factor', value: vResult.metrics.profitFactor, color: vResult.metrics.profitFactor >= 1 ? 'var(--buy)' : 'var(--sell)' },
+                { label: 'Net R',         value: `${vResult.metrics.netR}R`, color: vResult.metrics.netR >= 0 ? 'var(--buy)' : 'var(--sell)' },
+                { label: 'Expectancy',    value: `${vResult.metrics.expectancyR}R`, color: vResult.metrics.expectancyR >= 0 ? 'var(--buy)' : 'var(--sell)' },
+                { label: 'Max DD',        value: `${vResult.metrics.maxDrawdownR}R`, color: 'var(--sell)' },
+                { label: 'Avg Hold',      value: `${vResult.metrics.avgBarsHeld} bar`, color: undefined },
+                { label: 'Periode',       value: `${fmtT(vResult.periodStart).slice(0, 10)} → ${fmtT(vResult.periodEnd).slice(0, 10)}`, color: undefined },
+              ].map(s => (
+                <div key={s.label} className="bt-stat-card">
+                  <div className={`bt-stat-val mono ${statCls(s.color as any)}`}>{String(s.value)}</div>
+                  <div className="bt-stat-label">{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: 12, overflowX: 'auto' }}>
+              <table className="mono" style={{ width: '100%', fontSize: 10.5, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ color: '#787b86', textAlign: 'right' }}>
+                    <th style={{ textAlign: 'left', padding: '4px 6px' }}>Waktu Sinyal (UTC)</th>
+                    <th style={{ textAlign: 'left' }}>Aksi</th>
+                    <th>bullProb</th><th>Entry</th><th>SL</th><th>TP</th><th>Exit</th>
+                    <th>Hasil</th><th>R</th><th>Bar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vResult.trades.slice().reverse().map((t: any) => (
+                    <tr key={t.idx} style={{ textAlign: 'right', borderTop: '1px solid rgba(120,123,134,0.12)' }}>
+                      <td style={{ textAlign: 'left', padding: '3px 6px' }}>{fmtT(t.time)}</td>
+                      <td style={{ textAlign: 'left', fontWeight: 700, color: t.action === 'BUY' ? '#089981' : '#f23645' }}>{t.action} · {t.badge}</td>
+                      <td>{t.bullProb}</td><td>{t.entry}</td><td>{t.stopLoss}</td><td>{t.takeProfit}</td><td>{t.exitPrice}</td>
+                      <td style={{ fontWeight: 700, color: t.result === 'WIN' ? '#089981' : t.result === 'LOSS' ? '#f23645' : '#787b86' }}>{t.result}</td>
+                      <td style={{ color: t.rMultiple >= 0 ? '#089981' : '#f23645' }}>{t.rMultiple >= 0 ? '+' : ''}{t.rMultiple}</td>
+                      <td>{t.barsHeld}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </>
         )}
