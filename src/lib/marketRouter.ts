@@ -146,12 +146,14 @@ function yahooRange(limit: number, interval: string): string {
     if (limit <= 720)  return '60d';
     return '730d';
   }
-  // Daily
+  // Daily — NEVER 'max': on range=max Yahoo silently coarsens old tickers to
+  // WEEKLY granularity while we label it 1d (the "1d looks like 1w" bug on
+  // BMRI.JK etc). 10y of daily ≈ 2520 bars is the safe ceiling.
   if (limit <= 30)   return '1mo';
   if (limit <= 252)  return '1y';
   if (limit <= 504)  return '2y';
   if (limit <= 1260) return '5y';
-  return 'max';
+  return '10y';
 }
 
 // ─── CryptoCompare fallback (works from Vercel US datacenter) ────────────────
@@ -438,6 +440,14 @@ export async function getYahooOHLCV(
     const json = await res.json();
     const result = json?.chart?.result?.[0];
     if (!result) return [];
+
+    // GRANULARITY GUARD — Yahoo can silently substitute a coarser interval
+    // (e.g. weekly bars for interval=1d on long ranges). If the response's
+    // actual granularity differs from what we asked for, REJECT it so the
+    // caller falls back to Stooq (true daily CSV) instead of mislabeling
+    // weekly candles as 1d — that lie corrupts T1MO and every indicator.
+    const gran = String(result?.meta?.dataGranularity ?? '');
+    if (gran && gran !== yahooInterval) return [];
 
     const timestamps: number[] = result.timestamp || [];
     const quote = result.indicators?.quote?.[0] || {};

@@ -1095,14 +1095,20 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
               const xc = ts.logicalToCoordinate(i as any);
               if (xc == null) continue;
               const xn = ts.logicalToCoordinate((i + 1) as any);
-              const colW = Math.max(2, (xn != null ? Math.abs(xn - xc) : 6));
+              const rawW = xn != null ? Math.abs(xn - xc) : 6;
+              const colW = Math.max(1, rawW);
               const x    = xc - colW / 2;
-              const gapX = colW * 0.08;
+              // DENSE MODE — saat zoom-out ekstrem (ratusan/ribuan bar terlihat) kolom
+              // menjadi sub-pixel; gap + rounded-rect membuatnya tampak putus-putus dan
+              // "tidak locked" ke candle. Di bawah 3px: tanpa gap, tanpa rounding —
+              // setiap bar tetap dapat kolom warnanya sendiri, rapat 1:1.
+              const dense = rawW < 3;
+              const gapX = dense ? 0 : colW * 0.08;
               const bW   = Math.max(1, colW - gapX * 2);
               // Square size — capped so the full 3-block stack (≈6.8·sqH) fits the half-panel.
-              const sqH  = Math.min(bW, (drawH / 2) / 7);
-              const gapY = sqH * 0.15;
-              const rad  = Math.max(1, bW * 0.15);
+              const sqH  = dense ? (drawH / 2) / 7 : Math.min(bW, (drawH / 2) / 7);
+              const gapY = dense ? 0 : sqH * 0.15;
+              const rad  = dense ? 0 : Math.max(1, bW * 0.15);
 
               // Multi-horizon (v1 semantics): each of the 3 blocks carries its OWN
               // trend score — BASE=LONG, CENTER=MEDIUM, OUTER=SHORT — locked 1:1 to

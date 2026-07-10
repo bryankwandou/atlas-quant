@@ -65,6 +65,15 @@ async function signalFor(symbol: string, tf: Timeframe, limit: number) {
   const pos = (t1mo.series.positionPct as number[])?.[i] ?? 50;
   const sig = classify(bp, pos);
   const price = ctx.close[i];
+
+  // 24h context derived from the same candle history (no extra API call):
+  // bars-per-24h from the median bar gap → chg% vs 24h ago + quote-volume 24h.
+  const gapMs = i > 0 ? Math.max(1, ctx.time[i] - ctx.time[i - 1]) : 3_600_000;
+  const per24 = Math.max(1, Math.round(86_400_000 / gapMs));
+  const prevIdx = Math.max(0, i - per24);
+  const chg24hPct = ctx.close[prevIdx] > 0 ? (price / ctx.close[prevIdx] - 1) * 100 : 0;
+  let volUsd24h = 0;
+  for (let j = prevIdx + 1; j <= i; j++) volUsd24h += (ctx.volume[j] ?? 0) * (ctx.close[j] ?? 0);
   const atr = atr14(ctx.high, ctx.low, ctx.close);
   const long = sig.action !== 'SELL';
   const plan = Number.isFinite(atr) ? {
@@ -80,6 +89,8 @@ async function signalFor(symbol: string, tf: Timeframe, limit: number) {
     timeframe: tf,
     barTime: ctx.time[i],
     price: round(price),
+    chg24hPct: Number(chg24hPct.toFixed(2)),
+    volUsd24h: Math.round(volUsd24h),
     bullProb: round(bp),
     positionPct: round(pos),
     action: sig.action,

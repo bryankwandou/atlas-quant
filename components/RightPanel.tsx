@@ -474,6 +474,17 @@ export default function RightPanel() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, symbol, timeframe]);
 
+  // Sortable columns (klik header) — null = urutan API (simbol aktif dulu).
+  const [scrSort, setScrSort] = useState<{ key: 'chg' | 'vol' | 'bp'; dir: 1 | -1 } | null>(null);
+  const scrSorted = (() => {
+    if (!scrSort) return scrRows;
+    const v = (r: any) => scrSort.key === 'chg' ? (r.chg24hPct ?? 0) : scrSort.key === 'vol' ? (r.volUsd24h ?? 0) : (r.bullProb ?? 50);
+    return [...scrRows].sort((a, b) => (v(b) - v(a)) * scrSort.dir);
+  })();
+  const scrSortClick = (key: 'chg' | 'vol' | 'bp') =>
+    setScrSort(s => (s?.key === key ? (s.dir === 1 ? { key, dir: -1 } : null) : { key, dir: 1 }));
+  const fmtVol = (v: number) => v >= 1e9 ? (v / 1e9).toFixed(2) + 'B' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : String(Math.round(v));
+
   // bullProb (0..100) → TradingView-style tech rating.
   const scrRating = (bp: number) =>
     bp >= 72 ? { label: 'Strong Buy',  color: '#00c853', arrow: '↑' } :
@@ -805,23 +816,39 @@ export default function RightPanel() {
               <div className="rp-loading-row"><div className="rp-spinner" /><span>Memindai 12 pair…</span></div>
             )}
             <div style={{ padding: '0 6px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '2px 8px', fontSize: 10, color: '#787b86', padding: '2px 6px' }}>
-                <span>Symbol</span><span style={{ textAlign: 'right' }}>Price</span><span style={{ textAlign: 'right' }}>Tech rating</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 0.8fr 1fr', gap: '2px 6px', fontSize: 9.5, color: '#787b86', padding: '2px 6px', alignItems: 'center' }}>
+                <button type="button" onClick={() => scrSortClick('vol')} style={{ all: 'unset', cursor: 'pointer', color: scrSort?.key === 'vol' ? '#7b61ff' : undefined }}>
+                  Symbol · Vol{scrSort?.key === 'vol' ? (scrSort.dir === 1 ? ' ↓' : ' ↑') : ''}
+                </button>
+                <span style={{ textAlign: 'right' }}>Price</span>
+                <button type="button" onClick={() => scrSortClick('chg')} style={{ all: 'unset', cursor: 'pointer', textAlign: 'right', color: scrSort?.key === 'chg' ? '#7b61ff' : undefined }}>
+                  Chg%{scrSort?.key === 'chg' ? (scrSort.dir === 1 ? ' ↓' : ' ↑') : ''}
+                </button>
+                <button type="button" onClick={() => scrSortClick('bp')} style={{ all: 'unset', cursor: 'pointer', textAlign: 'right', color: scrSort?.key === 'bp' ? '#7b61ff' : undefined }}>
+                  Rating{scrSort?.key === 'bp' ? (scrSort.dir === 1 ? ' ↓' : ' ↑') : ''}
+                </button>
               </div>
-              {scrRows.map((r: any) => {
+              {scrSorted.map((r: any) => {
                 const rt = scrRating(r.bullProb ?? 50);
                 const active = r.symbol === symbol.toUpperCase();
+                const chg = r.chg24hPct ?? 0;
                 return (
                   <button key={r.symbol} type="button" onClick={() => setSymbol(r.symbol)}
                     style={{
-                      display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '2px 8px', width: '100%',
-                      alignItems: 'center', padding: '5px 6px', border: 'none', cursor: 'pointer', textAlign: 'left',
+                      display: 'grid', gridTemplateColumns: '1.2fr 1fr 0.8fr 1fr', gap: '2px 6px', width: '100%',
+                      alignItems: 'center', padding: '4px 6px', border: 'none', cursor: 'pointer', textAlign: 'left',
                       background: active ? 'rgba(123,97,255,0.10)' : 'transparent', borderRadius: 4,
                       borderLeft: active ? '2px solid #7b61ff' : '2px solid transparent', color: 'inherit',
                     }}>
-                    <span style={{ fontWeight: 600, fontSize: 11 }}>{r.symbol}</span>
+                    <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+                      <span style={{ fontWeight: 600, fontSize: 11 }}>{r.symbol}</span>
+                      <span className="mono" style={{ fontSize: 8.5, color: '#787b86' }}>{fmtVol(r.volUsd24h ?? 0)}</span>
+                    </span>
                     <span className="mono" style={{ fontSize: 11, textAlign: 'right' }}>{r.price}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: rt.color, textAlign: 'right', whiteSpace: 'nowrap' }}>{rt.arrow} {rt.label}</span>
+                    <span className="mono" style={{ fontSize: 10.5, fontWeight: 600, textAlign: 'right', color: chg >= 0 ? '#089981' : '#f23645' }}>
+                      {chg >= 0 ? '+' : ''}{chg.toFixed(2)}%
+                    </span>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: rt.color, textAlign: 'right', whiteSpace: 'nowrap' }}>{rt.arrow} {rt.label}</span>
                   </button>
                 );
               })}
