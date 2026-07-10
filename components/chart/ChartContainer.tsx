@@ -36,14 +36,23 @@ const SUB_PANELS = [
   { id: 'bandarad', label: 'Bandar A/D'    },
   { id: 'cvd',      label: 'CVD Flow'      },
   // ── Relative Strength (rebuild fitur v1 "Strength to BTCUSD / Index") ──
-  { id: 'rs_btc',   label: 'Strength/BTC'  },
-  { id: 'rs_idx',   label: 'Strength/IHSG' },
+  { id: 'rs_btc',   label: 'Strength/BTC'   },
+  { id: 'rs_idx',   label: 'Strength/Index' },
 ];
-// Benchmark symbol per RS panel (IHSG = Jakarta Composite via provider alias).
-const RS_BENCH: Record<string, { sym: string; label: string }> = {
-  rs_btc: { sym: 'BTCUSDT',   label: 'Strength to BTCUSD' },
-  rs_idx: { sym: 'COMPOSITE', label: 'Strength to Index'  },
-};
+// Benchmark untuk panel Relative Strength — DINAMIS mengikuti pasar ticker aktif.
+// Bug lama: rs_idx hardcode 'COMPOSITE' (ticker yang tidak ada di Yahoo/Binance)
+// → fetch selalu kosong → panel Strength/IHSG blank selamanya.
+function rsBenchFor(panel: string, symbol: string): { sym: string; label: string } {
+  if (panel === 'rs_btc') return { sym: 'BTCUSDT', label: 'Strength to BTCUSD' };
+  const s = symbol.toUpperCase();
+  if (s.endsWith('.JK'))                  return { sym: '^JKSE',    label: 'Strength to IHSG' };
+  if (s.endsWith('.HK'))                  return { sym: '^HSI',     label: 'Strength to HSI' };
+  if (s.endsWith('.SS') || s.endsWith('.SZ')) return { sym: '000001.SS', label: 'Strength to SSE' };
+  if (s.endsWith('=X'))                   return { sym: 'DX-Y.NYB', label: 'Strength to DXY' };
+  if (s.endsWith('.SR'))                  return { sym: '^TASI.SR', label: 'Strength to TASI' };
+  // Crypto (vs BTC sudah panel sendiri) & saham US/lainnya → S&P 500 sebagai indeks makro.
+  return { sym: '^GSPC', label: 'Strength to S&P 500' };
+}
 const SUB_PANEL_LABEL: Record<string, string> =
   Object.fromEntries(SUB_PANELS.map(p => [p.id, p.label]));
 
@@ -327,7 +336,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
   // ── Fetch benchmark histories for the Relative Strength panels (BTC / IHSG) ──
   const [benchData, setBenchData] = useState<Record<string, Array<{ time: number; close: number }>>>({});
   useEffect(() => {
-    const need = subPanels.filter((p) => RS_BENCH[p]).map((p) => RS_BENCH[p].sym);
+    const need = subPanels.filter((p) => p === 'rs_btc' || p === 'rs_idx').map((p) => rsBenchFor(p, symbol).sym);
     if (!need.length) { setBenchData({}); return; }
     let alive = true;
     const load = async () => {
@@ -348,7 +357,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
     load();
     const iv = setInterval(load, 60_000);
     return () => { alive = false; clearInterval(iv); };
-  }, [subPanels, timeframe]);
+  }, [subPanels, timeframe, symbol]);
 
   const [panelPct, setPanelPct] = useState([52, 10, 38]);
   const panelPctRef    = useRef([52, 10, 38]);
@@ -1161,10 +1170,15 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
         // ── Relative Strength vs benchmark (rebuild fitur v1 "Strength to BTCUSD/Index").
         // RS = close/benchClose aligned per-bar, dinormalisasi 100 di bar pertama yang
         // overlap. >100 & naik = outperform benchmark; <100 & turun = underperform.
-        const bench = benchData[RS_BENCH[subPanel].sym] ?? [];
-        const bmap = new Map(bench.map((b) => [b.time, b.close]));
+        const rsB = rsBenchFor(subPanel, symbol);
+        const bench = benchData[rsB.sym] ?? [];
+        // Daily+ TF: cocokan per HARI (sumber beda memberi timestamp beda dalam
+        // hari yang sama — Stooq tengah malam vs Yahoo jam buka bursa).
+        const dailyTf = ['1d', '2d', '3d', '1w', '2w', '1M'].includes(timeframe);
+        const tKey = (t: number) => (dailyTf ? Math.floor(t / 86400) : t);
+        const bmap = new Map(bench.map((b) => [tKey(b.time), b.close]));
         const rsRaw = times.map((t: number, i: number) => {
-          const b = bmap.get(t);
+          const b = bmap.get(tKey(t));
           return b && b > 0 ? closes[i] / b : NaN;
         });
         const firstFin = rsRaw.find((v: number) => Number.isFinite(v));
@@ -1178,7 +1192,7 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
           }
           return o;
         })();
-        addSubLine(rs,   '#7b61ff', RS_BENCH[subPanel].label, 1.5);
+        addSubLine(rs,   '#7b61ff', rsB.label, 1.5);
         addSubLine(rsMa, '#ff9800', 'MA20', 1);
         addLevel(100, 'rgba(255,255,255,0.15)');
         if (!bench.length) addSubLine(times.map(() => NaN), '#555', 'Benchmark data loading…');
