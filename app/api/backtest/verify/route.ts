@@ -52,6 +52,10 @@ export async function GET(req: Request) {
     const tpX     = Math.min(Math.max(Number(u.searchParams.get('tp') ?? 2.5), 0.3), 10);
     const dir     = (u.searchParams.get('dir') || 'both') as 'long' | 'short' | 'both';
     const hours   = (u.searchParams.get('hours') || '').split(',').map((h) => parseInt(h, 10)).filter((h) => h >= 0 && h <= 23);
+    // split : fraksi data awal sebagai TRAIN (in-sample). Sisanya TEST (out-of-sample).
+    //         Grid search cari config di train; angka test = bukti jujur (belum pernah dilihat
+    //         saat tuning). Default 0.7. split=1 → semua in-sample (perilaku lama).
+    const split   = Math.min(Math.max(Number(u.searchParams.get('split') ?? 1), 0.3), 1);
 
     const candles = await fetchOhlcv({ symbol, timeframe: tf, limit });
     if (candles.length < 120) {
@@ -134,37 +138,66 @@ export async function GET(req: Request) {
       });
     }
 
-    // ── Metrik agregat ──
-    const wins   = trades.filter((t) => t.rMultiple > 0);
-    const losses = trades.filter((t) => t.rMultiple <= 0);
-    const grossWin  = wins.reduce((s, t) => s + t.rMultiple, 0);
-    const grossLoss = Math.abs(losses.reduce((s, t) => s + t.rMultiple, 0));
-    let equity = 0, peak = 0, maxDD = 0;
-    const equityCurve = trades.map((t) => {
-      equity += t.rMultiple; peak = Math.max(peak, equity);
-      maxDD = Math.max(maxDD, peak - equity);
-      return { time: t.exitTime, equityR: Number(equity.toFixed(2)) };
-    });
+    // ── Metrik agregat (helper: dipakai untuk all / train / test) ──
+    const splitIdx = Math.floor(n * split);        // bar sinyal < splitIdx = TRAIN, sisanya TEST
+    const splitTime = time[Math.min(splitIdx, n - 1)];
+    const trainTrades = trades.filter((t) => t.idx <  splitIdx);
+    const testTrades  = trades.filter((t) => t.idx >= splitIdx);
+
+    const metricsOf = (ts: Trade[]) => {
+      const wins   = ts.filter((t) => t.rMultiple > 0);
+      const losses = ts.filter((t) => t.rMultiple <= 0);
+      const grossWin  = wins.reduce((s, t) => s + t.rMultiple, 0);
+      const grossLoss = Math.abs(losses.reduce((s, t) => s + t.rMultiple, 0));
+      let equity = 0, peak = 0, maxDD = 0;
+      const equityCurve = ts.map((t) => {
+        equity += t.rMultiple; peak = Math.max(peak, equity);
+        maxDD = Math.max(maxDD, peak - equity);
+        return { time: t.exitTime, equityR: Number(equity.toFixed(2)) };
+      });
+      return {
+        metrics: {
+          totalTrades: ts.length,
+          wins: wins.length,
+          losses: losses.length,
+          winRatePct: ts.length ? Number(((wins.length / ts.length) * 100).toFixed(1)) : 0,
+          profitFactor: grossLoss > 0 ? Number((grossWin / grossLoss).toFixed(2)) : (grossWin > 0 ? Infinity : 0),
+          expectancyR: ts.length ? Number((equity / ts.length).toFixed(3)) : 0,
+          netR: Number(equity.toFixed(2)),
+          maxDrawdownR: Number(maxDD.toFixed(2)),
+          avgBarsHeld: ts.length ? Math.round(ts.reduce((s, t) => s + t.barsHeld, 0) / ts.length) : 0,
+        },
+        equityCurve,
+      };
+    };
+
+    const all   = metricsOf(trades);
+    const train = metricsOf(trainTrades);
+    const test  = metricsOf(testTrades);
+    const breakevenWR = Number(((slX / (slX + tpX)) * 100).toFixed(1));
+
+    // Verdict jujur: config lolos hanya jika TEST (out-of-sample) tetap di atas breakeven
+    // DAN PF>1 DENGAN sampel test yang layak. Kalau train bagus tapi test runtuh → OVERFIT.
+    const testOK = split < 1 && test.metrics.totalTrades >= 15
+      && test.metrics.winRatePct >= breakevenWR && Number(test.metrics.profitFactor) > 1;
+    const verdict = split >= 1 ? 'IN_SAMPLE_ONLY'
+      : test.metrics.totalTrades < 15 ? 'INSUFFICIENT_TEST'
+      : testOK ? 'EDGE_HOLDS_OOS' : 'OVERFIT';
 
     return NextResponse.json({
-      source: 'ATLAS-QUANT/t1mo-verify', version: 2,
-      config: { minProb, trend: trendF, sl: slX, tp: tpX, dir, hours, horizon,
-        breakevenWinRatePct: Number(((slX / (slX + tpX)) * 100).toFixed(1)) },
+      source: 'ATLAS-QUANT/t1mo-verify', version: 3,
+      config: { minProb, trend: trendF, sl: slX, tp: tpX, dir, hours, horizon, split,
+        breakevenWinRatePct: breakevenWR },
       symbol, timeframe: tf, bars: n,
       periodStart: time[0], periodEnd: time[n - 1],
-      methodology: 'walk-forward; classifier & rencana ATR identik dengan chart/Arbiter; persistence 3 bar, cooldown 20 bar; SL diprioritaskan saat SL+TP tersentuh di bar yang sama (konservatif)',
-      metrics: {
-        totalTrades: trades.length,
-        wins: wins.length,
-        losses: losses.length,
-        winRatePct: trades.length ? Number(((wins.length / trades.length) * 100).toFixed(1)) : 0,
-        profitFactor: grossLoss > 0 ? Number((grossWin / grossLoss).toFixed(2)) : (grossWin > 0 ? Infinity : 0),
-        expectancyR: trades.length ? Number((equity / trades.length).toFixed(3)) : 0,
-        netR: Number(equity.toFixed(2)),
-        maxDrawdownR: Number(maxDD.toFixed(2)),
-        avgBarsHeld: trades.length ? Math.round(trades.reduce((s, t) => s + t.barsHeld, 0) / trades.length) : 0,
-      },
-      equityCurve,
+      split: { fraction: split, splitIdx, splitTime,
+        trainPeriod: [time[0], splitTime], testPeriod: [splitTime, time[n - 1]] },
+      verdict,
+      methodology: 'walk-forward; classifier & rencana ATR identik dengan chart/Arbiter; persistence 3 bar, cooldown 20 bar; SL diprioritaskan saat SL+TP tersentuh di bar yang sama (konservatif). Split by indeks bar sinyal (T1MO kausal) → train (in-sample, dipakai tuning) vs test (out-of-sample, belum pernah dilihat).',
+      metrics: all.metrics,          // gabungan (kompatibel v2)
+      train:   train.metrics,        // in-sample
+      test:    test.metrics,         // OUT-OF-SAMPLE — angka yang layak dipercaya
+      equityCurve: all.equityCurve,
       trades,
     });
   } catch (e) {
