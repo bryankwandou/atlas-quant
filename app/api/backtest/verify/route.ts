@@ -176,13 +176,18 @@ export async function GET(req: Request) {
     const test  = metricsOf(testTrades);
     const breakevenWR = Number(((slX / (slX + tpX)) * 100).toFixed(1));
 
-    // Verdict jujur: config lolos hanya jika TEST (out-of-sample) tetap di atas breakeven
-    // DAN PF>1 DENGAN sampel test yang layak. Kalau train bagus tapi test runtuh → OVERFIT.
-    const testOK = split < 1 && test.metrics.totalTrades >= 15
-      && test.metrics.winRatePct >= breakevenWR && Number(test.metrics.profitFactor) > 1;
+    // Verdict jujur. Edge NYATA butuh DUA syarat: (1) selectable di TRAIN — kalau di
+    // train saja sudah rugi, tuning tak akan pernah memilihnya, jadi menang di test =
+    // kebetulan regime, bukan edge; (2) bertahan di TEST (out-of-sample). Memisahkan
+    // OVERFIT (train menang, test kalah) dari TEST_LUCK (train kalah, test kebetulan menang).
+    const testOK  = test.metrics.totalTrades >= 15 && test.metrics.winRatePct >= breakevenWR && Number(test.metrics.profitFactor) > 1;
+    const trainOK = train.metrics.totalTrades >= 15 && train.metrics.netR > 0 && train.metrics.winRatePct >= breakevenWR;
     const verdict = split >= 1 ? 'IN_SAMPLE_ONLY'
       : test.metrics.totalTrades < 15 ? 'INSUFFICIENT_TEST'
-      : testOK ? 'EDGE_HOLDS_OOS' : 'OVERFIT';
+      : trainOK && testOK  ? 'EDGE_HOLDS_OOS'   // untung di train, bertahan di test → dipakai
+      : trainOK && !testOK ? 'OVERFIT'          // train menang, test kalah → jangan dipakai
+      : !trainOK && testOK ? 'TEST_LUCK'        // train rugi, test kebetulan menang → bukan edge
+      : 'NO_EDGE';
 
     return NextResponse.json({
       source: 'ATLAS-QUANT/t1mo-verify', version: 3,
