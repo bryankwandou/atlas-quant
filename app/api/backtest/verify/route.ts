@@ -39,6 +39,19 @@ export async function GET(req: Request) {
     const tf      = (u.searchParams.get('tf') || '1h') as Timeframe;
     const limit   = Math.min(Number(u.searchParams.get('limit') ?? 1500), 3000);
     const horizon = Math.min(Math.max(Number(u.searchParams.get('horizon') ?? 100), 10), 500);
+    // ── Parameter tuning (grid-search-able) ──
+    // minProb : conviction gate — BUY butuh bullProb ≥ minProb, SELL butuh ≤ (100-minProb).
+    //           Menghapus sinyal lemah/kontrarian (Spec Buy / Break Top Box).
+    // trend=1 : regime filter — BUY hanya saat close > EMA50, SELL hanya saat close < EMA50.
+    // sl / tp : pengali ATR14. RR = tp/sl; breakeven WR = sl/(sl+tp).
+    // dir     : long | short | both.
+    // hours   : jam UTC yang diizinkan, csv (seasonality kalender ala quant, mis. "12,13,14,15").
+    const minProb = Math.min(Math.max(Number(u.searchParams.get('minProb') ?? 0), 0), 100);
+    const trendF  = u.searchParams.get('trend') === '1';
+    const slX     = Math.min(Math.max(Number(u.searchParams.get('sl') ?? 1.5), 0.3), 6);
+    const tpX     = Math.min(Math.max(Number(u.searchParams.get('tp') ?? 2.5), 0.3), 10);
+    const dir     = (u.searchParams.get('dir') || 'both') as 'long' | 'short' | 'both';
+    const hours   = (u.searchParams.get('hours') || '').split(',').map((h) => parseInt(h, 10)).filter((h) => h >= 0 && h <= 23);
 
     const candles = await fetchOhlcv({ symbol, timeframe: tf, limit });
     if (candles.length < 120) {
@@ -56,6 +69,11 @@ export async function GET(req: Request) {
     if (!t1mo.meta.ready) return NextResponse.json({ error: 't1mo not ready' }, { status: 422 });
     const bullProb = (t1mo.series.bullProb as number[]) ?? [];
     const posPct   = (t1mo.series.positionPct as number[]) ?? [];
+
+    // EMA50 untuk regime/trend filter.
+    const ema50 = new Array<number>(n).fill(NaN);
+    { const k = 2 / 51; let e = close[0];
+      for (let i = 0; i < n; i++) { e = i === 0 ? close[0] : close[i] * k + e * (1 - k); if (i >= 49) ema50[i] = e; } }
 
     // ATR14 rolling (Wilder) — sama dengan arbiter plan.
     const atr = new Array<number>(n).fill(NaN);
@@ -82,12 +100,18 @@ export async function GET(req: Request) {
       if (sig.action === streakAction) streak++; else { streakAction = sig.action; streak = 1; }
       if (sig.action === 'HOLD' || streak < PERSIST || i - lastSignalIdx < COOLDOWN) continue;
       if (!Number.isFinite(atr[i]) || atr[i] <= 0) continue;
+      const long = sig.action === 'BUY';
+      // ── Gerbang tuning (semua opsional; default = perilaku standar) ──
+      if (dir === 'long' && !long) continue;
+      if (dir === 'short' && long) continue;
+      if (minProb > 0 && (long ? (bullProb[i] ?? 50) < minProb : (bullProb[i] ?? 50) > 100 - minProb)) continue;
+      if (trendF && Number.isFinite(ema50[i]) && (long ? close[i] <= ema50[i] : close[i] >= ema50[i])) continue;
+      if (hours.length && !hours.includes(new Date(time[i]).getUTCHours())) continue;
       lastSignalIdx = i;
 
-      const long = sig.action === 'BUY';
       const entry = close[i];
-      const sl = long ? entry - 1.5 * atr[i] : entry + 1.5 * atr[i];
-      const tp = long ? entry + 2.5 * atr[i] : entry - 2.5 * atr[i];
+      const sl = long ? entry - slX * atr[i] : entry + slX * atr[i];
+      const tp = long ? entry + tpX * atr[i] : entry - tpX * atr[i];
 
       // Eksekusi maju — bar sinyal TIDAK ikut (entry di close bar sinyal).
       let exitIdx = -1; let result: Trade['result'] = 'TIMEOUT'; let exitPrice = NaN;
@@ -123,7 +147,9 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({
-      source: 'ATLAS-QUANT/t1mo-verify', version: 1,
+      source: 'ATLAS-QUANT/t1mo-verify', version: 2,
+      config: { minProb, trend: trendF, sl: slX, tp: tpX, dir, hours, horizon,
+        breakevenWinRatePct: Number(((slX / (slX + tpX)) * 100).toFixed(1)) },
       symbol, timeframe: tf, bars: n,
       periodStart: time[0], periodEnd: time[n - 1],
       methodology: 'walk-forward; classifier & rencana ATR identik dengan chart/Arbiter; persistence 3 bar, cooldown 20 bar; SL diprioritaskan saat SL+TP tersentuh di bar yang sama (konservatif)',
