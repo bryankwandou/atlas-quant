@@ -1978,6 +1978,19 @@ export default function ChartContainer({ symbol, timeframe }: Props) {
       let dist = Infinity;
       if (d.type === 'hline') { const y = Y(d.points[0]?.price); if (y != null) dist = Math.abs(py - y); }
       else if (d.type === 'vline') { const x = X(d.points[0]?.time); if (x != null) dist = Math.abs(px - x); }
+      else if (d.type === 'text' || d.type === 'anchornote' || d.type === 'pricelabel') {
+        // Teks di-render OFFSET dari anchor (glyph memanjang ke kanan). Hit-zone =
+        // kotak label, bukan titik anchor 10px, supaya klik pada teks yang terlihat
+        // benar-benar menghapusnya (bukan "teks tak bisa dihapus").
+        const ax = X(d.points[0]?.time), ay = Y(d.points[0]?.price);
+        if (ax != null && ay != null) {
+          const label = (d as any).text || (d as any).label || '';
+          const w = Math.max(60, Math.min(320, 8 + String(label).length * 7));
+          const inX = px >= ax - 8 && px <= ax + w;
+          const inY = py >= ay - 16 && py <= ay + 16;
+          dist = inX && inY ? 0 : Math.hypot(px - ax, py - ay);
+        }
+      }
       else {
         const pts = d.points.map(p => ({ x: X(p.time), y: Y(p.price) })).filter(p => p.x != null && p.y != null) as { x: number; y: number }[];
         for (const p of pts) dist = Math.min(dist, Math.hypot(px - p.x, py - p.y));

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import "./page-styles.css";
 import ThemeInitializer from "@/components/ThemeInitializer";
+import VisitorBeacon from "@/components/VisitorBeacon";
 
 export const metadata: Metadata = {
   title: "ATLAS·QUANT — Quantitative Trading Platform",
@@ -28,6 +30,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <ThemeInitializer />
         {children}
+        <VisitorBeacon />
+        <Analytics />
       </body>
     </html>
   );

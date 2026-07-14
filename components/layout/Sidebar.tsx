@@ -82,15 +82,6 @@ export default function Sidebar() {
   const { lang } = useLanguage();
   const [fibOpen, setFibOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [isMaster, setIsMaster] = useState(false);
-
-  // Link audit hanya untuk superadmin (username master / role master|admin).
-  useEffect(() => {
-    try {
-      const u = JSON.parse(localStorage.getItem('atlas_user') || '{}');
-      setIsMaster(u?.username === 'nayrbryanGaming' || u?.role === 'master' || u?.role === 'admin');
-    } catch { setIsMaster(false); }
-  }, []);
 
   useEffect(() => {
     const app = document.querySelector('.atlas-app') as HTMLElement | null;
@@ -111,7 +102,6 @@ export default function Sidebar() {
     journal:   lang === 'id' ? 'Jurnal'    : 'Journal',
     backtest:  lang === 'id' ? 'Backtest'  : 'Backtest',
     screener:  lang === 'id' ? 'Screener'  : 'Screener',
-    audit:     lang === 'id' ? 'Audit'     : 'Audit',
   };
 
   return (
@@ -132,15 +122,6 @@ export default function Sidebar() {
             </Link>
           );
         })}
-        {isMaster && (() => {
-          const isActive = pathname.startsWith('/audit');
-          return (
-            <Link href="/audit" className={`sb-nav-btn ${isActive ? 'active' : ''}`} title="Audit (superadmin)">
-              <ShieldAlert size={16} />
-              <span className="sb-nav-label">{navLabels.audit}</span>
-            </Link>
-          );
-        })()}
       </div>
 
       <div className="sb-div" />
