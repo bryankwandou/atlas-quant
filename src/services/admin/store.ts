@@ -12,9 +12,9 @@
  *   2. Fallback → in-process Map (warned at log-level; survives only
  *                 until the cold-start cycle).
  *
- * Bootstrap credentials (used ONLY when no hash has been persisted):
- *   username: nayrbryanGaming   password: @Nataliamaria12345
- * Admin must change these on first login.
+ * Bootstrap credentials: username dari env ADMIN_USERNAME (default nayrbryanGaming),
+ * password WAJIB dari env ADMIN_PASSWORD (tidak ada default di kode — anti-bocor).
+ * Admin harus set ADMIN_PASSWORD di Vercel env, lalu ganti via UI setelah login.
  *
  * Capability model (enforced by the routes that consume this store):
  *   - Admin CAN list users, lock/unlock users, delete users, change
@@ -26,8 +26,11 @@
 import crypto from 'crypto';
 import { supabaseAuthAdmin } from '@/src/services/supabase-auth';
 
-export const ADMIN_USERNAME = 'nayrbryanGaming';
-const BOOTSTRAP_PASSWORD = '@Nataliamaria12345';
+export const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'nayrbryanGaming';
+// Password TIDAK PERNAH ditulis di kode (anti-bocor). Sumber password admin HANYA
+// dari env ADMIN_PASSWORD yang diset admin sendiri di Vercel → Settings → Environment
+// Variables. Kalau env kosong, login bootstrap dinonaktifkan (harus set env dulu).
+const BOOTSTRAP_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const ADMIN_RECORD_EMAIL = 'admin@atlas-quant.system';
 
 export type SignupMode = 'open' | 'approval';
@@ -137,8 +140,9 @@ export async function verifyAdminPassword(username: string, password: string): P
   if (username !== ADMIN_USERNAME) return false;
   const cfg = await readConfig();
   if (!cfg.passwordHash || !cfg.passwordSalt) {
-    // Bootstrap path: compare against the documented default password.
-    // crypto.timingSafeEqual requires equal-length buffers.
+    // Bootstrap path: bandingkan dengan env ADMIN_PASSWORD. Jika env kosong,
+    // login bootstrap dimatikan (return false) — admin wajib set env dulu.
+    if (!BOOTSTRAP_PASSWORD) return false;
     const a = Buffer.from(password);
     const b = Buffer.from(BOOTSTRAP_PASSWORD);
     if (a.length !== b.length) return false;

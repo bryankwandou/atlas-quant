@@ -31,11 +31,16 @@ function rateLimit(key: string): boolean {
  */
 export async function GET() {
   const config = await readPublicConfig();
+  const envPasswordSet = !!process.env.ADMIN_PASSWORD;
   return NextResponse.json({
     usingBootstrapPassword: config.isBootstrap,
     passwordChangedAt: config.passwordChangedAt,
+    envPasswordSet,   // true = password diambil dari env ADMIN_PASSWORD (pilihan Anda)
+    expectedUsername: ADMIN_USERNAME,
     hint: config.isBootstrap
-      ? 'Password masih bawaan (belum pernah diganti). Jika login gagal, periksa ejaan/typo — password case-sensitive.'
+      ? (envPasswordSet
+          ? 'Password diambil dari env ADMIN_PASSWORD yang Anda set di Vercel. Ketik persis nilai itu.'
+          : 'Password masih bawaan (belum pernah diganti). Jika login gagal, periksa ejaan/typo — password case-sensitive.')
       : 'Password SUDAH pernah diganti — gunakan password baru, bukan bawaan.',
   });
 }
