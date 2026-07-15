@@ -24,6 +24,22 @@ function rateLimit(key: string): boolean {
   return arr.length <= MAX_PER_WINDOW;
 }
 
+/**
+ * GET /api/admin/login — diagnostik non-rahasia untuk troubleshooting login:
+ * hanya memberi tahu apakah password masih bootstrap (belum pernah diganti)
+ * dan kapan terakhir diganti. TIDAK membocorkan hash/salt/password.
+ */
+export async function GET() {
+  const config = await readPublicConfig();
+  return NextResponse.json({
+    usingBootstrapPassword: config.isBootstrap,
+    passwordChangedAt: config.passwordChangedAt,
+    hint: config.isBootstrap
+      ? 'Password masih bawaan (belum pernah diganti). Jika login gagal, periksa ejaan/typo — password case-sensitive.'
+      : 'Password SUDAH pernah diganti — gunakan password baru, bukan bawaan.',
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0] ?? req.headers.get('x-real-ip') ?? 'unknown';

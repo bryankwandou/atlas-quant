@@ -23,8 +23,9 @@ export async function GET(req: Request) {
   const assetCounts = countByAssetClass();
   const indicatorCount = INDICATOR_REGISTRY.length;
   const indicatorByCategory: Record<string, number> = {};
-  for (const { def } of INDICATOR_REGISTRY) {
-    indicatorByCategory[def.category] = (indicatorByCategory[def.category] || 0) + 1;
+  for (const preset of INDICATOR_REGISTRY) {
+    const cat = (preset as any)?.category ?? 'Lainnya';
+    indicatorByCategory[cat] = (indicatorByCategory[cat] || 0) + 1;
   }
 
   let totalUsers = 0;

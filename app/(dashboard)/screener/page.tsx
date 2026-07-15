@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { useChartStore } from '@/store/chartStore';
 import { computeIndicators } from '@/core/indicators/client';
@@ -95,7 +96,7 @@ function ScreenerRow({ row, timeframe, signalFilter, onSelect }: { row: RawRow; 
       <td className={`mono ${metrics.rsi > 70 ? 'down' : metrics.rsi < 30 ? 'up' : ''}`}>{Number.isFinite(metrics.rsi) ? metrics.rsi.toFixed(1) : '—'}</td>
       <td className="mono text-muted">{Number.isFinite(metrics.atr) ? metrics.atr.toFixed(metrics.atr < 1 ? 5 : 2) : '—'}</td>
       <td>
-        <div className="score-bar-wrap" title="Bandarmologi smart-money score">
+        <div className="score-bar-wrap" title="Bandar (proxy OHLCV): komposit CVD + A/D + OBV + CMF + MFI — inferensi dari harga & volume publik, BUKAN data transaksi broker/bid riil">
           <div className="score-bar-fill" style={{ width: `${Math.round(metrics.bandar)}%`, background: metrics.bandar >= 55 ? '#089981' : metrics.bandar <= 45 ? '#f23645' : '#ff9800' }} />
           <span className="score-bar-val">{Math.round(metrics.bandar)}</span>
         </div>
@@ -114,7 +115,10 @@ function ScreenerRow({ row, timeframe, signalFilter, onSelect }: { row: RawRow; 
 const MAX_ROWS = 60; // cap concurrent OHLCV fetches (free-tier friendly)
 
 export default function ScreenerPage() {
+  const router = useRouter();
   const { setSymbol, timeframe, setTimeframe } = useChartStore();
+  // Klik baris = pindah simbol DAN buka chart-nya langsung.
+  const openChart = (symbol: string) => { setSymbol(symbol); router.push('/chart'); };
   const [assetFilter, setAssetFilter] = useState('crypto');
   const [signalFilter, setSignalFilter] = useState('all');
   const [rawRows, setRawRows] = useState<RawRow[]>([]);
@@ -181,7 +185,7 @@ export default function ScreenerPage() {
               <th>Chg %</th>
               <th>RSI(7)</th>
               <th>ATR(14)</th>
-              <th>Bandar</th>
+              <th title="Proxy OHLCV (CVD/AD/OBV/CMF/MFI) — bukan data broker riil">Bandar*</th>
               <th>Rating</th>
               <th>T1MO Score</th>
             </tr>
@@ -192,7 +196,7 @@ export default function ScreenerPage() {
             ) : filtered.length === 0 ? (
               <tr><td colSpan={8} className="text-muted">No symbols found</td></tr>
             ) : filtered.map(s => (
-              <ScreenerRow key={s.symbol} row={s} timeframe={timeframe} signalFilter={signalFilter} onSelect={() => setSymbol(s.symbol)} />
+              <ScreenerRow key={s.symbol} row={s} timeframe={timeframe} signalFilter={signalFilter} onSelect={() => openChart(s.symbol)} />
             ))}
           </tbody>
         </table>
@@ -201,6 +205,11 @@ export default function ScreenerPage() {
             Showing top {MAX_ROWS} of {rawRows.length} — real indicators computed per symbol (capped to stay within free-tier rate limits).
           </div>
         )}
+        <div className="text-muted" style={{ padding: '8px 12px 12px', fontSize: 11, lineHeight: 1.5 }}>
+          *Bandar = <b>proxy OHLCV</b>: skor komposit CVD divergence + A/D line + OBV + CMF + MFI, dihitung dari data harga &amp; volume publik.
+          Ini <b>bukan</b> broker summary, order-bid, atau foreign flow riil — data tersebut hanya tersedia lewat feed bursa berbayar.
+          Klik baris manapun untuk membuka chart-nya.
+        </div>
       </div>
     </div>
   );

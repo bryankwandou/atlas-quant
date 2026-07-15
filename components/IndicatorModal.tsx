@@ -184,10 +184,10 @@ const LEGACY_CATEGORIES: Category[] = [
     ],
   },
   {
-    id: 'Bandarmologi', label: 'Bandarmologi', color: '#e91e63',
+    id: 'Bandarmologi', label: 'Bandarmologi (proxy OHLCV — bukan data broker riil)', color: '#e91e63',
     items: [
-      { id: 'BANDAR_SUITE_PANEL', name: 'Bandar Suite (Multi)',  desc: 'All-in-one: Bandar Score + CVD% + MFI + CMF% + OBV% — 6 indicators normalized 0–100 in one panel' },
-      { id: 'BANDAR_PANEL',       name: 'Bandar Detector',      desc: 'Composite 0–100 smart-money accumulation score — blends CVD, A/D, OBV, CMF, MFI slopes. >55 = akumulasi, <45 = distribusi' },
+      { id: 'BANDAR_SUITE_PANEL', name: 'Bandar Suite (Multi)',  desc: 'All-in-one: Bandar Score + CVD% + MFI + CMF% + OBV% — 6 indicators normalized 0–100 in one panel. PROXY dari harga+volume publik, bukan broker summary/bid riil' },
+      { id: 'BANDAR_PANEL',       name: 'Bandar Detector',      desc: 'Composite 0–100 smart-money accumulation score — blends CVD, A/D, OBV, CMF, MFI slopes. >55 = akumulasi, <45 = distribusi. INFERENSI dari OHLCV publik — bukan data transaksi broker/foreign flow riil (itu butuh feed bursa berbayar)' },
       { id: 'CVD_PANEL',          name: 'CVD — Cumul Vol Delta', desc: 'Cumulative Volume Delta: per-bar buy/sell pressure from candle body+close position. Rising = net accumulation' },
       { id: 'BANDAR_AD_PANEL',    name: 'Bandar A/D Line',      desc: 'Accumulation/Distribution + EMA signal + oscillator histogram. Shows where big money is quietly entering/exiting' },
       { id: 'VOL_DELTA_PANEL',    name: 'Volume Delta (Buy/Sell)',desc: 'Buy-vol (green) vs Sell-vol (red) bars with Delta EMA trend line. Visual of net order flow per candle' },

@@ -204,6 +204,16 @@ export default function SuperConsole({ sys }: { sys: SysInfo }) {
           <div style={{ marginTop: 14, fontSize: 10.5, color: C.dim }}>Commit {sys.commit} · dirender {sys.now}</div>
         </Section>
 
+        {/* ═══ 4. SUMBER DATA & TRANSPARANSI ═══ */}
+        <Section title="4 · Sumber Data & Transparansi" hint="Pernyataan jujur tentang apa yang REAL dan apa yang PROXY — dasar pertanggungjawaban audit.">
+          <div style={{ fontSize: 11.5, lineHeight: 1.75, color: '#c9cbd3' }}>
+            <div><b style={{ color: C.up }}>REAL</b> — Harga & volume OHLCV: Binance (crypto, live) dan Yahoo/Stooq (saham/forex/indeks, incl. IHSG ^JKSE & saham .JK). Semua indikator (RSI, ATR, CVD, A/D, OBV, CMF, MFI, T1MO) dihitung deterministik dari data ini — rumusnya open-source di repo (src/core/indicators/client.ts) dan bisa direplikasi siapa pun.</div>
+            <div style={{ marginTop: 8 }}><b style={{ color: '#ff9800' }}>PROXY</b> — "Bandar Detector / Bandarmologi": skor komposit slope CVD + A/D + OBV + CMF + MFI dari OHLCV publik. Ini <b>inferensi matematis</b>, BUKAN broker summary, order-bid book, atau foreign inflow/outflow riil.</div>
+            <div style={{ marginTop: 8 }}><b style={{ color: C.down }}>TIDAK TERSEDIA</b> — Data transaksi broker IDX, bid/offer depth, dan aliran dana asing per-broker hanya dijual lewat feed bursa berbayar (IDX data services / vendor terlisensi). Tidak ada API gratis yang legal untuk itu; platform ini TIDAK mengklaim memilikinya.</div>
+            <div style={{ marginTop: 8 }}><b>Verifikasi</b> — Angka win-rate di seksi 1 berasal dari backtest walk-forward out-of-sample (/api/backtest/verify), trade-per-trade auditable dan bisa dicocokkan bar-per-bar dengan chart. Tidak ada angka yang dijanjikan tanpa data.</div>
+          </div>
+        </Section>
+
         <div style={{ fontSize: 10, color: '#5d6069', textAlign: 'center', padding: '10px 0 30px' }}>
           Halaman tersembunyi — tidak tertaut di menu manapun. Akses via URL /dashboard + login database. Sesi 8 jam.
         </div>
