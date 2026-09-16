@@ -208,6 +208,7 @@ export default function RightPanel() {
 
   // Risk tab state
   const [killActive, setKillActive] = useState(false);
+  const [arb, setArb] = useState<any>(null);
 
   // News / Calendar / Alerts tab state
   const [news, setNews] = useState<any[]>([]);
@@ -436,6 +437,18 @@ export default function RightPanel() {
       .then(r => r.json()).then(d => setNews(d.items || [])).catch(() => {}).finally(() => setNewsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, symbol]);
+
+  // Arbiter devnet bot record (/api/arbiter/status), polled while Risk is open.
+  useEffect(() => {
+    if (activeTab !== 'risk') return;
+    let dead = false;
+    const load = () => fetch('/api/arbiter/status', { cache: 'no-store' })
+      .then(r => r.json()).then(j => { if (!dead) setArb(j); })
+      .catch(() => { if (!dead) setArb({ live: false }); });
+    load();
+    const id = setInterval(load, 60_000);
+    return () => { dead = true; clearInterval(id); };
+  }, [activeTab]);
 
   // Fetch economic calendar when the Calendar tab opens
   useEffect(() => {
@@ -974,21 +987,37 @@ export default function RightPanel() {
               ))}
             </div>
 
-            {/* Today's stats */}
+            {/* Arbiter bot — live devnet record */}
             <div className="risk-today">
-              <div className="risk-today-title">Today</div>
+              <div className="risk-today-title">
+                <span style={{ color: arb?.live ? '#089981' : '#787b86' }}>●</span> Arbiter Bot — Solana devnet (autopilot)
+              </div>
               <div className="risk-today-stats">
                 {[
-                  { label: 'Trades', val: '0',  cls: ''   },
-                  { label: 'PnL',    val: '—',  cls: ''   },
-                  { label: 'Win',    val: '0/0', cls: ''   },
-                  { label: 'Win%',   val: '0%',  cls: ''   },
+                  { label: 'Trades', val: arb?.live ? String(arb.trades) : '—', cls: '' },
+                  { label: 'PnL',    val: arb?.live && arb.profit != null ? `+${arb.profit}` : '—', cls: arb?.live ? 'up' : '' },
+                  { label: 'Win',    val: arb?.live ? `${arb.wins}/${arb.trades}` : '—', cls: '' },
+                  { label: 'Win%',   val: arb?.live && arb.winRate != null ? `${arb.winRate}%` : '—', cls: '' },
                 ].map(({ label, val, cls }) => (
                   <div key={label} className="risk-today-item">
                     <div className={`risk-today-val mono${cls ? ` ${cls}` : ''}`}>{val}</div>
                     <div className="risk-today-label">{label}</div>
                   </div>
                 ))}
+              </div>
+              <div style={{ fontSize: 10, color: '#787b86', marginTop: 6, lineHeight: 1.5 }}>
+                {arb === null && 'Memuat ledger Arbiter…'}
+                {arb && !arb.live && 'Ledger Arbiter belum terbaca — angka ditahan, bukan nol.'}
+                {arb?.live && (
+                  <>
+                    {arb.runs} run otomatis · {arb.cycles} siklus · {arb.atlasReads} sinyal ATLAS dibaca · {arb.losses} rugi · unit {arb.unit}
+                    <br />Update: {arb.updatedAt ? new Date(arb.updatedAt).toLocaleString() : '—'}
+                    <br />
+                    {arb.explorer && <a href={arb.explorer} target="_blank" rel="noopener noreferrer" style={{ color: '#2962ff' }}>Trade terakhir ↗</a>}
+                    {' · '}
+                    <a href={arb.evidenceUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#2962ff' }}>Bukti lengkap ↗</a>
+                  </>
+                )}
               </div>
             </div>
 
