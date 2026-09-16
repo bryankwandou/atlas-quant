@@ -42,6 +42,17 @@ export interface RightPanelProps {
 
 type Tab = 'signal' | 'watchlist' | 'ai' | 'risk';
 
+/** Live devnet record published by the Arbiter bot — see /api/arbiter/status. */
+interface ArbiterStatus {
+  live: boolean;
+  updatedAt?: string | null;
+  trades?: number; wins?: number; losses?: number; skipped?: number;
+  cycles?: number; runs?: number; atlasReads?: number;
+  profit?: string | null; unit?: string; winRate?: number | null;
+  network?: string; wallet?: string | null; explorer?: string | null;
+  evidenceUrl?: string;
+}
+
 const T = {
   id: { signal: 'Sinyal', watchlist: 'Watchlist', ai: 'AI', risk: 'Risk', buy: 'BELI', sell: 'JUAL', neutral: 'NETRAL', confidence: 'keyakinan', entry: 'Entry', sl: 'SL', regime: 'Regime', support: 'Support', resistance: 'Resistance', indicators: 'Indikator', manualOnly: 'Eksekusi manual — tidak ada auto trade.', tradeAllowed: 'Trade Diizinkan', killSwitch: 'Kill Switch' },
   en: { signal: 'Signal', watchlist: 'Watchlist', ai: 'AI', risk: 'Risk', buy: 'BUY', sell: 'SELL', neutral: 'NEUTRAL', confidence: 'confidence', entry: 'Entry', sl: 'SL', regime: 'Regime', support: 'Support', resistance: 'Resistance', indicators: 'Indicators', manualOnly: 'Manual execution only — no auto trading.', tradeAllowed: 'Trade Allowed', killSwitch: 'Kill Switch' },
@@ -57,6 +68,7 @@ export default function RightPanel(props: RightPanelProps) {
   const [tab, setTab] = useState<Tab>('signal');
   const [watchlist, setWatchlist] = useState<Asset[]>([]);
   const [wlFilter, setWlFilter] = useState('crypto');
+  const [arb, setArb] = useState<ArbiterStatus | null>(null);
 
   useEffect(() => {
     fetch(`/api/market/symbols?class=${wlFilter}&limit=30`)
@@ -64,6 +76,20 @@ export default function RightPanel(props: RightPanelProps) {
       .then((d) => setWatchlist(d.results ?? []))
       .catch(() => setWatchlist([]));
   }, [wlFilter]);
+
+  // Arbiter devnet bot record. Polled only while the Risk tab is open; the bot
+  // publishes a new ledger at the end of each scheduled run, so 60 s is ample.
+  useEffect(() => {
+    if (tab !== 'risk') return;
+    let alive = true;
+    const pull = () => fetch('/api/arbiter/status')
+      .then((r) => r.json())
+      .then((d) => { if (alive) setArb(d); })
+      .catch(() => { if (alive) setArb({ live: false }); });
+    pull();
+    const id = setInterval(pull, 60_000);
+    return () => { alive = false; clearInterval(id); };
+  }, [tab]);
 
   const sig = props.signal;
   const brain = props.brain;
@@ -267,19 +293,62 @@ export default function RightPanel(props: RightPanelProps) {
               ))}
             </div>
             <div className="risk-today">
-              <div className="risk-today-title">{props.lang === 'id' ? 'Hari Ini' : 'Today'}</div>
+              <div className="risk-today-title">
+                {props.lang === 'id' ? 'Arbiter — Solana devnet' : 'Arbiter — Solana devnet'}
+                <span
+                  className="risk-today-dot"
+                  title={arb?.live ? (props.lang === 'id' ? 'Ledger terbaca' : 'Ledger reachable') : (props.lang === 'id' ? 'Ledger tidak terbaca' : 'Ledger unreachable')}
+                  style={{
+                    display: 'inline-block', width: 7, height: 7, borderRadius: '50%', marginLeft: 6,
+                    background: arb?.live ? 'var(--tv-up, #089981)' : '#6b7280',
+                  }}
+                />
+              </div>
               <div className="risk-today-stats">
                 {[
-                  { label: 'Trades', val: '0' },
-                  { label: 'PnL', val: '—' },
-                  { label: 'Win', val: '0/0' },
-                  { label: 'Win%', val: '—' },
+                  { label: 'Trades', val: arb?.live ? String(arb.trades ?? 0) : '—' },
+                  { label: 'PnL', val: arb?.live && arb.profit != null ? `+${arb.profit}` : '—' },
+                  { label: 'Win', val: arb?.live ? `${arb.wins ?? 0}/${arb.trades ?? 0}` : '0/0' },
+                  { label: 'Win%', val: arb?.live && arb.winRate != null ? `${arb.winRate.toFixed(1)}%` : '—' },
                 ].map((row) => (
                   <div key={row.label} className="risk-today-item">
                     <div className="risk-today-val">{row.val}</div>
                     <div className="risk-today-label">{row.label}</div>
                   </div>
                 ))}
+              </div>
+              <div className="risk-arb-meta" style={{ marginTop: 8, fontSize: 10, lineHeight: 1.6, color: 'var(--tv-text-muted, #787b86)' }}>
+                {arb?.live ? (
+                  <>
+                    <div>
+                      {props.lang === 'id'
+                        ? `${arb.runs ?? 0} run · ${arb.cycles ?? 0} siklus · ${arb.skipped ?? 0} ditahan margin · ${arb.atlasReads ?? 0} sinyal ATLAS dibaca`
+                        : `${arb.runs ?? 0} runs · ${arb.cycles ?? 0} cycles · ${arb.skipped ?? 0} held on margin · ${arb.atlasReads ?? 0} ATLAS signals read`}
+                    </div>
+                    <div>
+                      {props.lang === 'id' ? 'Diperbarui' : 'Updated'}{' '}
+                      {arb.updatedAt ? new Date(arb.updatedAt).toLocaleString() : '—'} · PnL {arb.unit ?? 'tUSD'} (devnet)
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                      {arb.explorer && (
+                        <a href={arb.explorer} target="_blank" rel="noreferrer" style={{ color: 'var(--tv-accent, #2962ff)' }}>
+                          {props.lang === 'id' ? 'Trade terakhir ↗' : 'Last trade ↗'}
+                        </a>
+                      )}
+                      {arb.evidenceUrl && (
+                        <a href={arb.evidenceUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--tv-accent, #2962ff)' }}>
+                          {props.lang === 'id' ? 'Bukti lengkap ↗' : 'Full evidence ↗'}
+                        </a>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    {props.lang === 'id'
+                      ? 'Ledger Arbiter belum terbaca — angka ditahan, bukan nol.'
+                      : 'Arbiter ledger unreachable — figures withheld, not zero.'}
+                  </div>
+                )}
               </div>
             </div>
             <button className="kill-switch-btn">🛑 {t.killSwitch}</button>
