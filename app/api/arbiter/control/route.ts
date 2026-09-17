@@ -22,7 +22,7 @@ const WORKFLOW = 'solana-devnet-bot.yml';
 const DEFAULTS = { enabled: true, riskPct: 100, maxDailyLoss: 50, maxTradesPerDay: 500, cooldownSec: 0 };
 
 function gh(path: string, init: RequestInit = {}) {
-  const token = process.env.ARBITER_GH_TOKEN;
+  const token = process.env.ARBITER_GH_TOKEN?.trim();
   return fetch(`https://api.github.com${path}`, {
     ...init,
     cache: 'no-store',
@@ -59,8 +59,12 @@ const clamp = (v: unknown, lo: number, hi: number, fallback: number) => {
 };
 
 export async function GET() {
-  const [{ control }, runs] = await Promise.all([readControl(), lastRuns()]);
-  return NextResponse.json({ control, runs, writable: !!process.env.ARBITER_GH_TOKEN });
+  try {
+    const [{ control }, runs] = await Promise.all([readControl(), lastRuns()]);
+    return NextResponse.json({ control, runs, writable: !!process.env.ARBITER_GH_TOKEN });
+  } catch (e: any) {
+    return NextResponse.json({ control: DEFAULTS, runs: [], writable: false, error: String(e?.message || e) });
+  }
 }
 
 export async function POST(req: Request) {
