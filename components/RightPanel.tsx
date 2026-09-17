@@ -209,6 +209,10 @@ export default function RightPanel() {
   // Risk tab state
   const [killActive, setKillActive] = useState(false);
   const [arb, setArb] = useState<any>(null);
+  const [ctl, setCtl] = useState<any>(null);          // Arbiter control.json + recent runs
+  const [ctlDraft, setCtlDraft] = useState<any>(null);
+  const [ctlMsg, setCtlMsg] = useState('');
+  const [ctlBusy, setCtlBusy] = useState(false);
 
   // News / Calendar / Alerts tab state
   const [news, setNews] = useState<any[]>([]);
@@ -442,13 +446,40 @@ export default function RightPanel() {
   useEffect(() => {
     if (activeTab !== 'risk') return;
     let dead = false;
-    const load = () => fetch('/api/arbiter/status', { cache: 'no-store' })
-      .then(r => r.json()).then(j => { if (!dead) setArb(j); })
-      .catch(() => { if (!dead) setArb({ live: false }); });
+    const load = () => {
+      fetch('/api/arbiter/status', { cache: 'no-store' })
+        .then(r => r.json()).then(j => { if (!dead) setArb(j); })
+        .catch(() => { if (!dead) setArb({ live: false }); });
+      fetch('/api/arbiter/control', { cache: 'no-store' })
+        .then(r => r.json()).then(j => {
+          if (dead) return;
+          setCtl(j);
+          setCtlDraft((d: any) => d ?? j.control);
+        })
+        .catch(() => {});
+    };
     load();
-    const id = setInterval(load, 60_000);
+    const id = setInterval(load, 30_000);
     return () => { dead = true; clearInterval(id); };
   }, [activeTab]);
+
+  // Arbiter control: kill switch / risk limits / trade now (admin session required)
+  const arbControl = async (body: Record<string, unknown>, okMsg: string) => {
+    setCtlBusy(true); setCtlMsg('');
+    try {
+      const r = await fetch('/api/arbiter/control', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!r.ok) { setCtlMsg(`✖ ${j.error || r.status}`); return; }
+      if (j.control) { setCtl((c: any) => ({ ...c, control: j.control })); setCtlDraft(j.control); }
+      setCtlMsg(`✔ ${okMsg}`);
+      setTimeout(() => fetch('/api/arbiter/control', { cache: 'no-store' }).then(r => r.json()).then(setCtl).catch(() => {}), 4000);
+    } catch (e: any) {
+      setCtlMsg(`✖ ${e?.message || 'gagal'}`);
+    } finally { setCtlBusy(false); }
+  };
 
   // Fetch economic calendar when the Calendar tab opens
   useEffect(() => {
@@ -1021,14 +1052,84 @@ export default function RightPanel() {
               </div>
             </div>
 
-            {/* Kill switch */}
+            {/* Arbiter bot control — writes control.json the bot reads every cycle */}
+            <div className="risk-today">
+              <div className="risk-today-title">
+                Kendali Bot Arbiter{' '}
+                <span style={{ color: ctl?.control?.enabled === false ? '#f23645' : '#089981' }}>
+                  {ctl ? (ctl.control?.enabled === false ? '■ DIHENTIKAN' : '▶ AKTIF') : '…'}
+                </span>
+              </div>
+              {ctlDraft && (
+                <div style={{ display: 'grid', gap: 4, marginTop: 6 }}>
+                  {([
+                    { key: 'riskPct',         label: 'Risk per Trade', suffix: '% vault', step: 1 },
+                    { key: 'maxDailyLoss',    label: 'Max Daily Loss', suffix: 'tUSD',    step: 1 },
+                    { key: 'maxTradesPerDay', label: 'Max Trades/Day', suffix: '',        step: 1 },
+                    { key: 'cooldownSec',     label: 'Cooldown after Loss', suffix: 'detik', step: 10 },
+                  ] as const).map(({ key, label, suffix, step }) => (
+                    <div key={key} className="risk-row">
+                      <span className="risk-label">{label}</span>
+                      <div className="risk-input-wrap">
+                        <input
+                          className="risk-input"
+                          type="number"
+                          min={0}
+                          step={step}
+                          value={ctlDraft[key] ?? ''}
+                          onChange={e => setCtlDraft((d: any) => ({ ...d, [key]: parseFloat(e.target.value) || 0 }))}
+                        />
+                        {suffix && <span className="risk-suffix">{suffix}</span>}
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="kill-switch-btn"
+                    style={{ background: '#2962ff' }}
+                    disabled={ctlBusy}
+                    onClick={() => arbControl({ action: 'set', ...ctlDraft, enabled: undefined }, 'Batas risiko terkirim — bot memakainya di siklus berikutnya')}
+                  >
+                    <span>Simpan Batas Risiko ke Bot</span>
+                  </button>
+                </div>
+              )}
+              <button
+                type="button"
+                className="kill-switch-btn"
+                style={{ background: '#089981', marginTop: 6 }}
+                disabled={ctlBusy}
+                onClick={() => arbControl({ action: 'trade-now' }, 'Bot diluncurkan sekarang (GitHub Actions)')}
+              >
+                <span>▶ Trade Now — jalankan bot sekarang</span>
+              </button>
+              <div style={{ fontSize: 10, color: '#787b86', marginTop: 6, lineHeight: 1.5 }}>
+                {ctlMsg && <div style={{ color: ctlMsg.startsWith('✔') ? '#089981' : '#f23645' }}>{ctlMsg}</div>}
+                {ctl?.control?.updatedAt && <>Perintah terakhir: {ctl.control.updatedBy} · {new Date(ctl.control.updatedAt).toLocaleString()}<br /></>}
+                {(ctl?.runs || []).slice(0, 3).map((w: any) => (
+                  <div key={w.id}>
+                    <a href={w.url} target="_blank" rel="noopener noreferrer" style={{ color: '#2962ff' }}>
+                      Run {w.event === 'workflow_dispatch' ? 'manual' : 'jadwal'} · {w.status === 'completed' ? w.conclusion : w.status} · {new Date(w.createdAt).toLocaleTimeString()} ↗
+                    </a>
+                  </div>
+                ))}
+                Perlu login admin (/admin) untuk mengirim perintah.
+              </div>
+            </div>
+
+            {/* Kill switch — stops the Arbiter bot for real */}
             <button
               type="button"
               className="kill-switch-btn"
-              onClick={() => setKillActive(k => !k)}
+              disabled={ctlBusy || !ctl}
+              onClick={() => {
+                const stop = ctl?.control?.enabled !== false;
+                setKillActive(stop);
+                arbControl({ action: 'set', enabled: !stop }, stop ? 'KILL SWITCH aktif — bot berhenti di siklus berikutnya' : 'Bot dilanjutkan');
+              }}
             >
               <Power size={14} />
-              <span>{killActive ? 'Deactivate Kill Switch' : 'Kill Switch (Stop All)'}</span>
+              <span>{ctl?.control?.enabled === false ? 'Deactivate Kill Switch (Resume Bot)' : 'Kill Switch (Stop All)'}</span>
             </button>
           </div>
         )}
