@@ -6,6 +6,7 @@ import { useUserStore } from '@/store/userStore';
 import { useMarketData, useMarketPrice } from '@/hooks/useMarketData';
 import { computeIndicators } from '@/core/indicators/client';
 import { t1moCompute } from '@/src/core/indicators/t1mo';
+import LpMeteoraPanel from './LpMeteoraPanel';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -1017,6 +1018,9 @@ export default function RightPanel() {
                 </div>
               ))}
             </div>
+
+            {/* LP Pilot — Meteora DLMM paper trading */}
+            <LpMeteoraPanel />
 
             {/* Arbiter bot — live devnet record */}
             <div className="risk-today">
